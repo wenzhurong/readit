@@ -1,0 +1,818 @@
+# readit · 跨平台轻量 Markdown 阅读/编辑器 · 设计规格（SPEC v1）
+
+> 一个 **阅读优先、跨平台（macOS + Windows）、可被内嵌** 的 Markdown 阅读/编辑器。核心是一个宿主无关的 JS 库，桌面端只是一层薄壳；渲染效果对齐 GitHub 网页版，且**这个对齐是可证伪的**——由对 GitHub 真实输出的快照回归测试守住，而不是靠肉眼。
+>
+> **状态**：设计共识已达成（经 brainstorming 逐点确认），技术事实经两轮多智能体调研 + 对抗式复核（16 个 agent、121 万 token、744 次工具调用）核实，**待落地**。
+>
+> **日期**：2026-08-06。本文档中所有版本号与字节数均为该日实测，非记忆。
+>
+> **核心洞见**：「像 GitHub」这句话里，有一部分能做到字节级对齐并自动验证，有一部分**永远做不到**（数学、图表、20 种主流语言的代码 token）。本设计的全部结构，都建立在把这两部分**切开**之上——切口恰好落在 Phase A / Phase B 的架构边界上。见 §1.2。
+
+---
+
+## 目录
+
+1. [概述、目标与核心洞见](#s1)
+2. [锁定决策清单](#s2)
+3. [总体架构：Phase A / Phase B](#s3)
+4. [保真度三档与验收方式](#s4)
+5. [组件划分与定版](#s5)
+6. [Phase A 引擎：GitHub 形状的渲染规则](#s6)
+7. [数学：MathJax 4 · SVG · 确定性](#s7)
+8. [美元护栏：行内数学的确定性规则集](#s8)
+9. [嵌入模型：Shadow DOM、主题、包布局](#s9)
+10. [桌面壳：Tauri 2.11](#s10)
+11. [数据流、导航与查找](#s11)
+12. [错误处理与安全](#s12)
+13. [测试架构](#s13)
+14. [落地顺序与验收线](#s14)
+15. [诚实的局限](#s15)
+16. [决策台账](#s16)
+
+---
+
+<a id="s1"></a>
+
+## 1. 概述、目标与核心洞见
+
+### 1.1 项目定性（一句话）
+
+**readit** 是一个 **阅读优先、跨平台、可内嵌** 的 Markdown 阅读/编辑器：默认呈现与 GitHub 网页版一致的渲染视图，可切换到源码编辑；它同时以两种形态交付——一个供真人双击使用的桌面应用，和一个供其他项目 `import` 的框架无关 JS 库。
+
+两种形态共享**同一份核心**。桌面壳不是"另一个实现"，它是核心的一个消费者。
+
+### 1.2 核心洞见：把"能证伪的保真"与"证伪不了的保真"切开
+
+项目最关键的设计判断是：**「渲染效果至少类似 GitHub」这句话，覆盖了两类性质完全不同的东西。**
+
+一类能做到字节级对齐并自动验证：块级 DOM、class 名、标题锚点、alerts、表格、任务列表、frontmatter 表、代码块外壳与语言识别、脚注、emoji、自动链接。GitHub 有一个稳定的 API 端点会返回它博客视图的真实 HTML，可以作为黄金样本源。
+
+另一类**永远做不到**，且原因是结构性的，不是努力不够：
+
+| 项 | 为什么做不到 |
+|---|---|
+| 数学 | GitHub **服务端不渲染数学**，只吐 `<math-renderer>` 裹原始 TeX，客户端用 MathJax 渲。API 里根本没有渲染结果可对 |
+| Mermaid | GitHub 在闭源 iframe（`viewscreen.githubusercontent.com`）里渲，版本不公开 |
+| 代码 token | GitHub 对 20 种最常见语言（JS/TS/Python/Go/Rust/Java/C/C#/PHP/Ruby/CSS/HTML…）已改用 tree-sitter 的 TreeLights。JS 生态里没有任何实现能复现。实测：同一段 JS，GitHub 出 `pl-kos`、`pl-s1`，最接近的 starry-night 缺这两个、多一个 `pl-pds`。且该名单五年从 10 涨到 20，只会继续扩大 |
+
+**如果 spec 只写「匹配 GitHub」而不切开这两类，v1 就无法通过自己的验收测试。** 团队会在若干次红灯后开始放宽标准，最终退回肉眼判断——正是验收标准存在的意义所要防止的那个失败模式。
+
+所以本设计把保真度显式切成三档（§4），每档有各自的验收方式，其中第三档**明确承认没有基准**并把它写死在 spec 里，作为已知偏离而非缺陷。
+
+### 1.3 目标与非目标
+
+**目标**
+
+1. 打开单个 `.md` 文件，渲染效果与 GitHub 网页版一致（按 §4 三档定义）
+2. 可切换到源码编辑并保存
+3. 文中的 `./other.md` 相对链接在同窗口打开，支持前进/后退
+4. 核心可被任意技术栈的项目 `import` 内嵌
+5. 完全离线自包含，任何运行时路径都不访问网络
+
+**非目标（v1 明确不做）**
+
+- 文件树、多标签页、全局搜索、笔记库/vault 概念
+- WYSIWYG 实时渲染编辑
+- 导出 PDF / 打印优化（见 §15，这是最可能在 v1.1 反过来推翻壳选型的需求）
+- 服务端渲染 Mermaid
+- 协作、同步、插件市场
+
+---
+
+<a id="s2"></a>
+
+## 2. 锁定决策清单
+
+| # | 决策点 | 结论 | 定于 |
+|---|--------|------|------|
+| 1 | 集成形态 | 核心库 + 薄壳 | brainstorming |
+| 2 | 编辑形态 | 阅读优先，快捷键切源码编辑，可选并排预览 | brainstorming |
+| 3 | 渲染范围 | GFM 全套 + 代码高亮 + Mermaid + GitHub Alerts/frontmatter + 数学 | brainstorming |
+| 4 | 应用范围 | 单文件打开 + 相对链接同窗跳转 + 前进/后退 | brainstorming |
+| 5 | 宿主兼容 | 框架无关：Web Component + 命令式 `mount()`，不绑任何框架 | brainstorming |
+| 6 | v1 验收 | 引擎先行，快照回归证明保真度 | brainstorming |
+| 7 | 总体方案 | **方案 A：分层保真 + 声明式偏离** | 一轮调研后 |
+| 8 | 数学引擎 | **MathJax**（与 GitHub 同源），非 KaTeX | 一轮调研后 |
+| 9 | 行内 `$…$` | **默认开 + 确定性护栏** | 一轮调研后 |
+| 10 | 解析器 | markdown-it 15.0.0 | 调研 |
+| 11 | 桌面壳 | Tauri 2.11.5 | 调研 |
+| 12 | 编辑器 | CodeMirror 6，动态 import | 调研 |
+| 13 | 高亮器 | 按消费方分档：桌面 starry-night / 嵌入 Shiki，同一 adapter | 调研 + 复核 |
+| 14 | 隔离模型 | Shadow DOM `open` 默认 + `shadow:false` 逃生舱 | 调研 |
+| 15 | 数学输出格式 | SVG + `fontCache:'none'`，字体用 `mathjax-tex-font` | 调研 + 复核 |
+
+---
+
+<a id="s3"></a>
+
+## 3. 总体架构：Phase A / Phase B
+
+系统只有一条硬边界。
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Phase A      (src, resolvedOpts) -> HTML string              │
+│                                                              │
+│  纯函数 · 同步 · 无 DOM · Node 与浏览器同构 · 字节确定        │
+│                                                              │
+│  markdown-it 15                                              │
+│    → GitHub 形状的渲染规则（§6）                              │
+│    → hast 卫生化                                             │
+│    → MathJax SVG 内联（§7）                                   │
+│    → 序列化为字符串                                          │
+│                                                              │
+│  ★ 快照测试只对着它跑。零网络、零 DOM、跨进程字节可重现。      │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Phase B      浏览器专属 · 异步 · 只做"渲染不出来的事"          │
+│                                                              │
+│  Mermaid 渲染注入 · 高亮升级 · CodeMirror 源码模式            │
+│  复制按钮 · 锚点桥接 · 相对链接拦截 · 查找索引构建             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 3.1 唯一的异步缝
+
+数学在 Phase A，但 MathJax 是个 ~677 KB gzip 的大件，不能静态打进核心。**所有异步收敛到唯一一道缝**：
+
+```js
+const opts = await prepare(src, baseOpts)
+//   ↑ 唯一的 await。扫描 $ / ```math / ```mermaid / 围栏语言，
+//     按需 dynamic import，返回已解析好的渲染器集合。
+
+const html = render(src, opts)
+//   ↑ 纯同步，函数体内永不出现 await。
+//     测试时把渲染器静态 import 后直接调它 —— 密闭、确定、零网络。
+```
+
+这道缝是**把数学放进 Phase A 的最重要 API 形状后果**。没有它，要么 MathJax 被静态打进核心（每个无数学文档都付 677 KB），要么数学被迫退回 Phase B（丧失确定性快照）。
+
+### 3.2 数学缺席时的降级 = GitHub 的服务端行为
+
+未传入 math 渲染器时，Phase A 输出 `<math-renderer class="js-inline-math">$x^2$</math-renderer>` 裹原始 TeX——**这正是 github.com 服务端吐出的东西**（实测确认）。
+
+于是：
+
+- 零数学文档零成本
+- 嵌入方按需 `math: true` 开启，桌面壳默认开
+- **"不装数学"这个配置，恰好就是与 oracle 字节对齐的那一档**——它不是残缺形态，而是①档保真的测试模式
+
+### 3.3 为什么这条边界值得如此严格
+
+1. **确定性**：Phase A 无 DOM、无网络、无随机、无时间。跨进程字节可重现（MathJax SVG 部分已实测 5 次独立进程 SHA-256 全等）
+2. **可嵌入**：Phase A 在 Node 里就能跑，宿主想要 HTML 字符串（SSR、静态站点、测试）直接调
+3. **可测试**：快照套件不需要浏览器、不需要网络、不会 flake
+4. **可审计**：符合"确定性、静态、人为可控"的工程取向——渲染结果是输入的纯函数
+
+---
+
+<a id="s4"></a>
+
+## 4. 保真度三档与验收方式
+
+| 档 | 覆盖 | 验收方式 | 对应阶段 |
+|---|---|---|---|
+| **① 结构档** | 块级 DOM、class、标题锚点、alerts、表格（含 `<markdown-accessiblity-table>`）、任务列表、frontmatter 表、代码块 wrapper 与语言识别、脚注、emoji、自动链接、tagfilter、**数学的定界判定与占位符**、Mermaid 占位符 | 归一化后对 GitHub blob HTML **100% diff 通过**（带具名白名单） | Phase A，`math: null` |
+| **② 视觉档** | github-markdown-css 原样 + Primer 配色变量 | 肉眼一致 + ≤12 张视觉回归截图；**不 diff token** | 样式层 |
+| **③ 声明偏离档** | MathJax SVG 输出、Mermaid SVG 输出、20 种 TreeLights 语言的 token 划分 | 对**自己的**冻结黄金文件快照（锁死依赖版本）。**没有 GitHub 基准，本文档写死** | Phase A（math）+ Phase B（mermaid） |
+
+**快照套件对 Phase A 跑两遍**：
+
+- `math: null` 那遍 → 撞 GitHub oracle（①档）
+- `math: on` 那遍 → 撞自家黄金文件（③档）
+
+### 4.1 ③档偏离清单（本清单即契约，不是缺陷列表）
+
+| 偏离 | 内容 | 原因 |
+|---|---|---|
+| **D-MATH** | readit 用 MathJax 4.1.3 + `mathjax-tex-font` + SVG 输出渲染数学；GitHub 用未公开版本的 MathJax 在客户端渲染。视觉可能有差异，DOM 结构必然不同 | GitHub 服务端无渲染结果可对 |
+| **D-MERMAID** | readit 用本地 mermaid 11.16.1；GitHub 用闭源 iframe 服务、版本不公开 | 无法获取基准 |
+| **D-TOKEN** | 20 种 TreeLights 语言（C, C#, CSS, CodeQL, EJS, Elixir, ERB, Gleam, Go, HTML, Java, JS, Nix, PHP, Python, RegEx, Ruby, Rust, TLA, TS）的代码 token 划分与 GitHub 不同 | GitHub 用私有 tree-sitter 语法，JS 生态无实现 |
+| **D-CAMO** | readit 不做 camo 图片代理，不做 `/blob/` → `/raw/` 的图片 URL 重写 | 本地阅读器无代理需求 |
+| **D-LINK** | readit 不把相对链接改写成绝对 github.com URL | 与"同窗跳转"需求直接冲突 |
+| **D-$1…D-$5** | 美元护栏的 5 条有意偏离，见 §8.5 | 安全性 / 对称性优先于 bug 兼容 |
+
+**每条偏离都是一个具名的"已知偏离"快照测试**——断言它与 GitHub **不同**。这样一旦 readit 或 GitHub 任一侧发生变化，测试会响，而不是静默漂移。
+
+### 4.2 黄金样本源
+
+**`GET /repos/{owner}/{repo}/contents/{path}`，`Accept: application/vnd.github.html`，`?ref=<sha>`**
+
+这是唯一同时给出 alerts + 标题锚点 + frontmatter 表格的端点。已实测：
+
+- `?ref=<sha>` 被该 Accept 头支持，且重复拉取字节一致
+- frontmatter 转表格是通用渲染行为（在 `gohugoio/hugoDocs` 上复现，不是 `github/docs` 特例）
+- `/contents/{path}` 与 `/readme` 除外层 `<div id="file">` vs `<div id="readme">` 外字节一致
+
+**明确拒绝的方案**：
+
+- `POST /markdown` `mode=gfm`：有 alerts 但无锚点，且带每次请求变化的 `data-run-id` 随机盐（实测三次同样请求得到三个不同值）
+- `POST /markdown` `mode=markdown`：有锚点但 alerts 退化成普通引用块、任务列表退化成字面 `[x]`
+- 抓取 github.com 页面：React 渲染，标记埋在 JSON 载荷里，CSS 包每周变
+
+---
+
+<a id="s5"></a>
+
+## 5. 组件划分与定版
+
+所有版本为 2026-08-06 实测，所有字节数为本地 `esbuild --bundle --minify` + `gzip -9` 实测。
+
+| 包 | 职责 | 关键依赖（精确版本） |
+|---|---|---|
+| `@readit/core` | Phase A 引擎 | markdown-it **15.0.0**、hast-util-sanitize **5.0.2**、github-slugger **2.0.0** |
+| `@readit/math` | MathJax 渲染器（Phase A，懒加载） | @mathjax/src **4.1.3**、@mathjax/mathjax-tex-font **4.1.3** |
+| `@readit/element` | Web Component + `mount()` | github-markdown-css **5.9.0**（用其中的单主题文件，见 §9.2） |
+| `@readit/highlight` | 高亮 adapter + 两个实现 | @wooorm/starry-night **3.10.0** / shiki **4.4.2** |
+| `@readit/editor` | CodeMirror 源码模式（懒加载） | @codemirror/view **6.43.8**、state **6.7.1**、language **6.12.4**、commands **6.10.4**、lang-markdown **6.5.2**、**style-mod >=4.1.2** |
+| `@readit/mermaid` | 图表（Phase B，懒加载） | mermaid **11.16.1**、dompurify **3.4.13** |
+| `@readit/find` | 查找（Phase B） | 无依赖 |
+| `shell` | Tauri 桌面壳 | tauri **2.11.5**、tauri-plugin-single-instance **2.4.3** |
+
+### 5.1 体积预算（实测）
+
+| 场景 | gzip |
+|---|---|
+| 嵌入方，只读，无高亮无数学（`highlighter: null`, `math: null`） | ~60–70 KB（引擎）+ 5.4 KB（github-markdown.css） |
+| 嵌入方，只读 + Shiki 高亮 | + ~54 KB（core，零 WASM）+ 每语言 0.8–16 KB 按需 |
+| 桌面壳，只读 + starry-night 高亮 | + ~64 KB JS + 151 KB WASM（本地磁盘，非网络） |
+| **含数学的文档**（首次遇到 `$`） | **+ ~677 KB**（引擎 117 KB + tex-font 561 KB） |
+| **含图表的文档**（首次遇到 ```mermaid） | + 约 1.0–1.5 MB minified（ESM 分块，非全量 3.4 MB） |
+| 编辑模式（首次切换） | + 176,654 B，一次性 |
+
+**"轻量"这个词在本项目里的准确含义是"懒式轻量"**：无数学无图表的文档确实轻；一旦遇到，就是几百 KB 到 1 MB 级别。这不是妥协，是这些能力的物理成本。四个大件（数学、Mermaid、编辑器、语法包）**必须是四个互相独立的动态 import**——包布局（§9.3）就是为此设计的。
+
+### 5.2 高亮器双默认的理由
+
+| | 桌面壳 | 嵌入库 |
+|---|---|---|
+| 默认 | starry-night 3.10.0 | Shiki 4.4.2 + JS 正则引擎 |
+| 体积 | ~215 KB gzip（本地磁盘，成本≈0） | ~54 KB gzip，零 WASM |
+| 保真 | 发 GitHub 真实的 `pl-*` class + Primer CSS 变量 | 内联 hex 色值，用 GitHub 的 VS Code 主题 |
+
+桌面端保真是免费的（磁盘读取），所以取最接近的；嵌入方没要求过高保真，不该替他们付 4 倍载荷。**同一个 adapter 接口 `{highlight(code, lang), supports(lang)}`**，两个默认值，宿主可传 `highlighter: null` 得到朴素 `<pre>`。
+
+**必做项**：starry-night 的默认浏览器路径硬编码 `fetch('https://esm.sh/vscode-oniguruma@2/release/onig.wasm')`。必须覆写 `getOnigurumaUrlFetch` 指向本地文件。**不改就直接违反离线约束，且在联网开发机上永远测不出来**——所以离线测试（§13）必须是一道真能失败的门。
+
+---
+
+<a id="s6"></a>
+
+## 6. Phase A 引擎：GitHub 形状的渲染规则
+
+markdown-it 的默认输出与 GitHub 差在若干处。以下每一条都来自实测差异，是引擎工作量的实质。
+
+| # | 规则 | 说明 |
+|---|---|---|
+| 1 | **GFM 扩展自动链接移植** | **必做，不封顶项。** linkify-it 6.0.0（markdown-it 15 的依赖）把 `fuzzyLink` 默认关了：`www.x`、裸域名、带认证部分的 URL 现在**一个都不链接**。做法：`linkify: false` + 移植 `micromark-extension-gfm-autolink-literal` 的算法为一条 inline rule。⚠️ 「回退 markdown-it 14.3.0」**不是行为中立的**——14.3.0 依赖 linkify-it 5.0.2，`fuzzyLink` 默认为真，回退会静默改变自动链接输出并作废基线 |
+| 2 | tagfilter | 9 个标签（title/textarea/style/xmp/iframe/noembed/noframes/script/plaintext）的前导 `<` 转义为 `&lt;` |
+| 3 | 表格 | `style="text-align:center"` → `align="center"`；外套 `<markdown-accessiblity-table>` |
+| 4 | 删除线 | `<s>` → `<del>` |
+| 5 | 任务列表 | 属性顺序 `type, id, disabled, class, aria-label, checked` + `aria-label="Completed task"/"Incomplete task"`。注：`markdown-it-task-lists` 在**默认配置**下输出是良好的（含 `disabled`），传 `enabled:true` 反而会破坏它并偏离 GitHub；但字节级对齐仍需自写规则 |
+| 6 | `dir="auto"` | 铺到每个块级元素 |
+| 7 | 标题锚点 | `<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">…</h2><a id="user-content-slug" class="anchor" aria-label="Permalink: …" href="#slug"><svg class="octicon octicon-link"…></svg></a></div>` |
+| 8 | Alerts | `markdown-it-github-alerts 1.0.1` 的 octicon path 已验证与 `@primer/octicons` 字节一致（好结果）。缺两个属性需补：外层 `dir="auto"`、svg 上的 `data-component="Octicon"`。图标映射：note→info, tip→light-bulb, important→report, warning→alert, caution→stop。标记必须独占引用块首行；类型名大小写不敏感；嵌套引用块内不生效 |
+| 9 | frontmatter → 表格 | 数组/对象嵌套为内层表，标量单元格套 `<div dir="auto">` |
+| 10 | emoji | 1936 个 shortcode。⚠️ `/emojis` 端点对标准 emoji 也返回 PNG URL，码点须从 `unicode/<hex>.png` 文件名解析；自定义 emoji（`:shipit:` 等，路径无 `/unicode/` 段）**必须本地内置**，否则打开一个带 `:shipit:` 的 README 就违反离线约束 |
+| 11 | 代码块 wrapper | `<div class="highlight highlight-source-LANG notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="…"><pre class="notranslate">`。⚠️ 完整形态**只在 blob 视图出现**，`POST /markdown` 只给简化版——别照着错的那个对 |
+| 12 | `data-line` | 从 `token.map` 生成，滚动同步的锚。markdown-it 只在块级 token 上有 `map`（行内全无），块级粒度的滚动同步是可接受的；若日后要字符级光标同步，markdown-it 无法提供 |
+| 13 | 美元护栏 | core rule，见 §8 |
+| 14 | `user-content-` 前缀 | 对用户手写 HTML 里的 `id`/`name` 也要加（GitHub 的防碰撞过滤器） |
+
+### 6.1 卫生化的边界（关键陷阱）
+
+GitHub 的白名单里 `class` 和 `style` 出现次数为**零**——它把用户写的这两个属性全剥掉。但 readit 自己生成的标记**重度依赖** class（`.markdown-alert`、`.pl-*`、`mjx-container`、`.markdown-body`）。
+
+**一遍扫全树会把自家标记全铲掉。**
+
+规则：**卫生化只对用户提供的原始 HTML 跑，且必须在注入自家标记之前。** 用 `hast-util-sanitize` 的 `defaultSchema`（它显式镜像 GitHub 的 html-pipeline 白名单）+ `clobberPrefix: 'user-content-'`。
+
+`defaultSchema` 已经自带的、不需要重复实现的：`data:` 协议在 `src`/`cite`/`longDesc` 上已被拒（相对 URL 已放行）；GFM 构造的值级 class 白名单（`code: language-*`、`li: task-list-item`、`ol/ul: contains-task-list`、`section: footnotes`、`a: data-footnote-backref`）已存在。
+
+需要额外加的只有：readit 自身前缀的值级白名单，以及"透传子树保持无 class"这条不变量。
+
+---
+
+<a id="s7"></a>
+
+## 7. 数学：MathJax 4 · SVG · 确定性
+
+### 7.1 包与配置
+
+```js
+// ⚠️ 不是 mathjax-full —— 那个包冻结在 3.2.2（2022-06），
+//    写 mathjax-full/js/... 就是在写 MathJax 3。
+//    v4 的源码包是 @mathjax/src。
+import { mathjax } from '@mathjax/src/js/mathjax.js'
+import { liteAdaptor } from '@mathjax/src/js/adaptors/liteAdaptor.js'
+import { SVG } from '@mathjax/src/js/output/svg.js'
+```
+
+| 配置 | 值 | 理由 |
+|---|---|---|
+| 输出格式 | **SVG** | CHTML 的自适应样式表是文档级、顺序依赖、单调增长的副作用（实测五次转换 11,458 → 19,037 字节），且其确定性模式在 Node 里根本无法同步构建，还需内置 ~1.8 MB woff2 |
+| 字体 | **`@mathjax/mathjax-tex-font`** | 默认字体 newcm 把字形拆成 40 个懒加载块，`\mathbb{R}`、`\mathcal{O}` 等常见构造在同步渲染时**抛错**（33 条真实语料中 2 条）。tex-font **零动态块**，8/8 全同步通过。且 GitHub 2022 年上线数学时 MathJax 4 尚未发布，它几乎肯定跑 MathJax 3，默认字体正是 MJX-TeX |
+| `fontCache` | **`'none'`** | 默认的 `'local'` 发出带自增计数器的 id（`MJX-1-…` vs `MJX-3-…`），同一份公式渲染两次字节不同。`'global'` 需要共享 `<defs>`，破坏片段自包含。`'none'` 内联字形几何，零 id，字节稳定 |
+| `tags` | **`'none'`** | `tags:'ams'` 会从另一个旋钮把计数器带回来（`id="mjx-eqn:1"` 逐次自增），`\label{}` 还会发出跨文档碰撞的全局 id |
+| TeX 包 | base, ams, newcommand, noundefined, noerrors | 见下 |
+| `displayOverflow` | `'scroll'` | 见 §7.4 |
+| MathDocument 生命周期 | **每份文档一个全新实例** | 见 §7.3 |
+
+### 7.2 安全：包白名单，不是 SafeHandler
+
+**不装 `html` / `unicode` / `mhchem` 包。**
+
+- `\unicode[...]` 的 CSS 注入在 v4 已修（issue #3129，2025-08-13 关闭），实测 4.1.3 上载荷被剥离
+- **活的向量是 `html` 包**：`\href{javascript:alert(1)}{x}` 实测原样输出到属性；`\style{color:red}{x}`、`\cssId{evil}{x}` 同理
+- 正确的缓解是**包白名单**（readit 本来就有），`ui/safe` 作为纵深防御的可选项而非必需品
+
+### 7.3 确定性的三个前提
+
+已实测：SVG + `fontCache:'none'` 下，5 次独立 Node 进程输出 SHA-256 全等。但这个保证有前提：
+
+1. **`fontCache: 'none'`**
+2. **`tags: 'none'`**
+3. **每份文档一个全新 MathDocument**
+
+第 3 条不是性能建议，是正确性要求。实测：先转 `\newcommand{\zz}{\alpha}\zz`，再转裸 `\zz`，**它渲染出来了**——TeX 宏状态跨 `convert()` 泄漏。后果有二：
+
+- 第 N 个公式的渲染依赖前 N-1 个 → 逐公式黄金快照不可组合，一份 README 能改变自己后面的数学
+- 不可信第三方 README 的宏炸弹面
+
+因此**快照套件必须包含顺序置换测试，而不只是重复测试**——重复跑测不出这一类。
+
+### 7.4 两个必须内置的东西
+
+**① 5,884 字节的 SVG 样式表，作为冻结常量。**
+
+实测五次转换恒定不变（与 CHTML 的自适应表相反），所以可以 vendor 成常量字符串并 `adoptedStyleSheets` 进每个 shadow root。它不是装饰性的：
+
+- `mjx-container` 是未知元素，无样式表时默认 `display: inline` → **行间公式变成行内且不居中、无边距**
+- SVG 根元素保持 UA 默认的 `overflow: hidden` → **字形被裁**
+- `overflow="scroll"/"truncate"` 显示模式 100% 由 CSS 驱动，无表即死
+
+**② `displayOverflow: 'scroll'`。**
+
+Phase A 预渲染时没有视口，`linebreaks.width: '100%'` 在 Node 里无意义。实测一条 20 项的方程得到单个 `width="105.038ex"` 的 SVG，零换行。**预渲染把布局按"无容器"算死，永远不会随窗口 reflow**——这对可缩放的桌面阅读器是相对 GitHub 客户端渲染的真实退步，只能靠 CSS 横向滚动兜。
+
+### 7.5 原始 TeX 的保留
+
+把源 TeX 存进 `data-tex` 属性。一举三得，且零成本：
+
+- **复制粘贴得到源码**——与 GitHub 行为一致（它的 `<math-renderer>` 元素文本内容就是原始 TeX）
+- **编辑器往返**的源
+- **无障碍**——绕开 `assistive-mml` + `speech-rule-engine`（后者当前是 `5.0.0-rc.4`，一个 RC 版传递依赖）
+
+⚠️ 注意 MathJax 会把用户原始 TeX 回显进遍布各节点的 `data-latex` 属性（实测 `\text{a"b<c>}` → `data-latex="\text{a&quot;b<c>}"`，引号转义、尖括号原样）。属性值内合法，但这是嵌在 Phase A 输出字符串各处的不可信内容——**任何对该字符串的下游正则/字符串后处理都是隐患**。考虑用 `skipAttributes` 丢掉它（同时也能削减 §5.1 里 SVG 相对 CHTML 4–5 倍的体积）。
+
+---
+
+<a id="s8"></a>
+
+## 8. 美元护栏：行内数学的确定性规则集
+
+### 8.1 位置选择（做了大半的工作）
+
+实现为 markdown-it 的 **core rule**，不是 inline rule：
+
+```js
+md.core.ruler.before('text_join', 'readit_math_inline', fn)
+```
+
+在 `inline` 之后（强调/链接/代码 token 已存在）、`text_join` 之前（反斜杠转义仍是可辨认的 `text_special` token，`markup` 为 `'\$'`）。
+
+只有 `text` 与 `text_special` 是候选；其他 token 类型（`code_inline`、`link_open/close`、`em/strong`、`image`、`html_inline`、`softbreak`、`hardbreak`）一律是**不透明边界**。
+
+这一个位置选择白送了：代码段里的 `$` 永不是数学、围栏里永不是、链接 href/title 里永不是、图片 alt 里永不是、数学永不跨行、`**$a$**` 正常工作、`$a*b*c$` 正确地**不**成为数学。
+
+### 8.2 展平
+
+每一段相邻的 text/text_special 兄弟节点合并为：
+- `s` = 各 `.content` 的拼接
+- `mask` = 平行 Uint8Array，`mask[i] = 1` 当且仅当该字符来自 `markup` 以 `\` 开头的 `text_special` token
+
+被遮罩的字符**永远不能是定界符**。这让 readit 拿到 Pandoc 式的 `\$` 正确行为——GitHub 自己反而没有。
+
+### 8.3 规则 R0–R10
+
+| 规则 | 内容 |
+|---|---|
+| **R0** | 优先尝试 `$$…$$`（§8.4） |
+| **R1** | 触发条件：`s[i] === '$'` 且 `mask[i] === 0` |
+| **R2** | **开启符左侧**：前一字符为 `null`（run 起始，即紧跟 token 边界——这就是 `**$a$**` 能工作的原因）、四个 ASCII 空白之一、或 `'('`。其余一律拒绝（字母、数字、`_`、其他标点、所有非 ASCII 含 CJK） |
+| **R3** | **开启符右侧**：不得为 undefined；不得为空白；不得为未遮罩的 `$`。**数字不拒绝**——GitHub 把 `$5+y$`、`$5$` 渲染为数学 |
+| **R4** | **闭合搜索**：向右走，遇 `\n`/`\r` 立即失败（行内数学不跨行），跳过被遮罩的 `$`。**第一个未遮罩的 `$` 是唯一候选** |
+| **R5** | **闭合符左侧**：前一字符不得为空白 |
+| **R6** | **闭合符右侧**：不得匹配 `/[0-9A-Za-z_]/`；不得为未遮罩的 `$`。为 `null`（run 末尾/行尾）或任意标点或任意非 ASCII 则接受。**这一条独自杀掉 `$5 or $10`、`$100-$200`、`$PATH/$HOME`** |
+| **R7** | **平局裁决**：首个候选若不合格，**整个放弃该开启符**，不再贪心右找。`i` 前进一位重新从 R1 开始——失败的候选自己获得成为新开启符的机会 |
+| **R8** | 内容非空 |
+| **R9** | 发射 `math_inline`。被遮罩的 `$` 在交给 MathJax 前重编码回 `\$` |
+| **R10** | 数学内容不透明，永不作为 markdown 二次解析 |
+
+**R7 是整套规则里最重要的一条**，它复现了 GitHub 的真实行为：
+
+```
+"$a $b$"                      → 只有 $b$ 是数学
+"costs $5, and $x$ holds."    → 只有 $x$ 是数学
+"$a$b$c$d$"                   → 全都不是数学
+"a line with $5 and one $ left over" → 全都不是数学
+```
+
+贪心式"继续右找合法闭合符"（`markdown-it-katex` 实际的做法）会产出 `$5 then code `$`——它会吃掉代码段。同一批语料下贪心实现得分 104/159，本规则集 154/159。
+
+### 8.4 `$$…$$` 行内展示
+
+同样的左右上下文测试，作用于两字符序列。差异：**闭合的 `$$` 允许前置空白**（GitHub 接受 `$$a+b $$`），保留以对齐。块级 `$$`（独占行）与 ```math 围栏是独立的块规则，必须在任何行内 pass 之前尝试。
+
+### 8.5 五条有意偏离（D-$1 … D-$5）
+
+| 编号 | 内容 | 理由 |
+|---|---|---|
+| D-$1 | `\$` 抑制数学。GitHub：`\$x+y\$` 仍渲染为数学（其转义在数学 pass 之前解析）。readit：字面量 | 更安全，与 Pandoc 一致，与 GitHub 自己文档的暗示一致 |
+| D-$2 | 闭合 `$` 前紧邻 Tab 被拒。GitHub 接受 | 没人这么写；对称性优于 bug 兼容 |
+| D-$3 | `$\$4 + \$5$` 渲染为一个数学段、内容 `\$4 + \$5`。GitHub 把它搅成 `$$4 + <math>$5$</math>` | — |
+| D-$4 | `$a\$ b$` 渲染为数学、内容 `a\$ b`。GitHub 渲染 `$a$` | — |
+| D-$5 | 原始行内 HTML 不产生文档级污染。GitHub 有个 bug：一个游离的 `<b>` 会压制后续所有段落的数学 | 这是 readit 占优的偏离 |
+
+这 5 条是 159 条 oracle 语料上的**全部**偏离集。每条编码为具名的"已知偏离"fixture，从而任何**其他**用例的变化都会响亮失败。
+
+### 8.6 开关与可检查性
+
+```
+inlineMath: 'github' | 'strict' | 'off'      // 默认 'github'
+```
+
+- `'github'` = 上述规则
+- `'strict'` = 额外两道闸：R2 去掉 `'('` 允许、R3 拒绝紧跟数字。使 `$5+5$`、`($x$)`、`f($x$)` 不成为数学。**代价：159 条里降到 147**。这是"我写钱不写数学"模式，是显式的保真度牺牲
+- `'off'` = 不注册该规则。`$$…$$` 块与 ```math 围栏仍工作
+
+优先级（首个匹配胜出，完全确定性）：**显式 API > 文档 frontmatter 键 `readit-inline-math` > 应用设置 > 内置默认**。
+
+frontmatter 键必须**扁平且带命名空间**——扁平因为 GitHub 把 frontmatter 渲染成可见表格且嵌套 YAML 渲染成嵌套表；带命名空间以免与 Jekyll/Hugo/Obsidian 的键碰撞。
+
+⚠️ **纯度约束**：Phase A **不得**自己读 frontmatter。单独提供纯函数 `readFrontmatterOptions(src) -> {inlineMath?}`，由宿主/壳调用后作为选项传入。这是承重的而非风格问题——一旦泄漏进渲染函数，同构纯度保证就没了。同时：读取某个键**不得**把它从输出里移除，frontmatter 仍照常渲染成表格。
+
+**`explain: true`**：对每个 `$` 输出 `{offset, verdict: 'opened'|'closed'|'rejected', ruleId}` 判定日志。UI 能回答"这段为什么没变成公式"，单元测试能断言规则号而非仅结果，R2–R8 各自成为一个具名测试组。
+
+---
+
+<a id="s9"></a>
+
+## 9. 嵌入模型：Shadow DOM、主题、包布局
+
+### 9.1 Shadow DOM `open` 为默认
+
+理由直接系于验收标准：**在未知宿主的 light DOM 里，宿主一旦上了 Tailwind Preflight 或 Bootstrap Reboot，隔离下通过的快照就证明不了真实嵌入的样子。** Shadow DOM 是唯一能让渲染结果成为「自家 CSS 的函数」的机制。
+
+四个曾被担心的阻碍已逐一核实：
+
+| 担心 | 实况 |
+|---|---|
+| github-markdown-css 在 shadow root 里坏 | 无 `:root`、无 `@font-face`，逐字可用 |
+| KaTeX 的 `@font-face` 在 shadow root 里不生效 | **不适用了**——改用 MathJax SVG，零字体依赖 |
+| Mermaid 在 shadow root 里坏 | 真的坏（它 shadow-unaware）→ 架构上绕开：离屏渲染后注入字符串（§10.3） |
+| CodeMirror 6 在 shadow root 里坏 | 官方支持 `root: ShadowRoot`，且 `new EditorView({parent})` 会自行推断 |
+
+`shadow: false` 逃生舱保留给需要宿主自行改样式、或对 find-in-page / ARIA 有特殊要求的场景。
+
+### 9.2 主题
+
+用 github-markdown-css 的**单主题文件**（`github-markdown-light.css` / `github-markdown-dark.css`，各 22,219 B，dark 那份零 `@media`），scope 在 `:host([data-theme=…])` 下。
+
+⚠️ 合并版 `github-markdown.css` 的 `[data-theme="dark"]` 规则**嵌在 `@media (prefers-color-scheme: dark)` 里**——在浅色系统上无论放哪都不生效。这不是 Shadow DOM 缺陷，那个文件本来就这样。曾流传的"改写成 `:host([data-theme="dark"])` 就能修"是错的，它没有把规则移出媒体查询。
+
+`theme: 'auto'` 读 `getComputedStyle(host).colorScheme`——`color-scheme` 是继承属性，跨 shadow 边界，所以无论宿主设在 `:root`、`.dark` 包装器还是没设（回落 `prefers-color-scheme`）都工作。
+
+对外只开两个覆写通道：`--readit-*` 自定义属性（映射到 GitHub 的 `--fgColor-*` / `--bgColor-*` / `--color-prettylights-syntax-*`，自定义属性会继承进 shadow 树），以及 `::part()`。**`::part()` 名字是永久公开 API**——先只开 `root / content / code-block / mermaid`，加容易删是破坏性变更。
+
+**永不写 `document.documentElement` 或 `document.body`。**
+
+### 9.3 包布局
+
+```
+readit/
+  package.json:
+    "type": "module", "sideEffects": ["*.css"],
+    "exports": {
+      ".":                   { "types": "./dist/core.d.ts",
+                               "module-sync": "./dist/core.js",
+                               "import": "./dist/core.js",
+                               "require": "./dist/core.cjs" },
+      "./element":           "./dist/element.js",
+      "./editor":            "./dist/editor.js",
+      "./plugins/math":      "./dist/plugins/math.js",
+      "./plugins/mermaid":   "./dist/plugins/mermaid.js",
+      "./plugins/highlight": "./dist/plugins/highlight.js",
+      "./styles.css":        "./dist/readit.css",
+      "./package.json":      "./package.json"
+    }
+  dist/readit.iife.js        // 全局 Readit，全量急加载，给 <script> 用户
+```
+
+- `.` 是同构引擎，**不得 import 任何浏览器专属内容**——Node 测试或 SSR 宿主 `import { render } from 'readit'` 直接拿 HTML 字符串
+- **不在 import 时 `customElements.define`**。导出 `defineReadit(tag = 'readit-view')`，内部 `customElements.get(tag)` 守卫。自动注册会让同页两个版本抛不可恢复的 `NotSupportedError`
+- CSS 双形态发布：作为 JS 字符串内联进 `./element`（走 `adoptedStyleSheets`，不要求宿主的打包器配 CSS）**和** `./styles.css`（给 light DOM 消费者）。**不用** CSS module scripts（`import s from './x.css' with {type:'css'}`）——那会强迫每个消费者的打包器支持 CSS import 属性，正是"未知宿主"必须避免的耦合
+- CJS 仅为遗留打包器保留在 `require` 条件下，下个大版本移除
+- 发布前门禁：`publint` + `@arethetypeswrong/cli`
+
+### 9.4 命令式 API
+
+```ts
+mount(el, {
+  value, mode: 'read'|'source'|'split', shadow: true, theme: 'auto',
+  baseUrl, inlineMath: 'github', math: null, highlighter, onNavigate,
+}) -> { setValue, getValue, setMode, setTheme, find, destroy }
+```
+
+**`destroy()` 是强制的**，必须拆掉 CodeMirror view、所有 ResizeObserver/MutationObserver、matchMedia 监听。在长生命周期的宿主 SPA 里漏掉这些是可嵌入组件的经典 bug。
+
+---
+
+<a id="s10"></a>
+
+## 10. 桌面壳：Tauri 2.11
+
+Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关联、文件监听。几乎所有迭代留在 JS 核心里（有热重载）。
+
+### 10.1 配置要点
+
+| 项 | 做法 |
+|---|---|
+| 资源协议 | 自注册 `readit://` 异步 URI scheme（`register_asynchronous_uri_scheme_protocol`），在 Rust 侧把作用域限定到当前文档所在目录。**不用**内置 asset 协议 + 持久化 scope——静态 glob 作用域对"用户双击任意文件"这个形态是错的。⚠️ CSP 里 `readit:` 和 `http://readit.localhost` **都要加**，两个引擎的 scheme 形态不同，一边对另一边就静默坏图 |
+| 文件关联 | `bundle.fileAssociations`，`ext: ["md","markdown"]` + `LSHandlerRank` |
+| macOS 打开事件 | `RunEvent::Opened` 的路径存进 `AppState`，前端挂载后来取。**事件在任何 JS 监听器存在之前就触发**（顺序 Opened → Ready → Window），不这么做会间歇性开出空窗口，且随机器速度复现不稳 |
+| Windows argv | 直接读裸 argv，**不要当 URL 解析**——Tauri 官方的文件关联示例就是这么错的，会丢掉 `C:\Users\…\file.md` |
+| 单实例 | `tauri-plugin-single-instance` 2.4.3，**第一个注册**，早于其他所有插件。第二次调用的 argv 路由进已开窗口的导航历史 |
+| 文件监听 | `notify`。⚠️ 原子保存的 rename 语义会骗过朴素 watcher |
+| 更新 | 官方 updater + minisign 密钥对 + GitHub Releases 上的静态 `latest.json`。**不依赖 OS 代码签名**，证书没到位也能发更新 |
+
+### 10.2 macOS 的 WebKit 版本
+
+⚠️ **不要写"最低 macOS 14 即得现代 WebKit"**。macOS 14 出厂是 Safari 17.0；Safari 26 是可选的独立更新，不是 OS 版本下限能保证的。要么把下限提到 macOS 15/26，要么运行时从 UA 检测 WebKit 构建号并显式降级/告警。文档里写 **"macOS 14 + Safari ≥ N"**，不写 "macOS 14"。
+
+### 10.3 Mermaid 在 WKWebView 上：真实风险与真实缓解
+
+**WebKit bug 23113（foreignObject + RenderLayer 错位，2009 年开、2026-06 仍确认）是真的，但很窄**：需要 foreignObject 之上有 SVG transform **且**其 HTML 子元素上有诱发图层的属性（opacity/transform）。Mermaid 默认标签两者都不满足。
+
+**不要退到 `htmlLabels: false`。** 那条路更差：#7016 在部分修复合并当天被维护者重开（2026-03-03），#7015（实体码）自 2025-09 未动，#4390 自 2022 年陈旧未决，而失败模式是**静默删除 `<` 和 `>` 之间的文本**。对文档阅读器而言，静默丢内容比偶发布局抖动严重得多。
+
+**真正的缺陷源是测量路径**，这也是"mermaid 看起来坏了"的头号来源：
+
+1. `mermaid.render(id, code)`（**不传第三参**）渲染到离屏但**真实布局**的容器：`position: absolute; left: -99999px`。**不能用 `display: none`**——那在 Chrome/Edge 上也坏（#6652）
+2. 渲染前 `await document.fonts.ready`
+3. 临时容器的 `font-family`/`font-size` 必须与 shadow root 一致，或显式把 mermaid 的 `fontFamily`/`fontSize` 配成 shadow 样式表里的同一组值。否则每个标签盒都是照着错误字体量的
+4. 拿回 SVG 字符串 → 自己过一遍 DOMPurify → 注入 shadow root → `bindFunctions(el)`
+5. 对用户 `classDef`/`style` 指令里落到 `node.labelStyle` 上的 `opacity`/`transform`/`filter` 加护栏——那是唯一引爆 WebKit 23113 的路径
+
+**绝不**调用 `mermaid.run({nodes: shadowRoot.querySelectorAll(...)})`——mermaid 通过 `document.getElementById` 解析元素，看不进 shadow root（#6306，维护者已确认）。离屏渲染再注入这个选择是**碰巧唯一可行的路径**。
+
+### 10.4 Mermaid 不进字节级快照
+
+设 `deterministicIds: true` 得到稳定的节点 id，但**这不是完整确定性**：
+
+- `Math.random()` 仍活在 `blockDB.ts`，更要命的是 `scoreLayout.ts` 里——它扰动的是**几何**而不只是标识符
+- `deterministicIDSeed` 的实现只用种子字符串的**长度**（源码内 TODO），不同种子等长即碰撞，按文档播种并不能真正区分文档
+
+因此：**Phase A 只快照它发出的占位符**（`<pre class="mermaid">` / 代码块），Phase B 的 mermaid 用结构断言与视觉截图覆盖。这干净地保住了"Phase A 是快照对象"这条边界。
+
+---
+
+<a id="s11"></a>
+
+## 11. 数据流、导航与查找
+
+### 11.1 数据流
+
+```
+双击 / readit x.md / 点击 ./other.md
+  └→ shell 读字节 + 解析基准目录
+      └→ prepare(src)          [唯一 await：扫 $、```math、```mermaid、围栏语言 → 按需 import]
+          └→ render(src, opts)  [纯同步：markdown-it → GitHub 形状 hast → 卫生化 → MathJax SVG → 字符串]
+              └→ setHtml() 注入 shadow root
+                  └→ Phase B：mermaid 渲染注入 · 高亮升级 · 复制按钮 ·
+                              锚点桥接 · 链接拦截 · 查找索引构建
+```
+
+### 11.2 导航三类
+
+| 类型 | 行为 |
+|---|---|
+| `./other.md` | 拦截，走元素内部的历史栈；`onNavigate(path)` 回调交宿主决定如何取内容（桌面壳读盘；嵌入方可能走 API）。**前进/后退是元素的能力，不是壳的** |
+| `#slug` | **必须拦截。** GitHub 把 `id` 放在兄弟 `<a id="user-content-slug">` 上、`href` 却是不带前缀的 `#slug`，靠前端 JS 搭桥；而在 Shadow DOM 里 fragment 本来就不跨边界。所以：**照抄 GitHub 的 DOM（保①档）+ 自己写桥接（保可用）**，两者不冲突 |
+| 外部 `http(s)` | 交系统浏览器 |
+
+### 11.3 查找
+
+**Shadow DOM 不是问题**——三个引擎的原生 find-in-page 都会遍历 open（乃至 closed）shadow root，WebKit 自 2017 年起如此。
+
+**真问题是 Tauri/WKWebView 在 macOS 上压根没有查找 UI**（tauri#9385，2024-04 开至今 needs-triage）。按 Cmd+F 什么都不会发生。**这是 v1 的实际阻塞项，且没人会替我们修。**
+
+实现：
+
+1. **绝不**建在 `window.find()` 或 `execCommand('FindString')` 上——WebKit 刻意让这两个 API 看不见 shadow tree（`FindOption::DoNotTraverseFlatTree`，bug 158503）。这是最容易踩的坑，因为它看起来像捷径
+2. 走自己的文本模型：遍历 shadow root 构建扁平文本缓冲 + `index → (textNode, offset)` 映射，匹配后为每个命中物化 `Range`
+3. 高亮用 **CSS Custom Highlight API**（`CSS.highlights.set(...)`）——**零 DOM 改动**，所以 Phase A 的输出字节不变，快照不变量不受影响，且能在 CodeMirror 与 Mermaid 水合之后存活
+4. `::highlight(readit-find)` 规则**必须写在 shadow root 内部**——Safari 与 Firefox 不跨 shadow 边界继承高亮样式（csswg#12497）
+5. 滚动到命中需手写（`range.getBoundingClientRect()`），API 不提供当前项与滚动语义
+6. Safari < 17.2 降级到 `<mark data-readit-find>` 包裹，用 `if (!('highlights' in CSS))` 把它关在常规路径之外
+7. **源码模式必须查文档模型而非 DOM**——CodeMirror 6 的视口虚拟化会让任何基于 DOM 的查找静默漏掉屏幕外的行
+8. Windows 上 Ctrl+F 被 WebView2 内置查找栏吃掉（那个栏是好用的，含 shadow DOM）。要么在 Windows 让原生栏赢，要么让壳禁用浏览器加速键——注意 Tauri 未再导出 wry 的 `browser_accelerator_keys`，后者需要 wry 层补丁或上游 PR
+
+预算：3–6 KB 手写代码 + 2–3 KB 降级路径，无依赖。
+
+---
+
+<a id="s12"></a>
+
+## 12. 错误处理与安全
+
+**原则：降级必须可见。护栏的误判要变成难看，不能变成静默的数据丢失。**
+
+| 情形 | 行为 |
+|---|---|
+| LaTeX 非法 | `noerrors`/`noundefined` → 显示原始源码文本。**不能**是空元素，不能抛 |
+| Mermaid 语法错 | 显示源码 + 错误提示框（GitHub 也是这样） |
+| 围栏语言未知 | 朴素 `<pre>`，不高亮，不报错 |
+| 语法包超体积上限 | 不高亮 + 一个"仍要加载"的显式入口。**这是产品决策不是埋点**，阈值与文案在实现前定死 |
+| 相对跳转文件不存在 | 窗口内错误态，显示解析后的完整路径，后退键仍可用 |
+| 原始 HTML | 唯一逃生舱 `allowDangerousHtml: true`（名字在调用处与代码评审中都该读起来像危险品）。**没有 `sanitize: false`** |
+| 卫生化边界 | 见 §6.1 |
+| oracle 刷新 | 写黄金文件前**必须**断言 HTTP 状态与 Content-Type。否则某天会把一段 277 字节的限流 JSON 当期望输出提交进去 |
+
+**注入路径唯一化**：所有 HTML 入 DOM 走一个内部 `setHtml(el, str)`：
+
+1. `'setHTML' in Element.prototype` → 用 `Element.setHTML()`
+2. 否则 `window.trustedTypes` 存在 → 走单一 Trusted Types 策略（`DOMPurify.sanitize(s, {RETURN_TRUSTED_TYPE: true})`）
+3. 否则对已消毒内容用 `innerHTML`
+
+**没有第 2 步，任何下发 `require-trusted-types-for 'script'` 的企业宿主里组件直接硬抛**——而且本地开发永远不会暴露。
+
+**两道 sanitizer 的分工**：`hast-util-sanitize`（无 DOM、Node 与浏览器同构，所以快照有意义）是主力，处理 Markdown 管线里的一切；`DOMPurify` 作为浏览器侧第二遍，只处理**运行时由第三方生成、没走过 hast 管线的东西**——具体就是 Mermaid 的 SVG 输出。
+
+---
+
+<a id="s13"></a>
+
+## 13. 测试架构
+
+| 层 | 内容 | 何时 |
+|---|---|---|
+| **L1 规格一致性** | CommonMark 0.31.2（652 例，140,487 B）+ GFM 0.29（672 例）。`known-failures.json` 白名单，默认全绿，**新增失败即断构建**。⚠️ spec.json 必须从 `spec.commonmark.org/0.31.2/` 直取——npm 的 `commonmark-spec` 包提取器漏了 U+2192→Tab 替换，会静默测错每条 Tab 用例；且 master 分支已有 655 例而发布版 652，只能锁版本化 URL | 本地 <1s |
+| **L2 黄金文件** | 对 §4.2 的 oracle。~120 行归一化器（下）。**刷新脚本永不在常规测试路径里跑** | 本地断言 |
+| **L2b 数学黄金文件** | 自家冻结黄金文件，锁死 `@mathjax/src` 与字体包版本。**必须是顺序置换测试**，不只是重复测试（§7.3） | 本地 |
+| **L3 DOM 断言** | linkedom。oracle 够不着的：数学输出、mermaid 容器、相对路径解析、锚点桥接、卫生化、高亮语言映射 | 本地 |
+| **L3b Shadow DOM 挂载** | **真浏览器里挂进 open shadow root 跑同一批断言。** 没有这层，"可嵌入"是唯一一条零覆盖的锁定需求。必测：同页两个实例（style-mod 的 bug 只在这现形）、CodeMirror 里的中日韩输入法组合 | CI |
+| **L4 视觉回归** | Playwright 1.62.1，**≤12 张**，只在 `mcr.microsoft.com/playwright:v1.62.1-noble` 里生成基线，自托管 woff2，`animations:'disabled'`，`maxDiffPixelRatio: 0.002`，`deviceScaleFactor: 1`。**外加敌意宿主 fixture**（页面加载 Tailwind Preflight + Bootstrap Reboot）证明隔离是真的 | CI |
+
+### 13.1 归一化器（9 步，与刷新脚本共用）
+
+用 `hast-util-from-html` 解析、遍历、`hast-util-to-html` 序列化：
+
+1. 脱掉 `<div id="file|readme" class="md">` / `<article class="markdown-body …">` 外壳
+2. 删非确定性属性：`data-run-id`、`data-identity`；剥掉脚注 id/href 上的 `-<32hex>` 后缀
+3. camo 还原：`<img>` 有 `data-canonical-src` 则回写 `src` 并删该属性。⚠️ github.com 与 raw.githubusercontent.com 上的绝对图片**不走 camo、没有该属性**，规则要留它们不动
+4. `<svg class="octicon octicon-X">…</svg>` 清空内部 `<path d="…">`（那些 blob 巨大且随 GitHub 更新图标集而变）
+5. `<div class="highlight highlight-source-*">` 清到只剩文本——保留 wrapper class（**那才是保真主张：语言识别正确 + 外壳正确**），丢弃 `pl-*` token span
+6. mermaid `<section class="js-render-needs-enrichment">` 清到 `<section data-type="mermaid">` + 解码后的源文本
+7. 丢 hovercard/mention 噪声：`data-hovercard-*`、`data-octo-*`、`data-error-text`、`data-permission-text`、`data-id`、`issue-link js-issue-link`、`user-mention notranslate`
+8. 每节点属性键按字典序排（`diffable-html` **不**做这件事，且它会重排 `<pre>` 内文本从而毁掉代码块比较）
+9. 折叠元素间空白，但 `<pre>`/`<code>` 内文本保持字节精确
+
+**额外两条永久预期差异**（不是 bug，是 §4.1 的 D-CAMO / D-LINK）：GitHub 把相对链接改写成绝对 github.com URL，以及把图片 URL 里的 `/blob/` 改写成 `/raw/`。这两类必须在归一化器里显式登记为白名单，否则每个相对链接、每张外链图都是永久 diff。
+
+### 13.2 三条横向要求
+
+- **跨平台矩阵**：路径解析必须在 windows-latest 上也跑——反斜杠、盘符、UNC、`file://` 里空格的百分号编码、大小写不敏感文件系统。纯 Node 逻辑，很便宜。不跑就会让 Windows 路径 bug 一路绿灯发出去
+- **离线测试要真能失败**：整套跑在阻断出网的环境里。任何依赖伸手够 CDN 就断构建。starry-night 默认从 esm.sh 拉 WASM 这种事，在联网开发机上**永远测不出来**
+- **真引擎才算验收**：Playwright 的 WebKit 是打过补丁的 main 分支构建，**跑在已发布 Safari 前面**——它可能因为一个还没到任何用户手上的修复而通过，也可能因为永不发布的 ToT 回归而失败。它只能当廉价预筛；验收门必须包含真 WKWebView（macOS runner）与真 WebView2（Windows runner）里的一次运行
+
+### 13.3 语料
+
+45–60 个文件，每个小而单一，失败时能自己指出原因。
+
+- `corpus/gfm/`：每个 GFM 特性一文件——表格（对齐、转义竖线、参差行、含竖线的行内代码）、任务列表、删除线、自动链接、脚注、emoji、tagfilter
+- `corpus/github-only/`：alerts（5 类 + 嵌套 + 多段 + 畸形）、frontmatter（标量/列表/多行/畸形/TOML 围栏）、标题锚点（重复 → `-1`/`-2`、标点、emoji、CJK、数字开头）、相对图片与链接（**裸图 / 已被链接包裹的图 / 原始 HTML 图 三种分开**——GitHub 只给"尚未在链接内"的图加 `target="_blank" rel="noopener noreferrer"` 包裹，已链接的图保留作者 href 并加 `rel="nofollow"`）
+- `corpus/frontend/`：数学（行内 `$`、块 `$$`、代码段里的 `$` 必须**不**是数学、货币误判）、mermaid（正确/语法错/巨大）、高亮（js/ts/py/rust/diff/未知语言/无语言）
+- `corpus/real-world/`：6–10 个真实 README，记录上游 commit SHA
+- `corpus/adversarial/`：`karlcow/markdown-testsuite`（**MIT**，103 对，只取输入）。⚠️ **`michelf/mdtest` 是 GPL-2.0，不要 vendor 进一个准备被别人内嵌的库**——这是下游法务会真的拦的东西。另加 cmark 的 `pathological_tests` 输入做**带硬超时的计时测试**：轻量阅读器不能被嵌套括号炸弹卡死
+- `corpus/inline-math/`：§8 的 159 条护栏语料 + 5 条具名偏离
+
+### 13.4 跑法
+
+- `npm test`（本地，目标 <10s，**零网络**）：L1 + L2 对已提交 fixture 的断言 + L3。这就是完整的可证伪主张，且完全离线
+- CI 每 PR：以上 + L3b + L4（固定容器内）
+- CI 夜间/每周，允许响亮失败：`oracle:refresh` → `git diff --exit-code test/fixtures/`。**非空 diff 意味着 GitHub 改了渲染器**，自动开 PR。这把 fixture churn 从维护税变成上游漂移的预警器——对一个验收标准就是"匹配 GitHub"的项目，这正是想要的东西
+- **PAT 强制**：未认证 60 次/小时（调研中两个 agent 一天就烧光并吃到 403 锁 42 分钟）。`GITHUB_TOKEN` 在 Actions 里只有 1000/小时/仓库
+
+---
+
+<a id="s14"></a>
+
+## 14. 落地顺序与验收线
+
+### 第 0 步（先于任何技术承诺）
+
+**一天的 spike。** Tauri hello-world 打包上 mermaid + MathJax + CodeMirror + 高亮，在两台真机上：量装机体积、量冷启动与常驻内存、在真 WKWebView 里渲一张非平凡流程图、按一次 Cmd+F。
+
+理由：调研里所有装机体积都是从别人的 app 反推的，那个「12–18 MB」是低置信度自评且 mermaid 一项低估了 3 倍（实测 mermaid.min.js 3.4 MB 而非 1.2 MB）。**这一天把整个壳决策从推测变成事实，是全项目性价比最高的一天。**
+
+### 里程碑
+
+| M | 内容 | 验收 |
+|---|---|---|
+| **M1** | Phase A 引擎 + L1 + 归一化器 + L2 + oracle 刷新脚本 | 672/672 GFM 减白名单；语料 100% diff 通过 |
+| **M2** | 美元护栏 + 数学 | 159 条护栏语料 154 对、5 条具名偏离；数学黄金文件 + **顺序置换测试**过 |
+| **M3** | element + Shadow DOM + L3b + 高亮双默认 | 敌意宿主 fixture 下渲染不变；同页两实例测试过 |
+| **M4** | 编辑器 + 滚动同步 + `mode:'plain'` 档 | IME 组合测试过 |
+| **M5** | Mermaid | 结构断言 + 截图；**不入字节快照** |
+| **M6** | 壳：文件关联、单实例、`readit://`、导航、查找、文件监听、更新器 | 双平台**真引擎**冒烟 |
+| **M7** | 签名分发 | 见下 |
+
+### 实施计划的切分
+
+本文档是**产品级 spec**，覆盖 7 个里程碑，超出单份实施计划的合理体量。切法：
+
+- **计划一：M0 + M1 + M2**（spike + Phase A 引擎 + 快照套件 + 护栏 + 数学）。这是自成一体的一块——交付物是一个可 `import`、可测、可证伪的渲染引擎，且正好是你选定的"引擎先行"验收线
+- **计划二：M3 + M4**（element/Shadow DOM + 编辑器）
+- **计划三：M5 + M6 + M7**（Mermaid + 壳 + 分发）
+
+每份计划各自走一遍 spec → plan → 实施的循环，本文档是三者共同的上位契约。
+
+**M7 的预算警告**：Apple Developer Program $99/年是硬前提（Sequoia 移除了 Ctrl-click 绕过 Gatekeeper 的路径，未签名意味着要引导用户进系统设置并输管理员密码）。Windows 侧 **Azure Trusted Signing（现名 Artifact Signing）对 EU/UK 个人不开放，只对组织**；若维护者在该辖区，Windows 签名预算要从 ~$120/年 重估到 OV 证书 + 硬件令牌的几百刀/年。不要买 EV 证书——微软 2024 年起取消了 EV 的即时 SmartScreen 信任，OV/EV 现在同样地积累声誉。
+
+---
+
+<a id="s15"></a>
+
+## 15. 诚实的局限
+
+按可能造成困扰的顺序：
+
+1. **数学、Mermaid、20 种主流语言的代码 token 与 GitHub 不同，且永远会不同。** 这不是待办事项，是 §4.1 里的契约。任何把"匹配 GitHub"读作包含这三项的人都会认为 v1 没达标
+2. **GitHub 今天用什么解析器无人知晓。** cmark-gfm 已休眠（三年两次提交，135 个未决 issue），commonmarker（由 GitHub 工程师维护）已转向 comrak，但没有任何公开声明说 github.com 换了。若它仍跑 cmark-gfm（CommonMark 0.29 语义）而我们建在 0.31.2 语义上，会有一条长尾的边界差异。**快照套件会抓住它，但要预留一个差异分诊的待办池，别假设为零**
+3. **GFM 规格冻结在 0.29（2019-04-06），而所有现代解析器实现 0.31.2。** 约 9 条 emphasis 边界用例是任何 JS 解析器都不可能匹配的。`known-failures.json` 必须从第一天就存在且有据可查，否则"可证伪的保真"会变成不可能通过的标准
+4. **Phase A 预渲染的数学不会随窗口 reflow。** 这是相对 GitHub 客户端渲染的真实退步（§7.4）
+5. **Mermaid 里的数学走 KaTeX，散文数学走 MathJax。** mermaid 11.16.1 硬依赖 `katex ^0.16.45`。含公式的图会由第二个、不同的数学引擎渲染，产出不同结果，且两个引擎的体积都要付。关掉 mermaid 的数学支持会让这类图直接坏掉，所以选择保留并在此登记为已知不一致
+6. **`$…$` 护栏是逆向工程的结果。** GitHub 从未公开其规则。R2 里那条"`(` 是唯一被接受的前置标点"尤其像实现产物，随时可能消失。缓解：CI 里定期重生成语料，把 oracle 漂移当一等信号而非要被压掉的失败
+7. **视觉与 GitHub 逐像素一致是不可达的**，因为 GitHub 的字体栈在不同 OS 上解析不同。②档只承诺"肉眼一致"
+8. **打印 / 导出 PDF 未在范围内**，而 `window.print()` 的行为、分页 CSS 支持与页眉页脚控制在 WKWebView 与 WebView2 之间差异显著——这是 Electron 捆绑 Chromium 的少数实质优势之一。**它是最可能在 v1.1 反过来推翻壳选型的需求**
+9. **Windows 上把 `.md` 变成默认打开程序**远比注册文件关联难。`.md` 被 VS Code、Notepad、Typora、浏览器激烈争夺，预计需要自定义 NSIS 注册表工作，且用户仍可能要手动"打开方式 → 始终"。这大概率是"它不工作"类报障的头号来源
+
+---
+
+<a id="s16"></a>
+
+## 16. 决策台账
+
+记录每个岔路口选了什么、以及**被否决的替代方案与否决理由**。
+
+| # | 岔路 | 选定 | 否决的替代 | 否决理由 |
+|---|---|---|---|---|
+| 1 | 黄金样本源 | `/contents` + `vnd.github.html` + `?ref=<sha>` | `POST /markdown` (gfm) | 有 alerts 无锚点，且 `data-run-id` 每次请求随机 |
+| | | | `POST /markdown` (markdown) | 有锚点但 alerts 退化成引用块、任务列表退化成字面 `[x]` |
+| | | | 抓 github.com 页面 | React 渲染、标记埋在 JSON 里、CSS 包每周变 |
+| | | | 把 GFM 0.29 规格当契约 | 7 年未修订，只定义 5 个扩展，不含脚注/alerts/数学/frontmatter/emoji |
+| 2 | 解析器 | markdown-it 15.0.0 | comrak-wasm（运行时） | 381 KB gzip 换 672 条里的 10 条；返回整块 HTML 字符串故无法增量重渲；npm 包是单人维护的 pre-release，落后 crate 8 个月 |
+| | | | marked 18.0.9 | 最小最快，但在字节级快照下光松散列表的空白就丢 ~70 例 |
+| | | | remark/micromark | 41 KB 文档 80 ms（markdown-it 6.6 ms），超帧预算 5–7 倍；`rehype-raw` 会把表格压成一行毁掉快照；`rehype-github-alerts` 为 5 个图标拖进 3.9 MB 的 @primer/octicons |
+| | | | cmark-gfm 编译 WASM | **不存在**可用构建。npm `cmark-gfm` 是 node-gyp 原生绑定；`cmark-gfm-js` 8 年陈旧 |
+| 3 | 桌面壳 | Tauri 2.11.5 | Electron 43 | 运行时本身 116–140 MiB，三个同类应用实测 105–235 MiB。保留为兜底 |
+| | | | Wails v3 | 仍 beta；用**同样**的系统 webview 故承担同样的保真风险，还多一套 Go 工具链 |
+| | | | Neutralino 6.9.0 | 同为系统 webview；文件关联/签名/更新是社区配方而非一等支持 |
+| | | | Tauri + CEF / Verso | alpha / 实验；捆绑 Chromium 就抹掉了选 Tauri 的理由 |
+| | | | 等 Tauri 3 | 里程碑 31%、无期限，内容是 Linux GTK4 迁移，不改变 macOS/Windows 渲染 |
+| 4 | 数学引擎 | MathJax 4.1.3 | KaTeX | 与 GitHub 不同源；后期用户改选 MathJax |
+| 5 | 数学输出 | SVG + `fontCache:'none'` | CHTML | 自适应样式表是文档级、顺序依赖、单调增长（11,458→19,037）；确定性模式在 Node 无法同步构建；另需内置 ~1.8 MB woff2 |
+| | | | `fontCache:'local'` | 发出自增 id，同公式两次渲染字节不同 |
+| | | | `fontCache:'local' + localID` | 字节稳定且小 14%，但固定前缀让全页容器共用同一批 id，`<use href="#…">` 会解析到文档中第一个匹配——删掉一个容器会静默弄坏其余 |
+| 6 | 数学字体 | `mathjax-tex-font` | `mathjax-newcm-font`（v4 默认） | 40 个懒加载块，`\mathbb`/`\mathcal`/`\mathsf`/`\mathtt`/非 ASCII `\text{}` 同步渲染直接抛错；要覆盖等价范围需 base + 全部 40 块 ≈ 3.5 MB gzip，约 6 倍差 |
+| 7 | 高亮器 | 双默认（starry-night / Shiki） | 全场景 starry-night | 嵌入常驻从 ~110 KB 涨到 ~430 KB gzip，而实测在 JS 上 class 依然对不齐 |
+| | | | 全场景 Shiki | 桌面端白白放弃免费的保真度（本地磁盘，WASM 成本≈0） |
+| | | | highlight.js | token 词汇与 GitHub 分歧且无成员访问 token；且有一个 2026-07-31 的 ReDoS 修复卡在未发布的 main 里 |
+| | | | Prism | 语法最弱；v2 三年未发布 |
+| 8 | 隔离 | Shadow DOM `open` | light DOM + 类名前缀 | 宿主的 Tailwind Preflight / Bootstrap Reboot 会级联进来，隔离下通过的快照证明不了真实嵌入 |
+| | | | iframe | 破坏高度自适应、页内查找、跨界选择、复制粘贴、链接导航、无障碍树连续性 |
+| 9 | 卫生化 | hast-util-sanitize 主 + DOMPurify 辅 | 只用 DOMPurify | 需要 DOM → Node 侧要 jsdom（7.1 MB），测试与运行时两套代码路径，破坏可证伪性 |
+| | | | 一遍扫全树 | 会把自家的 alert / 高亮 / 数学标记全铲掉（GitHub 白名单里 `class` 和 `style` 出现次数为零） |
+| 10 | Mermaid 标签 | `htmlLabels: true`（默认） | `htmlLabels: false` | 用一个布局抖动换三个开着的**静默删除 `<`…`>` 之间文本**的 bug（#7016 修复当天被重开、#7015、#4390） |
+| 11 | Mermaid 渲染路径 | 离屏 `mermaid.render()` 再注入字符串 | `mermaid.run({nodes: shadowRoot…})` | mermaid 用 `document.getElementById` 解析元素，看不进 shadow root（#6306） |
+| | | | 传 shadow 内元素作第三参 | mermaid 全代码库 0 处 `shadowRoot`、0 处 `adoptedStyleSheets`，任何可行的 shadow 安排都是"碰巧不坏"，上游重构不会当回归处理 |
+| | | | `display:none` 的离屏容器 | 在 Chrome/Edge 上也坏（#6652） |
+| 12 | 查找 | 自建文本模型 + Custom Highlight API | `window.find()` / `execCommand` | WebKit 刻意让这两个 API 看不见 shadow tree（bug 158503） |
+| | | | 依赖原生查找 | Tauri/WKWebView 在 macOS 上根本没有查找 UI（tauri#9385） |
+| 13 | 护栏位置 | markdown-it **core** rule | inline rule | core rule 的位置白送了代码段/围栏/href/alt 免疫与不跨行，inline rule 每一条都要单独处理 |
+| 14 | 护栏平局裁决 | R7 放弃开启符 | 贪心右找合法闭合符 | 贪心会吃掉代码段；同语料 104/159 vs 154/159 |
+| 15 | 对抗语料 | 只取 karlcow（MIT） | vendor michelf/mdtest | **GPL-2.0**。对一个要被别的项目内嵌的库，下游法务会拦 |
+| 16 | 元素注册 | `defineReadit(tag)` | import 时自动 `define` | 同页两个版本抛不可恢复的 `NotSupportedError` |
+| 17 | CSS 分发 | JS 字符串 + `adoptedStyleSheets`，另供 `.css` | CSS module scripts | 强迫每个消费者的打包器支持 CSS import 属性，正是"未知宿主"要避免的耦合 |
+
+---
+
+## 附录 A：本文档如何产生
+
+先经 brainstorming 逐点锁定 6 个需求决策与 3 个方案决策；再由两轮多智能体工作流并行调研 9 个技术方向（GitHub 渲染管线、解析器选型、桌面壳、编辑器与高亮、嵌入工程、保真测试、MathJax、美元护栏、平台风险），每个方向配一名对抗式复核 agent 独立复验其承重论断。合计 16 个 agent、约 121 万 token、744 次工具调用。
+
+复核推翻了首轮 30 余条论断，其中改变设计的包括：数学字体从 newcm 换成 tex-font（消解了"最大的坑"）、SVG 样式表并非可省（首轮称 SVG "完全绕开 Shadow DOM 问题"是错的）、`\unicode` 注入在 v4 已修而真正的活向量是 `html` 包、starry-night 的常驻成本被低估 6–8 倍、Playwright WebKit 不是可用的验收引擎、macOS 14 并不保证现代 WebKit、`htmlLabels:false` 比它要规避的 bug 更危险、mermaid 尺寸被低估 3 倍。
+
+所有被否决的替代方案与理由见 §16。
