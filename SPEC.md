@@ -2,7 +2,9 @@
 
 > 一个 **阅读优先、跨平台（macOS + Windows）、可被内嵌** 的 Markdown 阅读/编辑器。核心是一个宿主无关的 JS 库，桌面端只是一层薄壳；渲染效果对齐 GitHub 网页版，且**这个对齐是可证伪的**——由对 GitHub 真实输出的快照回归测试守住，而不是靠肉眼。
 >
-> **状态**：设计共识已达成（经 brainstorming 逐点确认），技术事实经两轮多智能体调研 + 对抗式复核（16 个 agent、121 万 token、744 次工具调用）核实，**待落地**。
+> **状态**：设计共识已达成（经 brainstorming 逐点确认），技术事实经两轮多智能体调研 + 对抗式复核（16 个 agent、121 万 token、744 次工具调用）核实。计划一已编写（`docs/plans/2026-08-06-plan1-engine.md`，32 个任务），**待落地**。
+>
+> ⚠️ **先读 §17。** 编写计划一时七个起草组真的装了依赖、真的跑了代码、真的调了 GitHub API，实测推翻了本文档正文的若干条（§6 的 emoji 码点来源与代码块形态、§7.3 的 MathDocument 粒度、§7.5 的 `skipAttributes`、§4.1 的 D-LINK/D-CAMO、§13.1 的 mermaid 结构等）。正文保持原样不改写，是为了让"当初怎么想的"与"实际是什么"都留在记录里；**冲突时以 §17 为准**。
 >
 > **日期**：2026-08-06。本文档中所有版本号与字节数均为该日实测，非记忆。
 >
@@ -28,6 +30,7 @@
 14. [落地顺序与验收线](#s14)
 15. [诚实的局限](#s15)
 16. [决策台账](#s16)
+17. [实测修订台账（计划一起草期间）](#s17)
 
 ---
 
@@ -806,6 +809,78 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 | 15 | 对抗语料 | 只取 karlcow（MIT） | vendor michelf/mdtest | **GPL-2.0**。对一个要被别的项目内嵌的库，下游法务会拦 |
 | 16 | 元素注册 | `defineReadit(tag)` | import 时自动 `define` | 同页两个版本抛不可恢复的 `NotSupportedError` |
 | 17 | CSS 分发 | JS 字符串 + `adoptedStyleSheets`，另供 `.css` | CSS module scripts | 强迫每个消费者的打包器支持 CSS import 属性，正是"未知宿主"要避免的耦合 |
+
+---
+
+<a id="s17"></a>
+
+## 17. 实测修订台账（计划一起草期间）
+
+本节记录在编写计划一（`docs/plans/2026-08-06-plan1-engine.md`）过程中，**通过真实运行代码与真实调用 GitHub API 发现的、与本文档正文冲突的事实**。七个起草组各自在临时目录里装了锁定版本的依赖并真的跑通了代码，下列每一条都有实测依据。
+
+**与正文冲突时，以本节为准。** 正文保持原样不改写，是为了让"当初怎么想的"与"实际是什么"都留在记录里。
+
+### 17.1 §6 渲染规则表的修订
+
+| 条目 | 正文说法 | 实测 |
+|---|---|---|
+| #6 `dir="auto"` | "铺到每个块级元素" | **覆盖面窄得多。** 跨 3 份真实 README 全量统计：`p` 32/32 有、`h1`–`h6` 20/20 有、`ul`+`ol` 6/6 有；而 `blockquote` 0/3、`li` 0/37、`table` 0/1、`pre` 0/4、`hr` 0/2、`td` 0/4、`tr` 0/2、`thead`/`tbody` 0/1 **全都没有**。另有一条真实例外：带 `contains-task-list` 的 `ul` 上**没有** `dir`（10/10） |
+| #7 标题锚点 | 示例里的 svg 只有 `class` | svg 上有 `data-component="Octicon"`，且**排在 `class` 之前**。正文在 #8（alerts）提到要补这个属性，#7 漏了 |
+| #9 frontmatter | "标量单元格套 `<div dir="auto">`" | **只对嵌套层成立，顶层 `<td>` 不套**（hugoDocs 两份 blob 逐字节确认） |
+| #10 emoji | "码点须从 `unicode/<hex>.png` 文件名解析" | **不成立。** 全量 1913 个跑下来只对 1690 个——文件名吞掉了 U+200D 与 U+FE0F。字符必须取自 oracle 返回值。另有 29 个带 `<g-emoji class="g-emoji" alias="…">` 包裹，blob 视图里**真的存在**（实测 `GET /repos/yt-dlp/yt-dlp/readme`） |
+| #11 代码块 | 给了单一形态 `<pre class="notranslate">` | **blob 视图有三种形态。** 可识别语言那种的 `<pre>` **没有** `class="notranslate"`、**没有** `<code>`；非高亮的两种**没有** `dir="auto"`。正文写的那个是 `POST /markdown` 的形态 |
+
+**§6 表格需要新增两条规则**（正文的 14 条不完整）：
+
+| 新 # | 规则 | 实测依据 |
+|---|---|---|
+| 15 | 外部链接与全部自动链接加 `rel="nofollow"`，指向 github.com 的不加 | 每一条自动链接实测都是 `<a href="…" rel="nofollow">`。这是 GitHub 链接装饰阶段的产物，不是自动链接规则本身的。①档要 100% diff 就必须发它 |
+| 16 | 每个 `<img>` 加 `style="max-width: 100%;"` | 确定性行为，所以**不能靠归一化器抹掉**——readit 必须自己发，否则每张图都是永久 diff。注意这与 §6.1「GitHub 白名单里 `style` 出现零次」不矛盾：那说的是**用户写的** `style` 被剥掉，GitHub 自己会注入这一条 |
+
+### 17.2 §4.1 偏离清单的修订
+
+- **D-LINK 与 D-CAMO 的相对 URL 改写在 oracle 端点上不发生。** 实测：github/docs README 里 `[LICENSE](LICENSE)` 在 `contents` + `Accept: application/vnd.github.html` 的返回里仍是 `<a href="LICENSE">`；tauri 的 `<img src=".github/splash.png">` 也没有 `/blob/`→`/raw/` 改写。相对 URL 重写是 **github.com 那个 React blob 页面**的行为，不是这个 API 的。归一化器里那两条白名单仍然实现（幂等、当前是 no-op、将来 GitHub 真改了也不会炸），但**不能再把它们当作"每个相对链接都是永久 diff"的理由**
+- **camo 确实发生**：外链图片在 oracle 里是 `src="https://camo.githubusercontent.com/<64hex>/<hex>"` + `data-canonical-src="<原 URL>"`
+- **新增偏离 D-AUTOLINK-EM。** GitHub 有一个下划线强调与自动链接交互的怪异行为，实测（同一次请求的不同段落）：`x _www.b.com_ y` **不**链接、`x _www.b.com a_ y` 链接、`x __www.b.com__ y` 不链接、`x **www.a.com** y` 链接、`x _http://b.com_ y` 不链接但 `x _foo@bar.baz_ y` 链接。用 cmark-gfm 的 postprocess-text-node 模型、raw-source 模型、Rinku-over-HTML 模型都推不出这个组合，它更像 GitHub 现役解析器的一个 off-by-node 缺陷。**readit 一律链接（与 GFM 规格一致），并把这条登记为具名偏离；语料里 autolink 那几个文件避免出现 `_…_` 包裹的 www/url**
+
+### 17.3 §7 数学的修订
+
+- **§7.3 第 3 条"每份文档一个全新 MathDocument"不够，必须是"每条公式一个全新 MathDocument"。** 实测证据：同一个 MathDocument 里先 `convert('\newcommand{\zz}{\alpha}\zz')` 再 `convert('\zz')`，第二条渲染出的是 α 字形（`data-c="1D6FC"`，宽 1.448ex），而隔离渲染得到的是 `noundefined` 画的红色字面 `\zz`（宽 3.14ex）。按正文字面实现，顺序置换测试必红。代价实测约 1 ms/公式（100 次二次公式 display 渲染 97.1 ms），换来逐公式黄金快照可组合 + 第三方 README 的宏炸弹面归零
+- **§7.5 的 `skipAttributes` 建议行不通。** 实测 `new SVG({ skipAttributes: { 'data-latex': true } })` 直接打印 `MathJax: Invalid option "data-latex" (no default value).` 并被忽略；`grep -rn "options.skipAttributes" node_modules/@mathjax/src/mjs/` 零命中——SVG wrapper 只读类静态 `SvgWrapper.skipAttributes`，那是个全局，改它会污染同进程所有 MathJax 实例。改用一个纯的、每次渲染都跑的 lite-DOM 遍历把 `data-latex` / `data-latex-item` 递归摘掉，效果与原意图相同
+- **§3.2 写的降级标记少了一个属性。** GitHub 真实吐出的是 `<math-renderer class="js-inline-math" style="display: inline-block" data-run-id="…">$x^2$</math-renderer>`。归一化器第 2 步已列 `data-run-id`，但**没列 `style`**——要么进归一化器，要么 readit 照发，否则每条行内数学都是永久 diff
+- **SVG 样式表恰好 5,884 字节且五次转换恒定，与 §7.4 完全一致。** 但它内部有一处 `content: "\A";`，**用模板字符串 vendor 会静默丢掉那个反斜杠变成 5,883 字节**。生成脚本必须走"每行 `JSON.stringify` 后 `join('\n')`"
+
+### 17.4 §8 美元护栏的修订
+
+- **R3 需要一处收窄，否则 R8 不可达。** 照 R3 字面"开启符右侧不得为未遮罩的 `$`"，`$$$$` 会在 R3 就被拒，R8 永远走不到，`ruleId` 联合类型里的 `'R8'` 成为死枝。修正：R3 的"不得为未遮罩 `$`"**只作用于单字符 `$` 开启符**，`$$` 开启符的右侧允许是 `$`，交给 R8 判空。语料上零影响
+- **§8.6 的 `'off'` 是运行期 no-op，不是"不注册该规则"。** 因为规则契约 `applyXxx(md)` 没有 options 形参，配置只能在运行期从 `env.readit` 读。行为等价，但这样同一个 md 实例才能服务不同选项，对 `render(src, opts)` 这个纯函数签名是必要的
+- **一个未决边界：HTML 实体形式的美元号会当定界符。** `pre &dollar;x+y&dollar; end.` 目前产出一个数学段。原因是 §8.2 的 mask 定义严格限定为"markup 以 `\` 开头的 text_special"，而实体的 markup 是 `&dollar;`。起草时**照字面实现、没有擅自扩大 mask**。不在 159 条语料里，GitHub 真实行为未知。**列为待决条目而非悄悄改**
+- **`$$…$$` 行内展示缺少 oracle 佐证。** 159 条里只有 2 条含 `$$`，且 GitHub 两条都判为"不是数学"。正向行为 `$$a+b$$ → 一个 display span` 只有按 §8.4 写的单测撑着。值得再抓一批 `$$` 的 GitHub 输出补进语料
+
+### 17.5 §13 测试架构的修订
+
+- **§13.1 第 6 步的 mermaid 描述是错的。** 真实形态是：一个 `<div class="highlight highlight-source-mermaid …">` 装源码，**紧跟着**一个 `<section class="js-render-needs-enrichment …" data-identity="<uuid>" data-type="mermaid">`；而**源码在内层 `<div class="js-render-enrichment-target">` 的 `data-plain` 属性上，不在 `<section>` 上**。第 2 步删 `data-identity` 是对的
+- **§13.1 需补一步：删 `data-line`**（readit 自有产物，GitHub 没有）
+- **§13.1 第 4 步的选择器要注意**：GitHub 的 octicon svg 首个属性是 `data-component` 而非 `class`，写选择器时按 class 属性**匹配**而不是按"以 class 开头"匹配，否则会漏掉全部 octicon
+- **§13.4 的限流描述不完整**：`POST /markdown` 与 `GET /repos/...` 走**不同的**限额桶。实测 7 次 POST 跑完后 `GET /rate_limit` 显示 core 桶仍是 `used: 7`。"未认证 60 次/小时"只约束 core 那一桶
+- **§13.3 的语料规模只剩 2 个余量**：实测 58 个（gfm 12 / github-only 25 / frontend 15 / real-world 6），上限是 60。§8 的 159 条护栏语料是独立一类，**必须排除在快照发现范围之外**，否则直接冲破上限
+- **L1 规格套件需要且只需要一条归一化**：规格文件发 XHTML 自闭合 `<br />`，readit 用 `xhtmlOut: false`（GitHub 发 `<br>`）。不归一化的话 CommonMark 只有 591/652，其中 58 条纯粹是这个配置差异。加一条只对 15 个空元素名生效的归一化，其余保持字节级比较。**这条要写死，别让后来的人以为可以随手往里加更多归一化**——那会把保真度测试悄悄稀释掉
+
+### 17.6 §5 定版表的补充
+
+**新增运行时依赖**：`js-yaml@4.1.0` + `@types/js-yaml@4.0.9`（frontmatter 解析）、`@types/hast@3.0.5`（类型）。
+
+**新增 devDependency**：`@wooorm/starry-night@3.10.0` —— 只给 `scripts/build-lang-scopes.ts` 用，**运行时零引用**（计划一里还没有高亮器）。
+
+**明确不进依赖**：`markdown-it-github-alerts@1.0.1`。读完它 4,785 字节的 dist 后确认与 GitHub 有五处行为分歧（同行标题当 title、穿透嵌套引用块、不检查层级、空 alert、`\[!NOTE]` 也命中），补两个属性解决不了任何一处。有价值的只有 5 个 octicon path 字符串，已比对为字节相同并抄成冻结常量。
+
+**§5.1 体积预算需上修**：`data/emoji.json` 44,795 B + 23 个自定义 emoji PNG 共 106,492 B + `data/lang-scopes.json` 30,318 B。其中 JSON 会静态进 core bundle（gzip 后小得多），PNG 在打包时拷到 `dist/emoji/` 而**不内联成 data URI**——23 个 PNG base64 后约 142 KB，会直接撑爆 §5.1 的 60–70 KB 引擎预算。
+
+### 17.7 一条独立的交叉验证
+
+L1 规格套件实测：CommonMark 0.31.2 **649/652**（白名单 3 条，全为 markdown-it 空引用块少一个换行）；GFM 0.29 **644/672**（白名单 28 条 = 14 PERMANENT + 14 TEMPORARY，TEMPORARY 全部由计划一的 Task 10–13 消化）。
+
+其中 **9 条 emphasis 失败**与 §15 局限第 3 条"约 9 条 emphasis 边界用例是任何 JS 解析器都不可能匹配的"**独立吻合**。那条局限当初是从规格版本差（GFM 冻结在 CommonMark 0.29、现代解析器实现 0.31.2）推理出来的，现在被真实运行的数字确认了。
 
 ---
 
