@@ -31,6 +31,11 @@ describe('normalize', () => {
     expect(normalize(html)).toBe(html)
   })
 
+  it('step 2 does not over-normalize: a 32-hex run in the middle of an id, not at the end, is left alone', () => {
+    const html = '<a href="#x" id="section-1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d-title">1</a>'
+    expect(normalize(html)).toBe(html)
+  })
+
   it('added step drops data-line, readit\'s own scroll-sync attribute that GitHub never emits', () => {
     const html = '<h1 data-line="0">H</h1><p data-line="2">para</p>'
     expect(normalize(html)).toBe('<h1>H</h1><p>para</p>')
@@ -44,10 +49,12 @@ describe('normalize', () => {
   it('step 3 restores camo src and leaves github.com images untouched', () => {
     const html =
       '<img src="https://camo.githubusercontent.com/9be2d8/6874" alt="status" data-canonical-src="https://img.shields.io/badge/status-stable-blue.svg" style="max-width: 100%;">' +
-      '<img src="https://raw.githubusercontent.com/o/r/main/a.png" alt="direct" style="max-width: 100%;">'
+      '<img src="https://raw.githubusercontent.com/o/r/main/a.png" alt="direct" style="max-width: 100%;">' +
+      '<img src="https://github.com/o/r/raw/main/b.png" alt="bare-github" style="max-width: 100%;">'
     expect(normalize(html)).toBe(
       '<img alt="status" src="https://img.shields.io/badge/status-stable-blue.svg" style="max-width: 100%;">' +
-        '<img alt="direct" src="https://raw.githubusercontent.com/o/r/main/a.png" style="max-width: 100%;">',
+        '<img alt="direct" src="https://raw.githubusercontent.com/o/r/main/a.png" style="max-width: 100%;">' +
+        '<img alt="bare-github" src="https://github.com/o/r/raw/main/b.png" style="max-width: 100%;">',
     )
   })
 
@@ -65,6 +72,20 @@ describe('normalize', () => {
     const a = normalize('<a href="./other.md">x</a>', opts)
     const b = normalize('<a href="./different.md">x</a>', opts)
     expect(a).not.toBe(b)
+  })
+
+  it('step 3b does not over-normalize: a dir-escaping .. stays distinguishable from a same-dir link', () => {
+    const opts = { repo: null, ref: null, dir: '' }
+    const same = normalize('<a href="./a.md">x</a>', opts)
+    const escaping = normalize('<a href="../a.md">x</a>', opts)
+    expect(same).not.toBe(escaping)
+  })
+
+  it('step 3b does not over-normalize: a root-relative link stays distinguishable from a dir-relative one', () => {
+    const opts = { repo: null, ref: null, dir: 'docs' }
+    const rootRelative = normalize('<a href="/a.md">x</a>', opts)
+    const dirRelative = normalize('<a href="a.md">x</a>', opts)
+    expect(rootRelative).not.toBe(dirRelative)
   })
 
   it('leaves fragments, mailto and unrelated absolute urls alone', () => {

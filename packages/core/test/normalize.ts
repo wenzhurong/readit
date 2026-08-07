@@ -41,7 +41,11 @@ const NOISE_CLASS_GROUPS: readonly (readonly string[])[] = [
   ['user-mention', 'notranslate'],
 ]
 
-const FOOTNOTE_SUFFIX = /-[0-9a-f]{32}\b/g
+// Anchored to the end of the string, not just a word boundary (`\b`): the salt is always the
+// last thing GitHub appends to a footnote id/href. An unanchored `\b` would also strip a
+// legitimate 32-hex-looking run that happens to sit in the middle of a real id, which is a
+// genuine (if unlikely) content difference this step must not paper over.
+const FOOTNOTE_SUFFIX = /-[0-9a-f]{32}$/g
 
 const BLOCKISH = new Set([
   'article', 'aside', 'blockquote', 'body', 'dd', 'div', 'dl', 'dt', 'details',
@@ -149,15 +153,34 @@ export function restoreCamo(tree: Parents): void {
   })
 }
 
+/**
+ * Resolve `rel` against `dir`. Two edge cases matter for the fidelity claim, not just for
+ * correctness in the abstract:
+ *
+ * - A `..` that would pop past the start of `out` does NOT clamp to a no-op. It is preserved as
+ *   a literal `../` on the front of the result (tracked via `escapes`, since a second `..` past
+ *   the same point must NOT re-pop the first one — that would silently swallow it right back).
+ *   Clamping would make `../a.md` and `./a.md` resolve to the identical token the moment `dir`
+ *   is empty (or exhausted), converging two genuinely different link targets. Preserving the
+ *   escape keeps them apart while still letting equivalent spellings of the *same* escape (e.g.
+ *   `../a.md` written with a redundant `./../a.md`) converge onto one token — that convergence,
+ *   not "always leave `..` alone", is this step's actual job.
+ * - A leading `/` (root-relative) is never joined onto `dir` — see `canon` below, which passes
+ *   `dir=''` for that case. Skipping the empty segment `''.split('/')` produces is not "clamp",
+ *   it is genuinely resolving from the root, so it stays as-is here.
+ */
 function joinPath(dir: string, rel: string): string {
   const base = dir ? dir.split('/').filter(Boolean) : []
   const out = [...base]
+  let escapes = 0
   for (const seg of rel.split('/')) {
     if (seg === '' || seg === '.') continue
-    if (seg === '..') out.pop()
-    else out.push(seg)
+    if (seg === '..') {
+      if (out.length > 0) out.pop()
+      else escapes++
+    } else out.push(seg)
   }
-  return out.join('/')
+  return '../'.repeat(escapes) + out.join('/')
 }
 
 const ABSOLUTE = /^[a-zA-Z][a-zA-Z0-9+.-]*:|^\/\//
@@ -169,8 +192,13 @@ const ABSOLUTE = /^[a-zA-Z][a-zA-Z0-9+.-]*:|^\/\//
  *
  * Measured against the live `contents` + `Accept: application/vnd.github.html` oracle endpoint:
  * relative-URL rewriting does NOT happen there (that is github.com's React blob *page*, a
- * different code path). These two prefixes are a no-op on today's oracle HTML and are kept only
- * so the whitelist still converges if GitHub ever starts rewriting on this endpoint too.
+ * different code path) — so the four `https://github.com/...` / `raw.githubusercontent.com`
+ * prefixes below are dormant on today's oracle HTML, kept only so the whitelist still converges
+ * if GitHub ever starts rewriting on this endpoint too. The general fallback in `canon` below is
+ * NOT dormant: it runs on every relative `href`/`src` on every `normalize()` call, prefixes
+ * present or not, because it also has to converge equivalent-but-differently-spelled relative
+ * paths (`./x` vs `x`) onto one token — so it carries the same over-normalization risk as any
+ * other step here and needs the same "does it leave a genuine difference intact" scrutiny.
  */
 export function undoGithubUrlRewrites(tree: Parents, opts: NormalizeOptions): void {
   const prefixes: string[] = []
@@ -187,7 +215,10 @@ export function undoGithubUrlRewrites(tree: Parents, opts: NormalizeOptions): vo
       if (value.startsWith(p)) return 'x-readit-rel:' + joinPath('', value.slice(p.length))
     }
     if (ABSOLUTE.test(value) || value.startsWith('#')) return null
-    return 'x-readit-rel:' + joinPath(opts.dir, value)
+    // A root-relative href (leading `/`) resolves from the repo root, never from `dir` — pass
+    // dir='' so it cannot land on the same token as a dir-relative link of the same name.
+    const base = value.startsWith('/') ? '' : opts.dir
+    return 'x-readit-rel:' + joinPath(base, value)
   }
   walk(tree, (child) => {
     if (!isElement(child)) return
