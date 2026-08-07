@@ -1,28 +1,50 @@
 import type { MarkdownIt, StateCore, Token } from 'markdown-it'
 
 /**
- * Links to GitHub itself do not get rel="nofollow" (measured 2026-08-06,
- * SPEC §17.1 rule #15). gist.github.com is a separate host from github.com
- * but is GitHub's own property, so it is exempted too.
+ * Links to GitHub itself do not get rel="nofollow". Measured 2026-08-07 via
+ * `POST /markdown` (mode: gfm) for all three hosts, including the forms that
+ * actually exercise the exemption path: a bare autolink to `www.github.com`
+ * and an explicit link to `gist.github.com` both came back without `rel`,
+ * same as a plain `github.com` link. (An earlier pass only had `github.com`
+ * itself directly measured and carried the other two as plausible inference
+ * — that gap is closed now.)
  */
 const GITHUB_HOSTS: ReadonlySet<string> = new Set(['github.com', 'www.github.com', 'gist.github.com'])
 
 /**
- * Only `http(s)://` links to a non-GitHub host count as "external". Relative
- * links, mailto:, and anything else without an http(s) scheme are left
- * alone. A URL that fails to parse is treated as internal — prefer under-
- * decorating to mis-decorating.
+ * `http(s)://` links to a non-GitHub host count as "external"; so does a
+ * protocol-relative link (`//host/path`) to a non-GitHub host — measured
+ * 2026-08-07: `[a](//example.com/x)` comes back `rel="nofollow"` on real
+ * GitHub, while `[a](//github.com/x)` and `[a](//www.github.com/x)` do not.
+ * A protocol-relative href is normalized to `https:` before the same
+ * scheme/host check runs, since the scheme itself never affects the
+ * decision — only the host does.
+ *
+ * `mailto:` links do NOT get nofollow — also measured 2026-08-07, across
+ * three different mailto forms (explicit `[a](mailto:x@y.z)`, a bare-email
+ * GFM extended autolink, and a `<mailto:x@y.z>` CommonMark autolink): none
+ * of the three came back with `rel`. SPEC §17.1 rule #15's "外部链接与全部
+ * 自动链接" ("external links and all autolinks") was generalized from
+ * http(s) autolinks specifically and does not hold for mailto — do not
+ * "fix" this from the SPEC prose without re-measuring; it was checked.
+ *
+ * Relative links (no scheme, no leading `//`) and anything else without an
+ * http(s)-after-normalization scheme are left alone. A URL that fails to
+ * parse is treated as internal — prefer under-decorating to mis-decorating.
  *
  * Takes `string | number` (not `string`): `Token.attrGet` is typed to return
  * `string | number | null` in markdown-it 15 — an href is never actually a
  * number, but the compiler doesn't know that, so the caller side would need
- * a cast otherwise.
+ * a cast otherwise. (Same underlying typing gap as `dirauto.ts`'s
+ * `String(cls)`; not unified here since the shapes differ — a boolean-typed
+ * `typeof` guard vs. a `String()` coercion — but it's the same root cause.)
  */
 function isExternal(href: string | number): boolean {
   if (typeof href === 'number') return false
-  if (!/^https?:\/\//i.test(href)) return false
+  const normalized = href.startsWith('//') ? `https:${href}` : href
+  if (!/^https?:\/\//i.test(normalized)) return false
   try {
-    return !GITHUB_HOSTS.has(new URL(href).hostname.toLowerCase())
+    return !GITHUB_HOSTS.has(new URL(normalized).hostname.toLowerCase())
   } catch {
     return false
   }

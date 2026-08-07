@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import MarkdownIt from 'markdown-it'
 import { applyDecorate } from '../../src/rules/decorate.js'
 import { applyEmoji } from '../../src/rules/emoji.js'
+import { applyAutolink } from '../../src/rules/autolink.js'
 
 function md() {
   return new MarkdownIt('default', { html: true, linkify: false }).use(applyDecorate)
@@ -29,6 +30,15 @@ describe('applyDecorate', () => {
       expect(md().render('![a](x.png)\n')).toBe(
         '<p><a target="_blank" rel="noopener noreferrer" href="x.png">' +
           '<img src="x.png" alt="a" style="max-width: 100%;"></a></p>\n',
+      )
+    })
+
+    // Measured 2026-08-07: real GitHub wraps ![a]() exactly the same way,
+    // href="" and all — this isn't a readit-only quirk of `?? ''`.
+    it('wraps even an image with an empty src, matching measured GitHub output', () => {
+      expect(md().render('![a]()\n')).toBe(
+        '<p><a target="_blank" rel="noopener noreferrer" href="">' +
+          '<img src="" alt="a" style="max-width: 100%;"></a></p>\n',
       )
     })
   })
@@ -87,6 +97,60 @@ describe('applyDecorate', () => {
 
     it('does NOT add nofollow to an unparseable href (fail closed, never fail open)', () => {
       expect(md().render('[a](https://)\n')).not.toContain('nofollow')
+    })
+
+    // Measured 2026-08-07 via POST /markdown (mode: gfm): [a](//example.com/x)
+    // -> rel="nofollow" on real GitHub. A protocol-relative href has no
+    // explicit scheme, so it must be normalized before the same host check
+    // applies to it.
+    it('adds nofollow to a protocol-relative link to a non-GitHub host', () => {
+      expect(md().render('[a](//example.com/x)\n')).toBe(
+        '<p><a href="//example.com/x" rel="nofollow">a</a></p>\n',
+      )
+    })
+
+    // Measured same session: [a](//github.com/x) and [a](//www.github.com/x)
+    // both come back without rel on real GitHub — the exemption is host-
+    // based, not scheme-based, and protocol-relative doesn't escape it.
+    it('does NOT add nofollow to a protocol-relative link to github.com or www.github.com', () => {
+      expect(md().render('[a](//github.com/o/r)\n')).toBe('<p><a href="//github.com/o/r">a</a></p>\n')
+      expect(md().render('[a](//www.github.com/o/r)\n')).toBe(
+        '<p><a href="//www.github.com/o/r">a</a></p>\n',
+      )
+    })
+
+    // Measured same session: [a](//EXAMPLE.com/x) still comes back nofollow —
+    // the host check must stay case-insensitive after the protocol-relative
+    // normalization, not just for explicit-scheme hrefs.
+    it('is case-insensitive for a protocol-relative host', () => {
+      expect(md().render('[a](//EXAMPLE.com/x)\n')).toBe(
+        '<p><a href="//EXAMPLE.com/x" rel="nofollow">a</a></p>\n',
+      )
+    })
+
+    // Measured 2026-08-07: [a](mailto:foo@bar.com) comes back WITHOUT rel on
+    // real GitHub. SPEC §17.1 rule #15 says nofollow goes on "external links
+    // and all autolinks", generalized from http(s) autolinks — that does not
+    // hold for mailto. Recorded here so this isn't re-raised from the SPEC
+    // prose without a re-measurement.
+    it('does NOT add nofollow to an explicit mailto: link (measured: GitHub does not nofollow mailto)', () => {
+      expect(md().render('[a](mailto:foo@bar.com)\n')).toBe(
+        '<p><a href="mailto:foo@bar.com">a</a></p>\n',
+      )
+    })
+
+    // Same measurement, the autolink forms: a bare-email GFM extended
+    // autolink and a <mailto:...> CommonMark autolink. Both also came back
+    // without rel on real GitHub, so applyAutolink's ordinary link_open
+    // tokens correctly fall through isExternal's http(s)-only scheme check
+    // with no further special-casing needed.
+    it('does NOT add nofollow to a bare-email autolink (mailto, via applyAutolink)', () => {
+      const m = new MarkdownIt('default', { html: true, linkify: false })
+      applyAutolink(m)
+      applyDecorate(m)
+      expect(m.render('foo@bar.com\n')).toBe(
+        '<p><a href="mailto:foo@bar.com">foo@bar.com</a></p>\n',
+      )
     })
   })
 
