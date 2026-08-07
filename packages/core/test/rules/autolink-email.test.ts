@@ -47,17 +47,14 @@ describe('gfm extended autolink: email', () => {
   })
 
   it('drops a mid-sentence trailing . that is not the end of the text', () => {
-    // NOTE: despite matchEmail calling the shared autolinkDelim (same as
-    // matchWww/matchUrl), this case — like the paragraph-final "a.b-c_d@a.b."
-    // case above — is decided entirely by matchEmail's own domain-scan
-    // boundary check, not by autolinkDelim: a '.' only counts toward the
-    // domain (np++) when the *next* byte is alnum, so a '.' followed by a
-    // space (or by end of string) makes the scan break one byte early and
-    // never hands that '.' to autolinkDelim in the first place. Verified by
-    // mutation: deleting the `autolinkDelim(src, at, at + linkEnd)` call from
-    // matchEmail and returning `at + linkEnd` directly leaves every assertion
-    // in this file green — see task-11-report.md for the full analysis of why
-    // that call is currently unreachable-effect dead code in matchEmail.
+    // NOTE: unlike matchWww/matchUrl, matchEmail does not call the shared
+    // autolinkDelim to strip trailing punctuation (see the comment at its
+    // `return` in autolink.ts) — this case, like the paragraph-final
+    // "a.b-c_d@a.b." case above, is decided entirely by matchEmail's own
+    // domain-scan boundary check: a '.' only counts toward the domain (np++)
+    // when the *next* byte is alnum, so a '.' followed by a space (or by end
+    // of string) makes the scan break one byte early and exclude it from the
+    // match on its own.
     // 2026-08-07 GitHub POST /markdown: "email me at foo@bar.baz. Thanks!" ->
     //   <p>email me at <a href="mailto:foo@bar.baz">foo@bar.baz</a>. Thanks!</p>
     expect(mk().render('email me at foo@bar.baz. Thanks!\n')).toBe(

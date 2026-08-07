@@ -167,8 +167,14 @@ export function matchEmail(src: string, pos: number, max: number): number {
   if (linkEnd < 2 || nb !== 1 || np === 0) return -1
   const last = src.charCodeAt(at + linkEnd - 1)
   if (!isAlpha(last) && last !== 0x2e) return -1
-  const end = autolinkDelim(src, at, at + linkEnd)
-  return end > at ? end : -1
+  // No autolinkDelim (trailing-punctuation strip) call here, unlike
+  // matchWww/matchUrl: the domain scan above only ever admits alnum, `@`,
+  // `.`-followed-by-alnum, `-`, and `_` into this span, and the isAlpha(last)
+  // || last === '.' check just above rules out `-`/`_` as the terminal byte.
+  // No character in TRAILING (autolinkDelim's strip set) can therefore ever
+  // be the last byte of [at, at + linkEnd), so a call would always be a
+  // no-op — confirmed by deleting it and observing no test regress.
+  return at + linkEnd
 }
 
 /** Scan one plain-text run and return every extended autolink in it. */
