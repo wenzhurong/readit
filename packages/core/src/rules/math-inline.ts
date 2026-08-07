@@ -131,7 +131,8 @@ export function scanDollars(s: string, mask: Uint8Array, mode: InlineMathMode): 
     // R6: closer right context — no word character, no unmasked '$'.
     const afterPos = cand + delim
     const afterCode = s.charCodeAt(afterPos)
-    const afterOk = afterPos >= len || (!isWordChar(afterCode) && !(afterCode === CH_DOLLAR && !maskAt(mask, afterPos)))
+    const afterIsWordOrDollar = isWordChar(afterCode) || (afterCode === CH_DOLLAR && !maskAt(mask, afterPos))
+    const afterOk = afterPos >= len || !afterIsWordOrDollar
     if (!afterOk) {
       // R7 again: abandon the opener rather than greedily looking further right.
       i++
@@ -163,7 +164,8 @@ function isTexty(t: Token): boolean {
  * (and `$\alpha$` would render as `$\aalpha$`).
  */
 function isBackslashEscape(t: Token): boolean {
-  return t.type === 'text_special' && t.markup.length > 0 && t.markup.charCodeAt(0) === 0x5c && t.content.length === 1
+  if (t.type !== 'text_special' || t.content.length !== 1) return false
+  return t.markup.length > 0 && t.markup.charCodeAt(0) === 0x5c
 }
 
 /**
