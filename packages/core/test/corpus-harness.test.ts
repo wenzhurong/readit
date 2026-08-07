@@ -1,5 +1,8 @@
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { compareToFixture, discoverCorpus, readCorpus } from './corpus-harness.js'
+import { NON_SNAPSHOT_DIRS, compareToFixture, discoverCorpus, readCorpus } from './corpus-harness.js'
 import { discoverKarlcow, readKarlcow } from './corpus-adversarial.js'
 import { PATHOLOGICAL_CASES } from './corpus/adversarial/pathological.js'
 
@@ -41,6 +44,26 @@ describe('corpus inventory', () => {
   it('is sorted and de-duplicated so test order is stable', () => {
     expect(names).toEqual([...names].sort())
     expect(new Set(names).size).toBe(names.length)
+  })
+})
+
+describe('NON_SNAPSHOT_DIRS', () => {
+  // `test/corpus/inline-math/` doesn't exist today — the 159-case dollar-guard corpus lives at
+  // `test/inline-math/corpus.json`, outside CORPUS_DIR entirely — so 'inline-math' in
+  // NON_SNAPSHOT_DIRS is otherwise never actually exercised by discoverCorpus() against the real
+  // corpus tree. A synthetic temp directory pins the exclusion behavior itself, independent of
+  // whether that directory happens to exist today.
+  it('excludes every listed directory, not just the ones the real corpus tree happens to have', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'corpus-non-snapshot-'))
+    await mkdir(join(dir, 'gfm'), { recursive: true })
+    await writeFile(join(dir, 'gfm', 'kept.md'), 'kept', 'utf8')
+    for (const excluded of NON_SNAPSHOT_DIRS) {
+      await mkdir(join(dir, excluded), { recursive: true })
+      await writeFile(join(dir, excluded, 'should-not-appear.md'), 'x', 'utf8')
+    }
+    expect(NON_SNAPSHOT_DIRS).toContain('adversarial')
+    expect(NON_SNAPSHOT_DIRS).toContain('inline-math')
+    expect(discoverCorpus(dir)).toEqual(['gfm/kept'])
   })
 })
 

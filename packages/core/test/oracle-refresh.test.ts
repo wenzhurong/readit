@@ -291,4 +291,78 @@ describe('vendor licence gate', () => {
     ).rejects.toThrow(/404/)
     await expect(readdir(dir)).resolves.toEqual([])
   })
+
+  // vendorKarlcow replaced the standalone vendor-karlcow.sh git-clone script, which hardcoded its
+  // GPL-2.0 avoidance in a comment instead of going through assertLicenceAllowed(). These tests
+  // exist to prove the karlcow vendoring path is actually wired to the shared gate, not just that
+  // the gate function itself works (that's already covered above) — see task-23-fix-report.md.
+
+  it('vendorKarlcow checks the licence before it ever calls fetch', async () => {
+    const { vendorKarlcow, KARLCOW } = await import('../scripts/vendor-corpus.js')
+    const dir = await mkdtemp(join(tmpdir(), 'vendor-karlcow-'))
+    const source = { ...KARLCOW, repo: 'michelf/mdtest', license: 'GPL-2.0' }
+    const spy = async () => {
+      throw new Error('fetch must not be called for a denied repo')
+    }
+    await expect(vendorKarlcow(dir, spy, source)).rejects.toThrow(/GPL-2\.0/)
+    await expect(readdir(dir)).resolves.toEqual([])
+  })
+
+  it('vendorKarlcow defaults to the real KARLCOW source when none is given', async () => {
+    const { vendorKarlcow, KARLCOW } = await import('../scripts/vendor-corpus.js')
+    const dir = await mkdtemp(join(tmpdir(), 'vendor-karlcow-'))
+    let seenUrl = ''
+    const spy = async (url: string) => {
+      seenUrl = url
+      return { status: 404, text: async () => 'Not Found' }
+    }
+    // No denial fires (KARLCOW.repo is allowed) and the function reaches the fetch stage — proving
+    // the default parameter really does carry KARLCOW's repo/ref/dir, not some other value.
+    await expect(vendorKarlcow(dir, spy)).rejects.toThrow(/HTTP 404/)
+    expect(seenUrl).toBe(`https://api.github.com/repos/${KARLCOW.repo}/contents/${KARLCOW.dir}?ref=${KARLCOW.ref}`)
+  })
+
+  it('vendorKarlcow refuses a directory listing that is not exactly 103 markdown inputs', async () => {
+    const { vendorKarlcow, KARLCOW } = await import('../scripts/vendor-corpus.js')
+    const dir = await mkdtemp(join(tmpdir(), 'vendor-karlcow-'))
+    const spy = async (url: string) => {
+      if (url.includes('/contents/')) {
+        return { status: 200, text: async () => JSON.stringify([{ name: 'a.md' }, { name: 'b.md' }]) }
+      }
+      // Individual raw fetches for the (too few) listed files must still succeed, so the count
+      // guard — not a fetch failure — is what's actually under test here.
+      return { status: 200, text: async () => 'content' }
+    }
+    await expect(vendorKarlcow(dir, spy, KARLCOW)).rejects.toThrow(/expected 103 karlcow \*\.md inputs/)
+  })
+
+  it('vendorKarlcow writes exactly the .md entries (filtering out .out and non-.md), plus LICENSE.txt and PROVENANCE.json', async () => {
+    const { vendorKarlcow, KARLCOW } = await import('../scripts/vendor-corpus.js')
+    const dir = await mkdtemp(join(tmpdir(), 'vendor-karlcow-'))
+    const mdNames = Array.from({ length: 103 }, (_, i) => `case-${String(i).padStart(3, '0')}.md`)
+    const listing = [...mdNames.map((name) => ({ name })), { name: 'case-000.out' }, { name: 'README' }]
+    const spy = async (url: string) => {
+      if (url.includes('/contents/')) return { status: 200, text: async () => JSON.stringify(listing) }
+      if (url.endsWith('/LICENSE.md')) return { status: 200, text: async () => 'MIT License text' }
+      const name = url.split('/').pop()
+      return { status: 200, text: async () => `content of ${name}` }
+    }
+    const written = await vendorKarlcow(dir, spy, KARLCOW)
+    expect(written).toHaveLength(105) // 103 inputs + LICENSE.txt + PROVENANCE.json
+
+    const files = (await readdir(join(dir, 'adversarial', 'karlcow'))).sort()
+    expect(files).toEqual([...mdNames, 'LICENSE.txt', 'PROVENANCE.json'].sort())
+    expect(files).not.toContain('case-000.out')
+    expect(files).not.toContain('README')
+
+    await expect(readFile(join(dir, 'adversarial', 'karlcow', 'case-042.md'), 'utf8')).resolves.toBe('content of case-042.md')
+    await expect(readFile(join(dir, 'adversarial', 'karlcow', 'LICENSE.txt'), 'utf8')).resolves.toBe('MIT License text')
+    const provenance = JSON.parse(await readFile(join(dir, 'adversarial', 'karlcow', 'PROVENANCE.json'), 'utf8'))
+    expect(provenance).toEqual({
+      repo: KARLCOW.repo,
+      ref: KARLCOW.ref,
+      license: KARLCOW.license,
+      vendored: 'tests/*.md inputs only; .out expectations excluded',
+    })
+  })
 })
