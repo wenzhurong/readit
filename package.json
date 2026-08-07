@@ -7,6 +7,10 @@
   "scripts": {
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "oracle:refresh": "tsx packages/core/scripts/oracle-refresh.ts"
+    "oracle:refresh": "tsx packages/core/scripts/oracle-refresh.ts",
+    "gen:svg-stylesheet": "vite-node tools/gen-svg-stylesheet.ts"
+  },
+  "devDependencies": {
+    "vite-node": "6.0.0"
   }
 }
