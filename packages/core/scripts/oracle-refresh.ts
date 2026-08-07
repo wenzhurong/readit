@@ -105,17 +105,31 @@ export async function fetchOracle(target: OracleTarget, token: string, fetchImpl
  */
 export type OracleProvenance = Record<string, { repo: string; ref: string; path: string; dir: string }>
 
+/**
+ * All-or-nothing: every target is fetched and validated (via fetchOracle/assertOracleResponse)
+ * before anything at all is written to `fixturesDir`. If any target fails, nothing lands on disk
+ * — not even the fixtures for targets that already succeeded. The alternative (write each fixture
+ * as it succeeds, provenance only at the end) leaves a batch that fails partway through with
+ * fixtures on disk that oracle-provenance.json does not describe: a fixture with no matching
+ * provenance entry is exactly the inconsistency the downstream corpus assertions would trip over.
+ * Trading some wasted quota on a retry after a partial failure for that guarantee is the right
+ * side of this task's core safety property to be strict about.
+ */
 export async function refreshAll(
   targets: readonly OracleTarget[],
   token: string,
   fixturesDir: string,
   fetchImpl: FetchLike,
 ): Promise<string[]> {
-  const written: string[] = []
-  const provenance: OracleProvenance = {}
+  const fetched: { target: OracleTarget; file: string; body: string }[] = []
   for (const target of targets) {
     const body = await fetchOracle(target, token, fetchImpl)
-    const file = join(fixturesDir, `${target.name}.html`)
+    fetched.push({ target, file: join(fixturesDir, `${target.name}.html`), body })
+  }
+
+  const written: string[] = []
+  const provenance: OracleProvenance = {}
+  for (const { target, file, body } of fetched) {
     await mkdir(dirname(file), { recursive: true })
     await writeFile(file, body, 'utf8')
     written.push(file)
@@ -149,9 +163,34 @@ export function buildSelfTargets(
   return corpusNames.map((name) => ({ name, repo, ref, path: `${prefix}/${name}.md` }))
 }
 
+/** Runtime shape check for one manifest entry — see the comment on `readManifest`. */
+function isOracleTarget(value: unknown): value is OracleTarget {
+  if (typeof value !== 'object' || value === null) return false
+  const v = value as Record<string, unknown>
+  return typeof v.name === 'string' && typeof v.repo === 'string' && typeof v.ref === 'string' && typeof v.path === 'string'
+}
+
+/**
+ * Task 23 hand-edits this manifest, so a malformed entry (typo'd or missing field) is validated
+ * here, at the point where the file path and the bad entry's index are both still known —
+ * `JSON.parse(...) as OracleTarget[]` would let a malformed entry through silently (TypeScript's
+ * `as` is a compile-time-only assertion) and it would instead surface later as an obscure
+ * `oracleUrl`/SHA40 failure, or not at all if the missing field happened not to be read.
+ */
 export async function readManifest(manifestPath: string): Promise<OracleManifestEntry[]> {
-  const raw = JSON.parse(await readFile(manifestPath, 'utf8')) as OracleTarget[]
-  return raw.map((t) => ({ ...t, dir: dirOf(t.path) }))
+  const raw: unknown = JSON.parse(await readFile(manifestPath, 'utf8'))
+  if (!Array.isArray(raw)) {
+    throw new OracleError(`manifest "${manifestPath}": expected a JSON array of targets, got ${typeof raw}.`)
+  }
+  return raw.map((entry: unknown, i: number) => {
+    if (!isOracleTarget(entry)) {
+      throw new OracleError(
+        `manifest "${manifestPath}": entry ${i} is not a valid OracleTarget ` +
+          `(needs string name/repo/ref/path). Got: ${JSON.stringify(entry)}`,
+      )
+    }
+    return { ...entry, dir: dirOf(entry.path) }
+  })
 }
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
@@ -163,11 +202,23 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     )
     return 2
   }
-  const root = argv[0] ?? new URL('../test', import.meta.url).pathname
-  const targets = await readManifest(join(root, 'oracle-manifest.json'))
-  const written = await refreshAll(targets, token, join(root, 'fixtures'), globalThis.fetch as unknown as FetchLike)
-  process.stdout.write(`refreshed ${written.length} fixtures\n`)
-  return 0
+  // Everything below can reject: a malformed manifest (readManifest), a non-200/wrong-media-type/
+  // malformed-body response (refreshAll, via assertOracleResponse — precisely the scenario this
+  // whole task exists to guard against), or a filesystem error. Without this try/catch, main()'s
+  // caller sees a raw unhandled-rejection stack dump instead of an operator-facing message, on
+  // the single most likely real failure this tool will hit. The corpus is still safe either way
+  // (nothing is written on a rejection — see refreshAll) but the operator experience is not.
+  try {
+    const root = argv[0] ?? new URL('../test', import.meta.url).pathname
+    const targets = await readManifest(join(root, 'oracle-manifest.json'))
+    const written = await refreshAll(targets, token, join(root, 'fixtures'), globalThis.fetch as unknown as FetchLike)
+    process.stdout.write(`refreshed ${written.length} fixtures\n`)
+    return 0
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    process.stderr.write(`oracle refresh failed: ${message}\n`)
+    return 1
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

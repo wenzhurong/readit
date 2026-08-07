@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   OracleError,
   assertOracleResponse,
@@ -130,6 +130,25 @@ describe('oracle-refresh', () => {
     expect(await readdir(dir)).toEqual([])
   })
 
+  it('refreshAll is all-or-nothing: a later target failing leaves NO fixture and NO provenance on disk, including for targets that already succeeded', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'oracle-'))
+    const second: OracleTarget = { ...TARGET, name: 'real-world/second', path: 'SECOND' }
+    let call = 0
+    const flaky: FetchLike = async () => {
+      call += 1
+      // First call (the TARGET fixture) succeeds; second call (the `second` fixture) comes back
+      // as the rate-limit body. Under all-or-nothing semantics, the first target's fixture must
+      // never land on disk on its own — a fixture with no matching provenance entry is exactly
+      // the inconsistency Task 24's assertions would trip over.
+      if (call === 1) {
+        return { status: 200, headers: { get: () => 'application/vnd.github.html' }, text: async () => GOOD_BODY }
+      }
+      return { status: 403, headers: { get: () => 'application/json' }, text: async () => RATE_LIMIT_BODY }
+    }
+    await expect(refreshAll([TARGET, second], 'tok', dir, flaky)).rejects.toThrow(OracleError)
+    expect(await readdir(dir)).toEqual([])
+  })
+
   it('readManifest parses a JSON array of targets and derives dir for each entry', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'oracle-manifest-'))
     const manifestPath = join(dir, 'oracle-manifest.json')
@@ -143,6 +162,24 @@ describe('oracle-refresh', () => {
     ])
   })
 
+  it('readManifest rejects a manifest whose top level is not an array, instead of failing later inside .map', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'oracle-manifest-'))
+    const manifestPath = join(dir, 'oracle-manifest.json')
+    await writeFile(manifestPath, JSON.stringify({ oops: 'not an array' }), 'utf8')
+    await expect(readManifest(manifestPath)).rejects.toThrow(OracleError)
+    await expect(readManifest(manifestPath)).rejects.toThrow(/expected a JSON array of targets/)
+  })
+
+  it('readManifest rejects an entry missing a required field, instead of silently producing a malformed target', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'oracle-manifest-'))
+    const manifestPath = join(dir, 'oracle-manifest.json')
+    // No `ref`: Task 23 will be hand-editing this file, and a typo like this should fail loudly
+    // right here, not resurface later as an obscure oracleUrl/SHA40 error far from the cause.
+    await writeFile(manifestPath, JSON.stringify([{ name: 'x', repo: 'o/r', path: 'docs/a.md' }]), 'utf8')
+    await expect(readManifest(manifestPath)).rejects.toThrow(OracleError)
+    await expect(readManifest(manifestPath)).rejects.toThrow(/entry 0/)
+  })
+
   it('main refuses to run without GITHUB_TOKEN, before ever reading a manifest or touching the network', async () => {
     const original = process.env.GITHUB_TOKEN
     delete process.env.GITHUB_TOKEN
@@ -153,6 +190,64 @@ describe('oracle-refresh', () => {
       await expect(main([])).resolves.toBe(2)
     } finally {
       if (original !== undefined) process.env.GITHUB_TOKEN = original
+    }
+  })
+})
+
+describe('main error handling', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function withToken<T>(run: () => Promise<T>): Promise<T> {
+    const original = process.env.GITHUB_TOKEN
+    process.env.GITHUB_TOKEN = 'tok'
+    return run().finally(() => {
+      if (original === undefined) delete process.env.GITHUB_TOKEN
+      else process.env.GITHUB_TOKEN = original
+    })
+  }
+
+  it('reports a clean message when the manifest is malformed, instead of an unhandled-rejection stack dump', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'oracle-main-'))
+    await writeFile(join(dir, 'oracle-manifest.json'), 'not json', 'utf8')
+    const errSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    try {
+      await withToken(async () => {
+        const code = await main([dir])
+        expect(code).not.toBe(0)
+      })
+      const output = errSpy.mock.calls.map((c) => String(c[0])).join('')
+      // Asserting a specific, stable prefix (rather than "does not contain a stack trace") is
+      // itself the proof: if main() ever let the rejection propagate unhandled again, there
+      // would be no such call to process.stderr.write from inside main() to match against —
+      // this assertion can only pass if main() caught the error itself and formatted it.
+      expect(output).toMatch(/^oracle refresh failed: /)
+    } finally {
+      errSpy.mockRestore()
+    }
+  })
+
+  it('reports a clean message when refreshAll rejects (e.g. a rate-limited response), instead of an unhandled-rejection stack dump', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'oracle-main-'))
+    await writeFile(join(dir, 'oracle-manifest.json'), JSON.stringify([TARGET]), 'utf8')
+    vi.stubGlobal('fetch', async () => ({
+      status: 403,
+      headers: { get: (n: string) => (n.toLowerCase() === 'content-type' ? 'application/json' : null) },
+      text: async () => RATE_LIMIT_BODY,
+    }))
+    const errSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    try {
+      await withToken(async () => {
+        const code = await main([dir])
+        expect(code).not.toBe(0)
+      })
+      const output = errSpy.mock.calls.map((c) => String(c[0])).join('')
+      expect(output).toMatch(/^oracle refresh failed: /)
+      expect(output).toContain('expected HTTP 200, got 403')
+      expect(await readdir(dir)).not.toContain('oracle-provenance.json')
+    } finally {
+      errSpy.mockRestore()
     }
   })
 })
