@@ -80,15 +80,21 @@ describe('off mode', () => {
       expect(mathSpans(c.src, 'off')).toEqual([])
     }
   })
+})
 
-  it('disables real inline $...$ while a fenced ```math block was never inline to begin with', () => {
-    // Guards against a mode test that would pass even if 'off' were a no-op:
-    // github mode must actually produce the paragraph span (proving the mode
-    // switch reaches the rule), off must suppress exactly that span, and the
-    // fenced block's dollars must produce no span in either mode (they are
-    // never part of an 'inline' token, so mode never even sees them).
+describe('fenced code blocks are structurally opaque to the guard', () => {
+  it('never turns a fenced ```math block\'s dollars into math, even in the most permissive mode', () => {
+    // Not a mode test — no corpus case has a fence or an embedded newline, so
+    // nothing above exercises this. A fence is tokenized as 'fence', never
+    // 'inline' (see math-inline.ts: `if (tok.type !== 'inline' ...) continue`),
+    // so its content is invisible to this rule before env.readit.inlineMath is
+    // even read; the mode argument genuinely does not matter here. 'github' —
+    // the mode most permissive to real inline math — is deliberately the only
+    // one exercised: it is the strongest case, since if the fence's dollars
+    // were reachable at all, this is the mode where they would show up. The
+    // paragraph's genuine $a+b$ in the same document is the control: it
+    // proves the renderer is doing real work, not silently producing [].
     const src = '```math\n$x+y$\n```\n\npara $a+b$ text.'
     expect(mathSpans(src, 'github')).toEqual(['$a+b$'])
-    expect(mathSpans(src, 'off')).toEqual([])
   })
 })

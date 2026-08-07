@@ -50,13 +50,35 @@ describe('D-$4 an escaped dollar cannot close a span', () => {
 describe('D-$5 raw inline HTML causes no document-level pollution', () => {
   const src = 'a stray <b> tag\n\nthen $x+y$ here.'
 
+  /**
+   * The corpus is captured one case per HTTP request specifically because
+   * drafting observed this bug contaminating batched requests (a stray raw
+   * `<b>` in one case killed math in every later case of the same batch) —
+   * so this cross-paragraph, single-document behavior has no corpus.json
+   * entry to cite and had to be captured directly, the same way each entry
+   * in corpus.json was.
+   *
+   * Captured live 2026-08-07 via `gh api -X POST /markdown --input -` with
+   * body `{"text":"a stray <b> tag\n\nthen $x+y$ here.","mode":"gfm","context":"octocat/Hello-World"}`
+   * (HTTP/2 200, Content-Type text/html;charset=utf-8, X-Commonmarker-Version
+   * 0.23.12). Raw response body:
+   *   <p dir="auto">a stray <b> tag</b></p><b>
+   *   <p dir="auto">then $x+y$ here.</p></b>
+   * GitHub auto-closes the unclosed `<b>` at the end of paragraph 1, then
+   * opens a *new*, itself-unclosed `<b>` that swallows paragraph 2 — and
+   * paragraph 2's `$x+y$` is left as literal text: zero `<math-renderer>`
+   * tags anywhere in the body. The bug reproduces as of the capture date;
+   * `github` below is that observed (empty) span list, not an assumption.
+   */
+  const github: string[] = []
+
   it('readit still renders math after a stray tag with raw HTML disabled', () => {
     expect(mathSpans(src, 'github', false)).toEqual(['$x+y$'])
-    expect(mathSpans(src, 'github', false)).not.toEqual([])
+    expect(mathSpans(src, 'github', false)).not.toEqual(github)
   })
 
   it('readit still renders math after a stray tag with raw HTML enabled', () => {
     expect(mathSpans(src, 'github', true)).toEqual(['$x+y$'])
-    expect(mathSpans(src, 'github', true)).not.toEqual([])
+    expect(mathSpans(src, 'github', true)).not.toEqual(github)
   })
 })
