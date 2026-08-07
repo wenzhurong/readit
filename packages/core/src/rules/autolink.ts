@@ -24,6 +24,11 @@ function isSpace(c: number): boolean {
   return c === 0x20 || c === 0x09 || c === 0x0a || c === 0x0b || c === 0x0c || c === 0x0d
 }
 
+/** Local-part character of an extended email autolink: alnum or `.` `+` `-` `_`. */
+function isEmailLocal(c: number): boolean {
+  return isAlnum(c) || c === 0x2e || c === 0x2b || c === 0x2d || c === 0x5f
+}
+
 /**
  * A character that may precede an extended www/url autolink:
  * start of the text run, whitespace, or one of `*` `_` `~` `(`.
@@ -138,6 +143,34 @@ export function matchUrl(src: string, pos: number, max: number): number {
   return -1
 }
 
+/**
+ * Email autolink whose local part starts at `pos` (which must be the first
+ * character of a maximal run of local-part characters). Returns end, or -1.
+ */
+export function matchEmail(src: string, pos: number, max: number): number {
+  let at = pos
+  while (at < max && isEmailLocal(src.charCodeAt(at))) at++
+  if (at === pos) return -1
+  if (at >= max || src.charCodeAt(at) !== 0x40) return -1
+
+  let nb = 0
+  let np = 0
+  let linkEnd = 0
+  for (; at + linkEnd < max; linkEnd++) {
+    const c = src.charCodeAt(at + linkEnd)
+    if (isAlnum(c)) continue
+    if (c === 0x40) nb++
+    else if (c === 0x2e && linkEnd < max - at - 1 && isAlnum(src.charCodeAt(at + linkEnd + 1)))
+      np++
+    else if (c !== 0x2d && c !== 0x5f) break
+  }
+  if (linkEnd < 2 || nb !== 1 || np === 0) return -1
+  const last = src.charCodeAt(at + linkEnd - 1)
+  if (!isAlpha(last) && last !== 0x2e) return -1
+  const end = autolinkDelim(src, at, at + linkEnd)
+  return end > at ? end : -1
+}
+
 /** Scan one plain-text run and return every extended autolink in it. */
 export function findAutolinks(src: string): AutolinkMatch[] {
   const out: AutolinkMatch[] = []
@@ -155,6 +188,10 @@ export function findAutolinks(src: string): AutolinkMatch[] {
     if (end < 0 && (c === 0x68 || c === 0x48 || c === 0x66 || c === 0x46)) {
       end = matchUrl(src, i, max)
       if (end > 0) href = src.slice(i, end)
+    }
+    if (end < 0 && isEmailLocal(c) && (i === 0 || !isEmailLocal(src.charCodeAt(i - 1)))) {
+      end = matchEmail(src, i, max)
+      if (end > 0) href = 'mailto:' + src.slice(i, end)
     }
 
     if (end > i) {
