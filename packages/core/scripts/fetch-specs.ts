@@ -19,6 +19,14 @@ const CM_URL = 'https://spec.commonmark.org/0.31.2/spec.json'
 const CM_BYTES = 140487
 const CM_COUNT = 652
 
+// 钉在 tag `0.29.0.gfm.13` 而不是 `master`：2026-08-06 实测两者内容 SHA-256 相同，
+// 钉 tag 现在零成本，且能防止 fixture 将来在 master 上悄悄漂移。
+const GFM_URL =
+  'https://raw.githubusercontent.com/github/cmark-gfm/0.29.0.gfm.13/test/spec.txt'
+/** 2026-08-06 实测：216,680 字节 / 672 例 */
+const GFM_BYTES = 216680
+const GFM_COUNT = 672
+
 async function fetchText(url: string, expectedBytes: number): Promise<string> {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`${url} -> HTTP ${res.status}`)
@@ -57,6 +65,61 @@ export async function fetchCommonMark(outPath: string): Promise<number> {
   return examples.length
 }
 
+/**
+ * 从 cmark-gfm 的 spec.txt 提取例子。
+ *
+ * ⚠️ 三个必须做对的点：
+ * 1. 在 `<!-- END TESTS -->` 处截断 —— 其后是回归用的杂项，不属于规格。
+ * 2. 围栏后的 info string 必须**保留**，不能按 `info.trim() === 'example'` 过滤。
+ *    实测：672 例中有 24 例带非空 info（table 8 / autolink 11 / disabled 2 /
+ *    strikethrough 2 / tagfilter 1），那 24 例正好是全部 GFM 扩展例子。
+ *    markdown-it 自己的 harness 用那个等号过滤，会静默丢光它们。
+ * 3. markdown 与 html 两侧都要把 U+2192 (→) 换回 Tab。
+ */
+export function parseGfmSpec(text: string): SpecExample[] {
+  const endMarker = '<!-- END TESTS -->'
+  const endAt = text.indexOf(endMarker)
+  if (endAt < 0) throw new Error(`GFM spec.txt 里找不到 ${endMarker}`)
+  const body = text.slice(0, endAt)
+
+  const exampleRe = /^`{32} example(.*)\n([\s\S]*?)^\.\n([\s\S]*?)^`{32}$/gm
+  const raw: Array<{ markdown: string; html: string; start: number; end: number }> = []
+  let m: RegExpExecArray | null
+  while ((m = exampleRe.exec(body)) !== null) {
+    raw.push({
+      markdown: m[2]!.replace(/→/g, '\t'),
+      html: m[3]!.replace(/→/g, '\t'),
+      start: m.index,
+      end: m.index + m[0]!.length,
+    })
+  }
+
+  // 章节名取最近的前置 h1/h2，但必须排除落在例子体内部的伪标题
+  // （规格里有 `# Foo` 这样的 markdown 输入，不排除会把 section 记成 "[Foo]"）。
+  const headings = [...body.matchAll(/^#{1,2} (.*)$/gm)]
+    .filter((h) => !raw.some((e) => h.index! >= e.start && h.index! < e.end))
+    .map((h) => ({ at: h.index!, name: h[1]!.trim() }))
+
+  return raw.map((e, i) => {
+    let section = ''
+    for (const h of headings) {
+      if (h.at < e.start) section = h.name
+      else break
+    }
+    return { markdown: e.markdown, html: e.html, example: i + 1, section }
+  })
+}
+
+export async function fetchGfm(outPath: string): Promise<number> {
+  const text = await fetchText(GFM_URL, GFM_BYTES)
+  const examples = parseGfmSpec(text)
+  if (examples.length !== GFM_COUNT) {
+    throw new Error(`GFM: expected ${GFM_COUNT} examples, got ${examples.length}`)
+  }
+  await writeFile(outPath, JSON.stringify(examples, null, 2) + '\n', 'utf8')
+  return examples.length
+}
+
 const isMain =
   process.argv[1] !== undefined &&
   fileURLToPath(import.meta.url) === process.argv[1]
@@ -67,4 +130,6 @@ if (isMain) {
     fileURLToPath(new URL('commonmark-0.31.2.json', here)),
   )
   console.log(`commonmark-0.31.2.json: ${cm} examples`)
+  const gfm = await fetchGfm(fileURLToPath(new URL('gfm-0.29.json', here)))
+  console.log(`gfm-0.29.json: ${gfm} examples`)
 }
