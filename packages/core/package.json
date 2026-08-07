@@ -15,6 +15,7 @@
     "fetch-specs": "tsx scripts/fetch-specs.ts"
   },
   "dependencies": {
+    "@readit/math": "0.0.0",
     "github-slugger": "2.0.0",
     "hast-util-from-html": "2.0.3",
     "hast-util-sanitize": "5.0.2",

@@ -38,17 +38,8 @@ export function renderWithExplain(
   return { html, explain: resolved.explain ? env.explain : [] }
 }
 
-/**
- * 唯一的异步缝（SPEC §3.1）。当前只做选项合并；
- * 按需 dynamic import 数学/高亮渲染器由后续任务在此处接入。
- */
-export async function prepare(
-  src: string,
-  opts?: Partial<RenderOptions>,
-): Promise<RenderOptions> {
-  void src
-  return resolve(opts)
-}
+export { prepare, scan, DEFAULT_LOADERS } from './prepare.js'
+export type { Loaders, ScanResult } from './prepare.js'
 
 /**
  * 纯函数，由宿主调用后把结果作为选项传入 render（SPEC §8.6 纯度约束）。
