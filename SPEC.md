@@ -834,7 +834,7 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 
 | 新 # | 规则 | 实测依据 |
 |---|---|---|
-| 15 | 外部链接与全部自动链接加 `rel="nofollow"`，指向 github.com 的不加 | 每一条自动链接实测都是 `<a href="…" rel="nofollow">`。这是 GitHub 链接装饰阶段的产物，不是自动链接规则本身的。①档要 100% diff 就必须发它 |
+| 15 | 外部 **http(s)** 链接加 `rel="nofollow"`；指向 `github.com` / `www.github.com` / `gist.github.com` 的不加；**协议相对**外链（`//example.com/x`）**加**；**`mailto:` 三种形式全部不加** | ⚠️ **本行经 2026-08-07 实测修订。** 原文写的「外部链接与**全部自动链接**」是从 http(s) 自动链接的实测**过度推广**——`mailto:` 从未被直接测过。执行 Task 33 时用一次 `POST /markdown`（mode: gfm）直接采样定案：显式 `[a](mailto:…)`、裸邮箱扩展自动链接、尖括号 `<mailto:…>` 自动链接，**三种形式在真实 GitHub 上全都不带 `rel`**。照原散文实现会**引入**一个与 GitHub 的偏离，而非消除。同批采样另外确认：协议相对外链确实加 `nofollow`（原实现因正则要求显式 scheme 而漏掉，已修）；`www.github.com` 与 `gist.github.com` 的豁免此前是推断，现为直测 |
 | 16 | 每个 `<img>` 加 `style="max-width: 100%;"` | 确定性行为，所以**不能靠归一化器抹掉**——readit 必须自己发，否则每张图都是永久 diff。注意这与 §6.1「GitHub 白名单里 `style` 出现零次」不矛盾：那说的是**用户写的** `style` 被剥掉，GitHub 自己会注入这一条 |
 
 ### 17.2 §4.1 偏离清单的修订
