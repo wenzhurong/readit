@@ -879,7 +879,7 @@ export type SuiteId = 'commonmark-0.31.2' | 'gfm-0.29'
 /**
  * 唯一一条允许的归一化：把 XHTML 自闭合空元素写成 HTML5 形式。
  * 规格文件里是 `<br />`，readit 用 xhtmlOut:false（GitHub 发 `<br>`）。
- * 只对固定的 15 个空元素名生效；代码块里的 `<` 已被转义成 `&lt;`，扫不到。
+ * 只对固定的 13 个空元素名（HTML5 现行空元素集；param 已从规范移除）生效；代码块里的 `<` 已被转义成 `&lt;`，扫不到。
  * 除此之外**不做任何归一化** —— 比较是字节级的。
  */
 const VOID_SELF_CLOSING =
