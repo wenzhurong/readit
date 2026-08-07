@@ -9522,6 +9522,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { render } from '../src/index.js'
+import { createSpecEngine } from '../src/engine.js'
+import { DEFAULT_OPTIONS } from '../src/types.js'
 
 const SRC = readFileSync(join(import.meta.dirname, 'integration/kitchen-sink.md'), 'utf8')
 
@@ -9597,16 +9599,29 @@ describe('all 16 rules in one engine', () => {
 })
 
 describe('createSpecEngine loads only the semantic slot', () => {
-  it('emits no GitHub shape for a plain heading', async () => {
-    const { createSpecEngine } = await import('../src/engine.js')
-    const { DEFAULT_OPTIONS } = await import('../src/types.js')
-    const md = createSpecEngine(DEFAULT_OPTIONS)
+  const md = createSpecEngine(DEFAULT_OPTIONS)
+
+  it('emits no GitHub shape for a plain heading', () => {
     expect(md.render('# hi')).toBe('<h1>hi</h1>\n')
   })
 
   it('still applies the semantic rules', () => {
-    // 见上一条的 import；此处复用同一个实例
     // <s> -> <del> 属于 SEMANTIC，规格引擎必须仍然生效
+    expect(md.render('~~x~~')).toBe('<p><del>x</del></p>\n')
+  })
+
+  it('does not apply the shape rules', () => {
+    // dir="auto"、markdown-heading wrapper、data-line 全部属于 SHAPE
+    const html = md.render('# hi\n\n| a |\n| - |\n| b |\n')
+    expect(html).not.toContain('dir="auto"')
+    expect(html).not.toContain('markdown-heading')
+    expect(html).not.toContain('markdown-accessiblity-table')
+    expect(html).not.toContain('data-line')
+  })
+
+  it('still applies the semantic half of the table rule', () => {
+    // align 属性归 SEMANTIC，外壳归 SHAPE —— 见契约 C1 对 Task 7 的拆分要求
+    expect(md.render('| a |\n|:-:|\n| b |\n')).toContain('align="center"')
   })
 })
 ```

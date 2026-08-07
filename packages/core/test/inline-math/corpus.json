@@ -1,0 +1,1122 @@
+[
+ {
+  "id": "PRE00",
+  "src": "pre ($x+y$ end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">pre (<math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"32826a1748ccd41efc1292664b080d4d\">$x+y$</math-renderer> end.</p>"
+ },
+ {
+  "id": "PRE01",
+  "src": "pre [$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre [$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE02",
+  "src": "pre {$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre {$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE03",
+  "src": "pre <$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre &lt;$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE04",
+  "src": "pre /$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre /$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE05",
+  "src": "pre ,$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre ,$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE06",
+  "src": "pre ;$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre ;$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE07",
+  "src": "pre :$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre :$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE08",
+  "src": "pre .$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre .$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE09",
+  "src": "pre -$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre -$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE10",
+  "src": "pre \"$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre \"$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE11",
+  "src": "pre '$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre '$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE12",
+  "src": "pre *$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre *$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE13",
+  "src": "pre ~$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre ~$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE14",
+  "src": "pre =$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre =$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE15",
+  "src": "pre +$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre +$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE16",
+  "src": "pre !$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre !$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE17",
+  "src": "pre ?$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre ?$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE18",
+  "src": "pre )$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre )$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE19",
+  "src": "pre ]$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre ]$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE20",
+  "src": "pre }$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre }$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE21",
+  "src": "pre >$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre &gt;$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE22",
+  "src": "pre |$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre |$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE23",
+  "src": "pre &$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre &amp;$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE24",
+  "src": "pre %$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre %$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE25",
+  "src": "pre #$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre #$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE26",
+  "src": "pre @$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre @$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE27",
+  "src": "pre ^$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre ^$x+y$ end.</p>"
+ },
+ {
+  "id": "PRE28",
+  "src": "pre _$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">pre _$x+y$ end.</p>"
+ },
+ {
+  "id": "POST00",
+  "src": "post $x+y$( end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"e295a37e3ef89e1affedab37080ff7bd\">$x+y$</math-renderer>( end.</p>"
+ },
+ {
+  "id": "POST01",
+  "src": "post $x+y$[ end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"1b89ded489b8fe029fd5c0b96bf99a05\">$x+y$</math-renderer>[ end.</p>"
+ },
+ {
+  "id": "POST02",
+  "src": "post $x+y${ end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"8b18f44a177835e1f293952a538e57bd\">$x+y$</math-renderer>{ end.</p>"
+ },
+ {
+  "id": "POST03",
+  "src": "post $x+y$< end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"a1224d1e6a46972468c430dc56a26cfa\">$x+y$</math-renderer>&amp;lt; end.</p>"
+ },
+ {
+  "id": "POST04",
+  "src": "post $x+y$/ end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"296faaa0358e2d9cd91d7c7c34247a58\">$x+y$</math-renderer>/ end.</p>"
+ },
+ {
+  "id": "POST05",
+  "src": "post $x+y$, end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"c7ece9645b0e5e59f443eb997e8d31f0\">$x+y$</math-renderer>, end.</p>"
+ },
+ {
+  "id": "POST06",
+  "src": "post $x+y$; end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"4cc6c7bbdbdc13fa1c2e4489a5d8c6dd\">$x+y$</math-renderer>; end.</p>"
+ },
+ {
+  "id": "POST07",
+  "src": "post $x+y$: end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"5587eda78f4c3c9da788b4df51548eab\">$x+y$</math-renderer>: end.</p>"
+ },
+ {
+  "id": "POST08",
+  "src": "post $x+y$. end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"19b318ceae5473912918bd19e6c29061\">$x+y$</math-renderer>. end.</p>"
+ },
+ {
+  "id": "POST09",
+  "src": "post $x+y$- end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"19231cf5912dcf9825259b907bea2edf\">$x+y$</math-renderer>- end.</p>"
+ },
+ {
+  "id": "POST10",
+  "src": "post $x+y$\" end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"f262c80ceeee2ffd2a2cab99dd5473e9\">$x+y$</math-renderer>\" end.</p>"
+ },
+ {
+  "id": "POST11",
+  "src": "post $x+y$' end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"f060bb6a30a4e8e0b36170040385d8aa\">$x+y$</math-renderer>' end.</p>"
+ },
+ {
+  "id": "POST12",
+  "src": "post $x+y$* end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"d331fcfa68a8c7ae6783babcacd17640\">$x+y$</math-renderer>* end.</p>"
+ },
+ {
+  "id": "POST13",
+  "src": "post $x+y$~ end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"aa8c046ad1c770f32cfe87246cb458dc\">$x+y$</math-renderer>~ end.</p>"
+ },
+ {
+  "id": "POST14",
+  "src": "post $x+y$= end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"945b76ab5bcc88d39fe36b967714ffda\">$x+y$</math-renderer>= end.</p>"
+ },
+ {
+  "id": "POST15",
+  "src": "post $x+y$+ end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"31282a8c241afa8f158e251ea5350731\">$x+y$</math-renderer>+ end.</p>"
+ },
+ {
+  "id": "POST16",
+  "src": "post $x+y$! end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"55ddc0b68f0420e54c4f18fd03c20ecd\">$x+y$</math-renderer>! end.</p>"
+ },
+ {
+  "id": "POST17",
+  "src": "post $x+y$? end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"763881baf0b5018303eeb2f7607f2b71\">$x+y$</math-renderer>? end.</p>"
+ },
+ {
+  "id": "POST18",
+  "src": "post $x+y$) end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"7b0a9c918b1448f17e29eee3ebeeb87e\">$x+y$</math-renderer>) end.</p>"
+ },
+ {
+  "id": "POST19",
+  "src": "post $x+y$] end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"42976fc98c5ea57d54a4b4d6a6e5785e\">$x+y$</math-renderer>] end.</p>"
+ },
+ {
+  "id": "POST20",
+  "src": "post $x+y$} end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"c5236bc1bbc63cae88811c675bf2c1a8\">$x+y$</math-renderer>} end.</p>"
+ },
+ {
+  "id": "POST21",
+  "src": "post $x+y$> end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"162d210d2dee1fa2aca5fd48ea3e65c3\">$x+y$</math-renderer>&amp;gt; end.</p>"
+ },
+ {
+  "id": "POST22",
+  "src": "post $x+y$| end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"185de7e190217de3bec62229fd483d57\">$x+y$</math-renderer>| end.</p>"
+ },
+ {
+  "id": "POST23",
+  "src": "post $x+y$& end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"f9ab7e6f2ab1150d12e84c0fbb9ca6cf\">$x+y$</math-renderer>&amp;amp; end.</p>"
+ },
+ {
+  "id": "POST24",
+  "src": "post $x+y$% end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"1c76b4b7e81e98642d5df6807b36fe4b\">$x+y$</math-renderer>% end.</p>"
+ },
+ {
+  "id": "POST25",
+  "src": "post $x+y$# end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"3805b175559a6adae01ebeabedb44d13\">$x+y$</math-renderer># end.</p>"
+ },
+ {
+  "id": "POST26",
+  "src": "post $x+y$@ end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"2db9615efcd91a63dfd8eb9b9c69ca91\">$x+y$</math-renderer>@ end.</p>"
+ },
+ {
+  "id": "POST27",
+  "src": "post $x+y$^ end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"92a3522ce20fa8868e8fc9c2ed3f5d3a\">$x+y$</math-renderer>^ end.</p>"
+ },
+ {
+  "id": "POST28",
+  "src": "post $x+y$_ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">post $x+y$_ end.</p>"
+ },
+ {
+  "id": "POST29",
+  "src": "post $x+y$0 end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">post $x+y$0 end.</p>"
+ },
+ {
+  "id": "POST30",
+  "src": "post $x+y$a end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">post $x+y$a end.</p>"
+ },
+ {
+  "id": "POST31",
+  "src": "post $x+y$\\ end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">post <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"1572267e71d5977edfa1216158ada64c\">$x+y$</math-renderer>\\ end.</p>"
+ },
+ {
+  "id": "M000",
+  "src": "It costs $5 or $10 today.",
+  "gh": [],
+  "html": "<p dir=\"auto\">It costs $5 or $10 today.</p>"
+ },
+ {
+  "id": "M001",
+  "src": "The range is $100-$200 dollars.",
+  "gh": [],
+  "html": "<p dir=\"auto\">The range is $100-$200 dollars.</p>"
+ },
+ {
+  "id": "M002",
+  "src": "Use the $PATH variable and $HOME too.",
+  "gh": [],
+  "html": "<p dir=\"auto\">Use the $PATH variable and $HOME too.</p>"
+ },
+ {
+  "id": "M003",
+  "src": "Price: $5.00 exactly.",
+  "gh": [],
+  "html": "<p dir=\"auto\">Price: $5.00 exactly.</p>"
+ },
+ {
+  "id": "M004",
+  "src": "Inline math $a+b$ here.",
+  "gh": [
+   "$a+b$"
+  ],
+  "html": "<p dir=\"auto\">Inline math <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"7aedf9cb91dde067e21b71cbdc4107b2\">$a+b$</math-renderer> here.</p>"
+ },
+ {
+  "id": "M005",
+  "src": "Spaced open $ a+b$ here.",
+  "gh": [],
+  "html": "<p dir=\"auto\">Spaced open $ a+b$ here.</p>"
+ },
+ {
+  "id": "M006",
+  "src": "Spaced close $a+b $ here.",
+  "gh": [],
+  "html": "<p dir=\"auto\">Spaced close $a+b $ here.</p>"
+ },
+ {
+  "id": "M007",
+  "src": "Both spaced $ a+b $ here.",
+  "gh": [],
+  "html": "<p dir=\"auto\">Both spaced $ a+b $ here.</p>"
+ },
+ {
+  "id": "M008",
+  "src": "Closing followed by digit $a+b$5 here.",
+  "gh": [],
+  "html": "<p dir=\"auto\">Closing followed by digit $a+b$5 here.</p>"
+ },
+ {
+  "id": "M009",
+  "src": "Opening preceded by digit 5$a+b$ here.",
+  "gh": [],
+  "html": "<p dir=\"auto\">Opening preceded by digit 5$a+b$ here.</p>"
+ },
+ {
+  "id": "M010",
+  "src": "Escaped \\$5 and \\$10 here.",
+  "gh": [],
+  "html": "<p dir=\"auto\">Escaped $5 and $10 here.</p>"
+ },
+ {
+  "id": "M011",
+  "src": "Code span with `$5 and $10` inside.",
+  "gh": [],
+  "html": "<p dir=\"auto\">Code span with <code class=\"notranslate\">$5 and $10</code> inside.</p>"
+ },
+ {
+  "id": "M012",
+  "src": "Prose $5 then code `$var` end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">Prose $5 then code <code class=\"notranslate\">$var</code> end.</p>"
+ },
+ {
+  "id": "M013",
+  "src": "a$b$c compact.",
+  "gh": [],
+  "html": "<p dir=\"auto\">a$b$c compact.</p>"
+ },
+ {
+  "id": "M014",
+  "src": "$5 at line start.",
+  "gh": [],
+  "html": "<p dir=\"auto\">$5 at line start.</p>"
+ },
+ {
+  "id": "M015",
+  "src": "CJK price 0 5 here.",
+  "gh": [],
+  "html": "<p dir=\"auto\">CJK price 0 5 here.</p>"
+ },
+ {
+  "id": "M016",
+  "src": "CJK adjacent \u306f$a$\u3067\u3059 end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">CJK adjacent \u306f$a$\u3067\u3059 end.</p>"
+ },
+ {
+  "id": "M017",
+  "src": "Link [text](http://x.com/$a$b) here.",
+  "gh": [],
+  "html": "<p dir=\"auto\">Link <a href=\"http://x.com/$a$b\" rel=\"nofollow\">text</a> here.</p>"
+ },
+ {
+  "id": "M018",
+  "src": "Three dollars $a$ and $b more.",
+  "gh": [
+   "$a$"
+  ],
+  "html": "<p dir=\"auto\">Three dollars <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"7bc52f7e401e604d9e8d47dcfbd71ea8\">$a$</math-renderer> and $b more.</p>"
+ },
+ {
+  "id": "M019",
+  "src": "Multi $x$ and $y$ pairs.",
+  "gh": [
+   "$x$",
+   "$y$"
+  ],
+  "html": "<p dir=\"auto\">Multi <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"6ab112381f4f097e3804b03eb6e750d0\">$x$</math-renderer> and <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"6ab112381f4f097e3804b03eb6e750d0\">$y$</math-renderer> pairs.</p>"
+ },
+ {
+  "id": "M020",
+  "src": "Currency $1,000 and math $x^2$ mixed.",
+  "gh": [
+   "$x^2$"
+  ],
+  "html": "<p dir=\"auto\">Currency $1,000 and math <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"4363f01118c643f00696986ff3523615\">$x^2$</math-renderer> mixed.</p>"
+ },
+ {
+  "id": "M021",
+  "src": "Empty $$ pair.",
+  "gh": [],
+  "html": "<p dir=\"auto\">Empty $$ pair.</p>"
+ },
+ {
+  "id": "M022",
+  "src": "Bold **$a$** inside.",
+  "gh": [
+   "$a$"
+  ],
+  "html": "<p dir=\"auto\">Bold <strong><math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"5188bccc388a86eb2f9ef5ccb51b282c\">$a$</math-renderer></strong> inside.</p>"
+ },
+ {
+  "id": "M023",
+  "src": "Underscore math $a_b$ here.",
+  "gh": [
+   "$a_b$"
+  ],
+  "html": "<p dir=\"auto\">Underscore math <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"06792fa5437bbbbf50969c540b11a63e\">$a_b$</math-renderer> here.</p>"
+ },
+ {
+  "id": "M024",
+  "src": "Star math $a*b*c$ here.",
+  "gh": [],
+  "html": "<p dir=\"auto\">Star math $a<em>b</em>c$ here.</p>"
+ },
+ {
+  "id": "M025",
+  "src": "$\\$4 + \\$5$ escaped inside math.",
+  "gh": [
+   "$5$"
+  ],
+  "html": "<p dir=\"auto\">$$4 + <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"54ef77709c1c67f8b910087d0119fe7e\">$5$</math-renderer> escaped inside math.</p>"
+ },
+ {
+  "id": "M026",
+  "src": "A dollar alone $ here.",
+  "gh": [],
+  "html": "<p dir=\"auto\">A dollar alone $ here.</p>"
+ },
+ {
+  "id": "M027",
+  "src": "$a$b$c$ ambiguous quad.",
+  "gh": [],
+  "html": "<p dir=\"auto\">$a$b$c$ ambiguous quad.</p>"
+ },
+ {
+  "id": "M028",
+  "src": "100$ and 200$ trailing.",
+  "gh": [],
+  "html": "<p dir=\"auto\">100$ and 200$ trailing.</p>"
+ },
+ {
+  "id": "M029",
+  "src": "USD$5 and EUR5$ mixed.",
+  "gh": [],
+  "html": "<p dir=\"auto\">USD$5 and EUR5$ mixed.</p>"
+ },
+ {
+  "id": "M030",
+  "src": "$a+b$, punctuation after.",
+  "gh": [
+   "$a+b$"
+  ],
+  "html": "<p dir=\"auto\"><math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"9b5b360ac104149dcc4117381b7cbde1\">$a+b$</math-renderer>, punctuation after.</p>"
+ },
+ {
+  "id": "M031",
+  "src": "$a+b$. period after.",
+  "gh": [
+   "$a+b$"
+  ],
+  "html": "<p dir=\"auto\"><math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"e832270337a2d131fdd54aef5b12be5d\">$a+b$</math-renderer>. period after.</p>"
+ },
+ {
+  "id": "M032",
+  "src": "foo$a+b$bar word chars.",
+  "gh": [],
+  "html": "<p dir=\"auto\">foo$a+b$bar word chars.</p>"
+ },
+ {
+  "id": "M033",
+  "src": "price is $ 5 spaced dollar.",
+  "gh": [],
+  "html": "<p dir=\"auto\">price is $ 5 spaced dollar.</p>"
+ },
+ {
+  "id": "M034",
+  "src": "$x$ $y$ two singles adjacent.",
+  "gh": [
+   "$x$",
+   "$y$"
+  ],
+  "html": "<p dir=\"auto\"><math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"a4422a9627d34662817f9b9e80cc5568\">$x$</math-renderer> <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"a4422a9627d34662817f9b9e80cc5568\">$y$</math-renderer> two singles adjacent.</p>"
+ },
+ {
+  "id": "M035",
+  "src": "close then hyphen $x$-axis here.",
+  "gh": [
+   "$x$"
+  ],
+  "html": "<p dir=\"auto\">close then hyphen <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"22f30a03613c16d03bbdd726be5f5552\">$x$</math-renderer>-axis here.</p>"
+ },
+ {
+  "id": "M036",
+  "src": "close then paren ($x$) here.",
+  "gh": [
+   "$x$"
+  ],
+  "html": "<p dir=\"auto\">close then paren (<math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"a0e04a9d5d0cfb1072f884a6d39e500f\">$x$</math-renderer>) here.</p>"
+ },
+ {
+  "id": "M037",
+  "src": "close then slash $x$/2 here.",
+  "gh": [
+   "$x$"
+  ],
+  "html": "<p dir=\"auto\">close then slash <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"80502a12d78caf7c5c3ecdb2dff15070\">$x$</math-renderer>/2 here.</p>"
+ },
+ {
+  "id": "M038",
+  "src": "accent \u00e9$a$ after.",
+  "gh": [],
+  "html": "<p dir=\"auto\">accent \u00e9$a$ after.</p>"
+ },
+ {
+  "id": "M039",
+  "src": "content with space $a + b$ end.",
+  "gh": [
+   "$a + b$"
+  ],
+  "html": "<p dir=\"auto\">content with space <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"0749bafcb338db1fb0602247b3614020\">$a + b$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M040",
+  "src": "entity inside $a &amp; b$ end.",
+  "gh": [
+   "$a &amp; b$"
+  ],
+  "html": "<p dir=\"auto\">entity inside <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"c178cd12af255e7ee65037a94b0a475e\">$a &amp;amp; b$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M041",
+  "src": "amp inside $a & b$ end.",
+  "gh": [
+   "$a &amp; b$"
+  ],
+  "html": "<p dir=\"auto\">amp inside <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"e0effc365e109b08fb6ce343e9095f92\">$a &amp;amp; b$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M042",
+  "src": "lt inside $a < b$ end.",
+  "gh": [
+   "$a &lt; b$"
+  ],
+  "html": "<p dir=\"auto\">lt inside <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"24ef180d620b286fd4bda8514ced9699\">$a &amp;lt; b$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M043",
+  "src": "code then dollars `x` $a$ end.",
+  "gh": [
+   "$a$"
+  ],
+  "html": "<p dir=\"auto\">code then dollars <code class=\"notranslate\">x</code> <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"7c57891d5fb5c45dc949b703e68fb108\">$a$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M044",
+  "src": "dollar then code $a `x` b$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">dollar then code $a <code class=\"notranslate\">x</code> b$ end.</p>"
+ },
+ {
+  "id": "M045",
+  "src": "three pairs $a$ $b$ $c$ end.",
+  "gh": [
+   "$a$",
+   "$b$",
+   "$c$"
+  ],
+  "html": "<p dir=\"auto\">three pairs <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"fa7ee0ccd400b60630c9b4420def5ebb\">$a$</math-renderer> <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"fa7ee0ccd400b60630c9b4420def5ebb\">$b$</math-renderer> <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"fa7ee0ccd400b60630c9b4420def5ebb\">$c$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M046",
+  "src": "odd count $a$ $b end.",
+  "gh": [
+   "$a$"
+  ],
+  "html": "<p dir=\"auto\">odd count <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"5974dce0a93cedc01bd82c8185a20386\">$a$</math-renderer> $b end.</p>"
+ },
+ {
+  "id": "M047",
+  "src": "esc close $a\\$ b$ end.",
+  "gh": [
+   "$a$"
+  ],
+  "html": "<p dir=\"auto\">esc close <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"d9d1143ae2e95d07642c5e4334bf2708\">$a$</math-renderer> b$ end.</p>"
+ },
+ {
+  "id": "M048",
+  "src": "digit inside $5+5$ end.",
+  "gh": [
+   "$5+5$"
+  ],
+  "html": "<p dir=\"auto\">digit inside <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"6f380e42a517be54908764b45559a907\">$5+5$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M049",
+  "src": "open digit $5x$ end.",
+  "gh": [
+   "$5x$"
+  ],
+  "html": "<p dir=\"auto\">open digit <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"1cbab055f740d7d34500e3cbdf26cbed\">$5x$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M050",
+  "src": "close digit inside $x5$ end.",
+  "gh": [
+   "$x5$"
+  ],
+  "html": "<p dir=\"auto\">close digit inside <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"ad819a3ead4b7d08046b1428c2066d8b\">$x5$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M051",
+  "src": "currency then math: costs $5, and $x$ holds.",
+  "gh": [
+   "$x$"
+  ],
+  "html": "<p dir=\"auto\">currency then math: costs $5, and <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"909e2128dcfe2f93e838d0e4c39d5afb\">$x$</math-renderer> holds.</p>"
+ },
+ {
+  "id": "M052",
+  "src": "math then currency: $x$ costs $5 today.",
+  "gh": [
+   "$x$"
+  ],
+  "html": "<p dir=\"auto\">math then currency: <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"a2483b83ffa4e3a9fb3e74aa526e90ee\">$x$</math-renderer> costs $5 today.</p>"
+ },
+ {
+  "id": "M053",
+  "src": "emphasis after $a$*b* end.",
+  "gh": [
+   "$a$"
+  ],
+  "html": "<p dir=\"auto\">emphasis after <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"df381b8b78fc8edb2dc7e3850cce45d8\">$a$</math-renderer><em>b</em> end.</p>"
+ },
+ {
+  "id": "M054",
+  "src": "tilde $a~b$ end.",
+  "gh": [
+   "$a~b$"
+  ],
+  "html": "<p dir=\"auto\">tilde <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"bd11729f851e47ffd2bc86768cad72c7\">$a~b$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M055",
+  "src": "pipe $a|b$ end.",
+  "gh": [
+   "$a|b$"
+  ],
+  "html": "<p dir=\"auto\">pipe <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"0d0e14471368e040fc04793d0a4a2c4e\">$a|b$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M056",
+  "src": "comma close $a$, end.",
+  "gh": [
+   "$a$"
+  ],
+  "html": "<p dir=\"auto\">comma close <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"a09b171a037718293dcc52744ecbfa0d\">$a$</math-renderer>, end.</p>"
+ },
+ {
+  "id": "M057",
+  "src": "semicolon $a$; end.",
+  "gh": [
+   "$a$"
+  ],
+  "html": "<p dir=\"auto\">semicolon <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"d046ab75623455347e0b2b406abbf6f3\">$a$</math-renderer>; end.</p>"
+ },
+ {
+  "id": "M058",
+  "src": "eol close $a$",
+  "gh": [
+   "$a$"
+  ],
+  "html": "<p dir=\"auto\">eol close <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"7354eae2d954110c11d8bc6ed1b52118\">$a$</math-renderer></p>"
+ },
+ {
+  "id": "M059",
+  "src": "$a$",
+  "gh": [
+   "$a$"
+  ],
+  "html": "<p dir=\"auto\"><math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"398123fa3d045b6842f96c799cb5017d\">$a$</math-renderer></p>"
+ },
+ {
+  "id": "M060",
+  "src": "open before backslash $\\alpha$ end.",
+  "gh": [
+   "$\\alpha$"
+  ],
+  "html": "<p dir=\"auto\">open before backslash <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"510fe48d4e24c6d257de564fb6f23344\">$\\alpha$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M061",
+  "src": "costs $5, and $x$ holds.",
+  "gh": [
+   "$x$"
+  ],
+  "html": "<p dir=\"auto\">costs $5, and <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"a1eb075ccc244fa492d7416350aec515\">$x$</math-renderer> holds.</p>"
+ },
+ {
+  "id": "M062",
+  "src": "costs $5 and $x$ holds.",
+  "gh": [
+   "$x$"
+  ],
+  "html": "<p dir=\"auto\">costs $5 and <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"79c59c12c44519c15c3ff1f848105a80\">$x$</math-renderer> holds.</p>"
+ },
+ {
+  "id": "M063",
+  "src": "it costs $5 today $x$ ok.",
+  "gh": [
+   "$x$"
+  ],
+  "html": "<p dir=\"auto\">it costs $5 today <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"1467d2213770e269c549c14c69bd92c7\">$x$</math-renderer> ok.</p>"
+ },
+ {
+  "id": "M064",
+  "src": "range $100-$200 ok.",
+  "gh": [],
+  "html": "<p dir=\"auto\">range $100-$200 ok.</p>"
+ },
+ {
+  "id": "M065",
+  "src": "range $100 - $200 ok.",
+  "gh": [],
+  "html": "<p dir=\"auto\">range $100 - $200 ok.</p>"
+ },
+ {
+  "id": "M066",
+  "src": "path $PATH/$HOME vars.",
+  "gh": [],
+  "html": "<p dir=\"auto\">path $PATH/$HOME vars.</p>"
+ },
+ {
+  "id": "M067",
+  "src": "prose $5 then code `$x` end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">prose $5 then code <code class=\"notranslate\">$x</code> end.</p>"
+ },
+ {
+  "id": "M068",
+  "src": "prose $5 then code `x$` end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">prose $5 then code <code class=\"notranslate\">x$</code> end.</p>"
+ },
+ {
+  "id": "M069",
+  "src": "code `$a$` only.",
+  "gh": [],
+  "html": "<p dir=\"auto\">code <code class=\"notranslate\">$a$</code> only.</p>"
+ },
+ {
+  "id": "M070",
+  "src": "code `$5` and prose $x$ end.",
+  "gh": [
+   "$x$"
+  ],
+  "html": "<p dir=\"auto\">code <code class=\"notranslate\">$5</code> and prose <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"8a4b5b90dd2a8cd83780a7643f8760cd\">$x$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M071",
+  "src": "link [a $b](http://e.com) $c$ end.",
+  "gh": [
+   "$c$"
+  ],
+  "html": "<p dir=\"auto\">link <a href=\"http://e.com\" rel=\"nofollow\">a $b</a> <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"82ac678c2d512d0725e08ecae3ef0a5d\">$c$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M072",
+  "src": "five dollars $a$b$c$d$ done.",
+  "gh": [],
+  "html": "<p dir=\"auto\">five dollars $a$b$c$d$ done.</p>"
+ },
+ {
+  "id": "M073",
+  "src": "unbalanced $a$ $b done.",
+  "gh": [
+   "$a$"
+  ],
+  "html": "<p dir=\"auto\">unbalanced <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"08fa8ed41a98ed99955b1d76fc1057b4\">$a$</math-renderer> $b done.</p>"
+ },
+ {
+  "id": "M074",
+  "src": "unbalanced2 $a $b$ done.",
+  "gh": [
+   "$b$"
+  ],
+  "html": "<p dir=\"auto\">unbalanced2 $a <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"90f5f834c3dfef4ea533fdea22b9d35d\">$b$</math-renderer> done.</p>"
+ },
+ {
+  "id": "M075",
+  "src": "open space $ x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">open space $ x+y$ end.</p>"
+ },
+ {
+  "id": "M076",
+  "src": "close space $x+y $ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">close space $x+y $ end.</p>"
+ },
+ {
+  "id": "M077",
+  "src": "open digit $5+y$ end.",
+  "gh": [
+   "$5+y$"
+  ],
+  "html": "<p dir=\"auto\">open digit <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"1dfb310ddd5eba0bcda488cfc5e5fa52\">$5+y$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M078",
+  "src": "close digit $x+5$ end.",
+  "gh": [
+   "$x+5$"
+  ],
+  "html": "<p dir=\"auto\">close digit <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"1c7ecc3a7eb9a47ea54e8c0b13f0082b\">$x+5$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M079",
+  "src": "both digit $5$ end.",
+  "gh": [
+   "$5$"
+  ],
+  "html": "<p dir=\"auto\">both digit <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"0a450f138aa4e3512ff3ecde50134f40\">$5$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M080",
+  "src": "cjk after close $x+y$\u3067\u3059 end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">cjk after close <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"60279205e5ccddb8cc9eb9101fcf8118\">$x+y$</math-renderer>\u3067\u3059 end.</p>"
+ },
+ {
+  "id": "M081",
+  "src": "cjk before open \u3067\u3059$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">cjk before open \u3067\u3059$x+y$ end.</p>"
+ },
+ {
+  "id": "M082",
+  "src": "escaped both \\$x+y\\$ end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">escaped both <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"1e75bd6e49a525da71b720c235385693\">$x+y$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M083",
+  "src": "escaped open only \\$x+y$ end.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\">escaped open only <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"02c7abd3a7d462f14c3a65b991b4376b\">$x+y$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M084",
+  "src": "two escaped \\$5 and \\$10 end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">two escaped $5 and $10 end.</p>"
+ },
+ {
+  "id": "M085",
+  "src": "currency pair $5 and $10 end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">currency pair $5 and $10 end.</p>"
+ },
+ {
+  "id": "M086",
+  "src": "currency word $five and $ten end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">currency word $five and $ten end.</p>"
+ },
+ {
+  "id": "M087",
+  "src": "shell $PATH and $HOME end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">shell $PATH and $HOME end.</p>"
+ },
+ {
+  "id": "M088",
+  "src": "func f($x$) call.",
+  "gh": [
+   "$x$"
+  ],
+  "html": "<p dir=\"auto\">func f(<math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"0c72897b96be0d106c61eb973472e9c4\">$x$</math-renderer>) call.</p>"
+ },
+ {
+  "id": "M089",
+  "src": "bracket a [$x$] b.",
+  "gh": [],
+  "html": "<p dir=\"auto\">bracket a [$x$] b.</p>"
+ },
+ {
+  "id": "M090",
+  "src": "after open paren (a $x$ b) c.",
+  "gh": [
+   "$x$"
+  ],
+  "html": "<p dir=\"auto\">after open paren (a <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"00f5f4e289c05f0405e44124b1dde072\">$x$</math-renderer> b) c.</p>"
+ },
+ {
+  "id": "M091",
+  "src": "nbsp before\u00a0$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">nbsp before\u00a0$x+y$ end.</p>"
+ },
+ {
+  "id": "M092",
+  "src": "emdash \u2014$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">emdash \u2014$x+y$ end.</p>"
+ },
+ {
+  "id": "M093",
+  "src": "quote \u201c$x+y$\u201d end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">quote \u201c$x+y$\u201d end.</p>"
+ },
+ {
+  "id": "M094",
+  "src": "$x+y$ at true paragraph start.",
+  "gh": [
+   "$x+y$"
+  ],
+  "html": "<p dir=\"auto\"><math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"867a6b52fffbbbc577b780f77b09258d\">$x+y$</math-renderer> at true paragraph start.</p>"
+ },
+ {
+  "id": "M095",
+  "src": "dollar before open $$x+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">dollar before open $$x+y$ end.</p>"
+ },
+ {
+  "id": "M096",
+  "src": "tabclose $x+y\t$ end.",
+  "gh": [
+   "$x+y\t$"
+  ],
+  "html": "<p dir=\"auto\">tabclose <math-renderer class=\"js-inline-math\" style=\"display: inline-block\" data-run-id=\"be8f73898cf8fc80c0685dbc6cab7969\">$x+y\t$</math-renderer> end.</p>"
+ },
+ {
+  "id": "M097",
+  "src": "tabopen $\tx+y$ end.",
+  "gh": [],
+  "html": "<p dir=\"auto\">tabopen $\tx+y$ end.</p>"
+ }
+]

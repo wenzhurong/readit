@@ -4,3 +4,4 @@ dist/
 test/fixtures/*.actual.html
 playwright-report/
 test-results/
+.superpowers/
