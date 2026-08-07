@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>tauri-probe (M0 spike)</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <main class="container">
+      <h1>readit M0 spike — heavy dependency probe</h1>
+      <p>
+        This app exists only to measure installer size, memory, and cold
+        start with mermaid, MathJax, CodeMirror 6, and starry-night actually
+        rendering content. See <code>spike/README.md</code> in the repo.
+      </p>
+
+      <section>
+        <h2>CodeMirror 6 (Markdown editor)</h2>
+        <div id="editor" class="probe-panel"></div>
+      </section>
+
+      <section>
+        <h2>starry-night (syntax highlight)</h2>
+        <pre id="highlight" class="probe-panel"></pre>
+      </section>
+
+      <section>
+        <h2>MathJax (TeX → SVG)</h2>
+        <div id="math" class="probe-panel"></div>
+      </section>
+
+      <section>
+        <h2>mermaid (flowchart, &gt;=10 nodes, subgraph, classDef)</h2>
+        <div id="diagram" class="probe-panel"></div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -5,3 +5,10 @@ test/fixtures/*.actual.html
 playwright-report/
 test-results/
 .superpowers/
+
+# spike/tauri-probe (M0 spike, task 1): build output only, never source.
+# node_modules/ and dist/ above already match at any depth.
+target/
+spike/tauri-probe/probe-output/
+spike/tauri-probe/size-probes/out/
+spike/tauri-probe/size-probes/out.*
