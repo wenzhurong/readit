@@ -6,6 +6,7 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "oracle:refresh": "tsx packages/core/scripts/oracle-refresh.ts"
   }
 }
