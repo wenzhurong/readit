@@ -24,9 +24,9 @@ function nestedTable(v: Value[] | { [key: string]: Value }): string {
       v.length === 0 ? '' : `  <tr>\n${v.map((i) => `  <td>${cell(i)}</td>\n`).join('')}  </tr>\n`
     return `<table>\n  <tbody>\n${body}  </tbody>\n</table>`
   }
-  const keys = Object.keys(v)
-  const head = keys.map((k) => `  <th>${escapeText(k)}</th>\n`).join('')
-  const row = keys.map((k) => `  <td>${cell(v[k] as Value)}</td>\n`).join('')
+  const entries = Object.entries(v)
+  const head = entries.map(([k]) => `  <th>${escapeText(k)}</th>\n`).join('')
+  const row = entries.map(([, val]) => `  <td>${cell(val)}</td>\n`).join('')
   return (
     `<table>\n  <thead>\n  <tr>\n${head}  </tr>\n  </thead>\n` +
     `  <tbody>\n  <tr>\n${row}  </tr>\n  </tbody>\n</table>`

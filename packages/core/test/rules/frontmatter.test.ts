@@ -111,4 +111,18 @@ describe('frontmatter', () => {
         '  </tbody>\n</table></markdown-accessiblity-table>',
     )
   })
+
+  // DETERMINISM PIN — not a GitHub oracle assertion, and not a trivial scalar
+  // case to be "simplified" away. js-yaml's *default* schema resolves a plain
+  // YAML date scalar into a JS `Date`, and `String(date)` is timezone-dependent:
+  // the same input would render differently on two machines (or the same
+  // machine with TZ set differently), silently breaking the byte-exact
+  // snapshot suite. `renderFrontmatterTable` must parse with `CORE_SCHEMA`
+  // (which has no timestamp resolver) so the value stays the plain string
+  // "2020-01-01" everywhere. This needs no oracle — it pins readit's own
+  // determinism, which is entirely within our control — and it fails
+  // immediately if the `{ schema: CORE_SCHEMA }` option is ever dropped.
+  it('parses a YAML date as a CORE_SCHEMA string, not a timezone-dependent Date object', () => {
+    expect(renderFrontmatterTable('date: 2020-01-01')).toContain('<td>2020-01-01</td>')
+  })
 })
