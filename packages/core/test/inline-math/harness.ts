@@ -1,7 +1,7 @@
 import MarkdownIt from 'markdown-it'
 import type { MarkdownIt as MarkdownItInstance } from 'markdown-it'
 import { applyMathInline, type ReaditEnv } from '../../src/rules/math-inline.js'
-import type { InlineMathMode } from '../../src/types.js'
+import type { ExplainEntry, InlineMathMode } from '../../src/types.js'
 
 export interface CorpusCase {
   id: string
@@ -39,4 +39,11 @@ export function mathSpans(src: string, inlineMath: InlineMathMode = 'github', ht
   // without changing behavior (the group can never actually be absent here).
   while ((m = re.exec(out)) !== null) spans.push(decodeEntities(m[1] ?? ''))
   return spans
+}
+
+/** The explain log for a source string, in decision order. */
+export function explainOf(src: string, inlineMath: InlineMathMode = 'github'): ExplainEntry[] {
+  const env: ReaditEnv = { readit: { inlineMath, explain: true } }
+  build(false).render(src, env)
+  return env.readitExplain ?? []
 }

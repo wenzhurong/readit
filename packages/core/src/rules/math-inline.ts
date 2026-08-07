@@ -1,12 +1,15 @@
 import type { Env, MarkdownIt, StateCore, Token } from 'markdown-it'
-import type { InlineMathMode, MathRenderer } from '../types.js'
+import type { ExplainEntry, InlineMathMode, MathRenderer } from '../types.js'
 
 /** Environment object threaded through `md.render(src, env)` by the engine. */
 export interface ReaditEnv extends Env {
   readit?: {
     inlineMath?: InlineMathMode
     math?: MathRenderer | null
+    explain?: boolean
   }
+  /** Filled in by the guard when `readit.explain` is true. */
+  readitExplain?: ExplainEntry[]
 }
 
 /** Inclusive on both ends: `s[open]` and `s[close]` are delimiter characters. */
@@ -56,10 +59,26 @@ function maskAt(mask: Uint8Array, i: number): number {
  * the flattened run — not into the original document source. Scans by
  * UTF-16 code unit throughout (never `for...of`), so an astral character
  * never desynchronises `s` from `mask`.
+ *
+ * `log`, when non-null, receives one entry per verdict in decision order
+ * (the opener first, then the closer candidate it was judged against). This
+ * offset is into `s` — the flattened run — never into the original document
+ * source: after the inline stage, text tokens carry no source position, and
+ * `\$` occupies one character in `s` but two in the source, so there is no
+ * sound way to map it back. A multi-paragraph document therefore has the
+ * offset restart at 0 for every run.
  */
-export function scanDollars(s: string, mask: Uint8Array, mode: InlineMathMode): DollarSpan[] {
+export function scanDollars(
+  s: string,
+  mask: Uint8Array,
+  mode: InlineMathMode,
+  log: ExplainEntry[] | null,
+): DollarSpan[] {
   const out: DollarSpan[] = []
   const strict = mode === 'strict'
+  const note = (offset: number, verdict: ExplainEntry['verdict'], ruleId: ExplainEntry['ruleId']) => {
+    if (log) log.push({ offset, verdict, ruleId })
+  }
   const len = s.length
   let i = 0
   while (i < len) {
@@ -76,6 +95,7 @@ export function scanDollars(s: string, mask: Uint8Array, mode: InlineMathMode): 
     // R2: opener left context — run start, ASCII whitespace, or (non-strict) '('.
     const prevOk = i === 0 || isSpace(s.charCodeAt(i - 1)) || (!strict && s.charCodeAt(i - 1) === CH_LPAREN)
     if (!prevOk) {
+      note(i, 'rejected', 'R2')
       i++
       continue
     }
@@ -93,6 +113,7 @@ export function scanDollars(s: string, mask: Uint8Array, mode: InlineMathMode): 
       (!display && nxtCode === CH_DOLLAR && !maskAt(mask, nxtPos)) ||
       (strict && isDigit(nxtCode))
     if (nxtBad) {
+      note(i, 'rejected', 'R3')
       i++
       continue
     }
@@ -110,11 +131,13 @@ export function scanDollars(s: string, mask: Uint8Array, mode: InlineMathMode): 
       j++
     }
     if (cand < 0) {
+      note(i, 'rejected', 'R4')
       i++
       continue
     }
     // A '$$' opener needs a '$$' closer; a lone '$' is not a candidate for it.
     if (display && !(cand + 1 < len && s.charCodeAt(cand + 1) === CH_DOLLAR && !maskAt(mask, cand + 1))) {
+      note(i, 'rejected', 'R4')
       i++
       continue
     }
@@ -124,6 +147,8 @@ export function scanDollars(s: string, mask: Uint8Array, mode: InlineMathMode): 
       // R7: the first candidate decides. Abandon the opener, never search on
       // — re-running from R1 next iteration lets the failed candidate itself
       // become a new opener (this is what kills "$5 or $10").
+      note(i, 'rejected', 'R7')
+      note(cand, 'rejected', 'R5')
       i++
       continue
     }
@@ -135,16 +160,21 @@ export function scanDollars(s: string, mask: Uint8Array, mode: InlineMathMode): 
     const afterOk = afterPos >= len || !afterIsWordOrDollar
     if (!afterOk) {
       // R7 again: abandon the opener rather than greedily looking further right.
+      note(i, 'rejected', 'R7')
+      note(cand, 'rejected', 'R6')
       i++
       continue
     }
 
     // R8: content must be non-empty.
     if (cand <= nxtPos) {
+      note(i, 'rejected', 'R8')
       i++
       continue
     }
 
+    note(i, 'opened', 'R3')
+    note(cand, 'closed', 'R6')
     out.push({ open: i, close: cand + delim - 1, delim })
     i = cand + delim
   }
@@ -205,7 +235,12 @@ function flatten(group: readonly Token[]): { s: string; mask: Uint8Array; orig: 
  * flattened together with a neighbouring run, so `$` inside it can never
  * combine with `$` outside it (R10).
  */
-function rewriteChildren(children: readonly Token[], mode: InlineMathMode, TokenCtor: typeof Token): Token[] {
+function rewriteChildren(
+  children: readonly Token[],
+  mode: InlineMathMode,
+  TokenCtor: typeof Token,
+  log: ExplainEntry[] | null,
+): Token[] {
   const res: Token[] = []
   let k = 0
   while (k < children.length) {
@@ -226,7 +261,7 @@ function rewriteChildren(children: readonly Token[], mode: InlineMathMode, Token
     }
     const level = group[0]?.level ?? head.level
     const { s, mask, orig } = flatten(group)
-    const spanList = scanDollars(s, mask, mode)
+    const spanList = scanDollars(s, mask, mode, log)
     if (spanList.length === 0) {
       res.push(...group)
       continue
@@ -275,9 +310,12 @@ export function applyMathInline(md: MarkdownIt): void {
     const mode: InlineMathMode = env.readit?.inlineMath ?? 'github'
     if (mode === 'off') return
 
+    const wantExplain = env.readit?.explain === true
+    const log: ExplainEntry[] | null = wantExplain ? (env.readitExplain ?? (env.readitExplain = [])) : null
+
     for (const tok of state.tokens) {
       if (tok.type !== 'inline' || !tok.children) continue
-      tok.children = rewriteChildren(tok.children, mode, state.Token)
+      tok.children = rewriteChildren(tok.children, mode, state.Token, log)
     }
   })
 
