@@ -62,6 +62,14 @@ describe('codeblock', () => {
     )
   })
 
+  it('escapes a dangerous lang attribute value', () => {
+    expect(md().render('```weird"onmouseover=alert(1)\na\n```\n')).toBe(
+      '<div class="snippet-clipboard-content notranslate position-relative overflow-auto"' +
+        ' data-snippet-clipboard-copy-content="a">' +
+        '<pre lang="weird&quot;onmouseover=alert(1)" class="notranslate"><code>a\n</code></pre></div>\n',
+    )
+  })
+
   it('strips exactly one trailing newline from the copy attribute', () => {
     const out = md().render('```\na\n\n```\n')
     expect(out).toContain('data-snippet-clipboard-copy-content="a\n"')
@@ -99,6 +107,15 @@ describe('codeblock', () => {
     tokens[0]!.attrSet('data-line', '0')
     expect(m.renderer.render(tokens, m.options, {})).toContain(
       'overflow-auto" dir="auto" data-line="0" data-snippet-clipboard-copy-content="a">',
+    )
+  })
+
+  it('forwards a data-line attribute on the snippet-clipboard (no-language) wrapper too', () => {
+    const m = md()
+    const tokens = m.parse('```\na\n```\n', {})
+    tokens[0]!.attrSet('data-line', '0')
+    expect(m.renderer.render(tokens, m.options, {})).toContain(
+      'overflow-auto" data-line="0" data-snippet-clipboard-copy-content="a">',
     )
   })
 })

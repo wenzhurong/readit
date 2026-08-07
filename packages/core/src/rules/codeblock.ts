@@ -26,14 +26,15 @@ export function scopeClassFor(lang: string): string | null {
 
 function renderBlock(token: Token, highlighter: Highlighter | null): string {
   const code = token.content
+  const trimmed = code.replace(/\n$/, '')
   const lang = token.info.trim().split(/\s+/)[0] ?? ''
-  const copy = escapeAttr(code.replace(/\n$/, ''))
+  const copy = escapeAttr(trimmed)
   const line = token.attrGet('data-line')
   const dataLine = line === null ? '' : ` data-line="${line}"`
   const scopeClass = lang === '' ? null : scopeClassFor(lang)
 
   if (scopeClass !== null) {
-    const body = highlighter?.highlight(code, lang) ?? escapeText(code.replace(/\n$/, ''))
+    const body = highlighter?.highlight(code, lang) ?? escapeText(trimmed)
     return (
       `<div class="highlight ${scopeClass} notranslate position-relative overflow-auto"` +
       ` dir="auto"${dataLine} data-snippet-clipboard-copy-content="${copy}">` +
