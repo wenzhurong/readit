@@ -37,6 +37,13 @@ const TITLE: Readonly<Record<AlertType, string>> = Object.freeze({
 /** `[!TYPE]` must occupy the whole first line of the blockquote. */
 const MARKER = /^\[!(note|tip|important|warning|caution)\](\r?\n|$)/i
 
+/**
+ * Token count of a single-paragraph blockquote body: open, paragraph_open,
+ * inline, paragraph_close, close. Used to detect a marker that owns the
+ * *entire* blockquote (nothing follows it to alert about).
+ */
+const MARKER_ONLY_BLOCKQUOTE_LENGTH = 4
+
 interface AlertMeta {
   type: AlertType
   /** true when the marker owned its own paragraph, which GitHub removes. */
@@ -68,15 +75,29 @@ export function applyAlerts(md: MarkdownIt): void {
       if (match === null) continue
 
       const rest = inline.content.slice(match[0].length)
+      // Find *this* blockquote's own close, not the first `blockquote_close`
+      // seen while scanning forward: the alert body is free to contain an
+      // ordinary nested blockquote, whose inner close must not be mistaken
+      // for the outer one. Track nesting depth, starting at 1 for the open
+      // token already consumed, and stop where it returns to 0.
+      let depth = 1
       let close = i + 1
-      while (close < tokens.length && tokens[close]?.type !== 'blockquote_close') close++
-      if (close >= tokens.length) continue
+      for (; close < tokens.length; close++) {
+        const t = tokens[close]
+        if (t === undefined) continue
+        if (t.type === 'blockquote_open') depth++
+        else if (t.type === 'blockquote_close') {
+          depth--
+          if (depth === 0) break
+        }
+      }
+      if (depth !== 0) continue
 
       let markerParagraphRemoved = false
       if (rest.length === 0) {
         // `> [!NOTE]` on its own paragraph: GitHub drops the empty paragraph,
         // and produces no alert at all when nothing else is left in the quote.
-        if (close === i + 4) continue
+        if (close === i + MARKER_ONLY_BLOCKQUOTE_LENGTH) continue
         tokens.splice(i + 1, 3)
         close -= 3
         markerParagraphRemoved = true
