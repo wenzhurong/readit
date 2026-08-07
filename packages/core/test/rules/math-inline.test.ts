@@ -138,6 +138,26 @@ describe('astral characters keep the flattened offsets aligned', () => {
   })
 })
 
+describe('backslash before a non-escapable character is literal text, not an escape', () => {
+  it('pins the isBackslashEscape content.length === 1 discriminator', () => {
+    // markdown-it's escape rule emits `text_special` for `\a` too (`a` is not
+    // CommonMark-escapable), but with markup='\a' AND content='\a' — two
+    // characters, not one. If isBackslashEscape used only "markup starts with
+    // backslash" as its test (dropping the content.length === 1 half), this
+    // token would be wrongly treated as an escape: `s` would gain one
+    // character ('\\') while `orig` recorded the two-character markup for
+    // that single slot, corrupting every offset after it. Concretely, the
+    // opener's own text ('\a') is such a token, so the corruption shows up
+    // immediately: '$\alpha$' renders as '$\alpha$$' — a duplicated 'a' and a
+    // stray trailing '$' — instead of round-tripping unchanged. Do not
+    // "simplify" this away as a duplicate of the R9 escaped-dollar tests
+    // above: those exercise a *real* escape (content.length === 1 on a
+    // dollar); this exercises the *non-escape* text_special branch, which is
+    // the discriminator's only reason to exist.
+    expect(spans('open before backslash $\\alpha$ end.')).toEqual(['$\\alpha$'])
+  })
+})
+
 describe('inlineMath modes', () => {
   it('strict drops the "(" allowance and digit openers', () => {
     expect(spans('pre ($x+y$ end.', 'strict')).toEqual([])
@@ -148,6 +168,24 @@ describe('inlineMath modes', () => {
   it('off produces no inline math at all', () => {
     expect(spans('pre $x+y$ end.', 'off')).toEqual([])
     expect(spans('pre $$a+b$$ end.', 'off')).toEqual([])
+  })
+
+  it('reads the mode fresh from env on every render of the same md instance', () => {
+    // Options travel through env.readit at render time, not through md
+    // options or any closure state captured at applyMathInline(md) time —
+    // that is what lets one shared `md` serve render(src, opts) as a pure
+    // function of its arguments. Exercise that directly: one md, three
+    // renders, three different modes, in an order that would surface any
+    // accidental state leftover from a previous call (github, then off,
+    // then back to github).
+    const md = new MarkdownIt()
+    applyMathInline(md)
+    const render = (src: string, inlineMath: 'github' | 'strict' | 'off') =>
+      md.render(src, { readit: { inlineMath } } satisfies ReaditEnv)
+
+    expect(render('pre $x+y$ end.', 'github')).toContain('math-renderer')
+    expect(render('pre $x+y$ end.', 'off')).not.toContain('math-renderer')
+    expect(render('pre $x+y$ end.', 'github')).toContain('math-renderer')
   })
 })
 
