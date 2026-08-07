@@ -37,6 +37,16 @@ describe('applyTaskList', () => {
     )
   })
 
+  it('emits readit_raw, not html_inline, so the sanitizer never sees its classes', () => {
+    const kinds = new MarkdownIt('default', { html: true, linkify: false })
+      .use(applyTaskList)
+      .parse('- [x] a\n', {})
+      .flatMap((t) => t.children ?? [])
+      .map((t) => t.type)
+    expect(kinds).toContain('readit_raw')
+    expect(kinds).not.toContain('html_inline')
+  })
+
   it('emits attributes in GitHub order: type, id, disabled, class, aria-label, checked', () => {
     const html = md().render('- [X] done\n')
     const input = /<input[^>]*>/.exec(html)?.[0] ?? ''

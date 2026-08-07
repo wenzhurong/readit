@@ -30,6 +30,14 @@ function markerOf(inline: Token): 'checked' | 'unchecked' | null {
 }
 
 export function applyTaskList(md: MarkdownIt): void {
+  // Self-generated HTML that carries a `class` attribute must not travel as
+  // html_inline/html_block: a later sanitization pass strips class/style from
+  // those token types (it cannot distinguish generated markup from
+  // user-authored HTML). `readit_raw` is the escape hatch for that pass.
+  // `??=` so this rule still works standalone in tests without clobbering the
+  // central registration a later task adds in engine.ts.
+  md.renderer.rules.readit_raw ??= (tokens, idx) => tokens[idx]!.content
+
   md.core.ruler.push('readit_task_list', (state: StateCore) => {
     const tokens = state.tokens
     const listStack: Token[] = []
@@ -64,7 +72,7 @@ export function applyTaskList(md: MarkdownIt): void {
       firstChild.content = firstChild.content.slice(3)
       inline.content = inline.content.slice(3)
 
-      const checkbox = new state.Token('html_inline', '', 0)
+      const checkbox = new state.Token('readit_raw', '', 0)
       checkbox.content = marker === 'checked' ? CHECKBOX_CHECKED : CHECKBOX_UNCHECKED
       children.unshift(checkbox)
 
