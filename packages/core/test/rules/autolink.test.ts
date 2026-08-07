@@ -34,6 +34,27 @@ describe('gfm extended autolink: www and url', () => {
     )
   })
 
+  it('strips trailing quote characters but keeps unlisted trailing characters', () => {
+    // ' is unambiguous: no HTML escaping is involved either way, so this
+    // alone proves ' is in the strip set (GFM prose lists only 8 trailing
+    // characters; GitHub measured strips 10, adding ' and ").
+    expect(mk().render("www.x.com/a'\n")).toBe(
+      '<p><a href="http://www.x.com/a">www.x.com/a</a>\'</p>\n',
+    )
+    // " is stripped too. If it were NOT stripped, normalizeLink would
+    // percent-encode it into the href (%22) and the visible text would
+    // still show the escaped quote right before </a> instead of after it —
+    // so this assertion is equally revert-detecting, just via a different
+    // rendering path than '.
+    expect(mk().render('www.x.com/a"\n')).toBe(
+      '<p><a href="http://www.x.com/a">www.x.com/a</a>&quot;</p>\n',
+    )
+    // Bounded-set check: a character NOT in TRAILING (#) must be kept.
+    expect(mk().render('www.x.com/a#\n')).toBe(
+      '<p><a href="http://www.x.com/a#">www.x.com/a#</a></p>\n',
+    )
+  })
+
   it('strips a trailing entity-looking &name; but not &name1;', () => {
     expect(mk().render('www.google.com/search?q=commonmark&hl;\n')).toBe(
       '<p><a href="http://www.google.com/search?q=commonmark">www.google.com/search?q=commonmark</a>&amp;hl;</p>\n',

@@ -102,6 +102,18 @@ export function autolinkDelim(src: string, start: number, endIn: number): number
   return end
 }
 
+/**
+ * Shared tail of both matchers: scan forward from `contentStart` (the offset
+ * right after the `www.` prefix or the matched scheme) up to whitespace or
+ * `<`, then run extended-autolink path validation over the whole candidate
+ * match starting at `pos`. Returns the validated end offset.
+ */
+function scanAndDelimit(src: string, pos: number, contentStart: number, max: number): number {
+  let end = contentStart
+  while (end < max && !isSpace(src.charCodeAt(end)) && src.charCodeAt(end) !== 0x3c) end++
+  return autolinkDelim(src, pos, end)
+}
+
 /** `www.` autolink starting at `pos`. Returns the end offset, or -1. */
 export function matchWww(src: string, pos: number, max: number): number {
   if (pos + 4 > max) return -1
@@ -110,9 +122,7 @@ export function matchWww(src: string, pos: number, max: number): number {
   if (!precedingOk(src, pos)) return -1
   const dl = checkDomain(src, pos, max, false)
   if (dl === 0) return -1
-  let end = pos + dl
-  while (end < max && !isSpace(src.charCodeAt(end)) && src.charCodeAt(end) !== 0x3c) end++
-  end = autolinkDelim(src, pos, end)
+  const end = scanAndDelimit(src, pos, pos + dl, max)
   return end > pos ? end : -1
 }
 
@@ -122,9 +132,7 @@ export function matchUrl(src: string, pos: number, max: number): number {
   for (const scheme of SCHEMES) {
     if (pos + scheme.length > max) continue
     if (src.slice(pos, pos + scheme.length).toLowerCase() !== scheme) continue
-    let end = pos + scheme.length
-    while (end < max && !isSpace(src.charCodeAt(end)) && src.charCodeAt(end) !== 0x3c) end++
-    end = autolinkDelim(src, pos, end)
+    const end = scanAndDelimit(src, pos, pos + scheme.length, max)
     return end > pos + scheme.length ? end : -1
   }
   return -1
