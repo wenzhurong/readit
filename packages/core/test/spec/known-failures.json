@@ -1,0 +1,8 @@
+{
+  "commonmark-0.31.2": {
+    "218": "PERMANENT · 空引用块的内部换行。markdown-it 15 渲染器发 <blockquote></blockquote>，规格要 <blockquote>\\n</blockquote>。三个 preset 一致，是上游渲染器行为。纯空白差异，§13.1 归一化器第 9 步会折叠掉，L2 黄金文件不受影响。",
+    "239": "PERMANENT · 同 218，输入是 '>'。markdown-it 15 上游渲染器行为。",
+    "240": "PERMANENT · 同 218，输入是 '>\\n>  \\n> '。markdown-it 15 上游渲染器行为。"
+  },
+  "gfm-0.29": {}
+}
