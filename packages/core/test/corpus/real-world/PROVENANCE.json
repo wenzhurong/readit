@@ -1,0 +1,44 @@
+[
+  {
+    "dest": "real-world/sindresorhus-is.md",
+    "repo": "sindresorhus/is",
+    "ref": "7821031c66cdeb7256a0feb2d506535f9e84fcaf",
+    "path": "readme.md",
+    "license": "MIT"
+  },
+  {
+    "dest": "real-world/tauri.md",
+    "repo": "tauri-apps/tauri",
+    "ref": "c0bd0d5a61eedba5c4783add24455c5028c6f390",
+    "path": "README.md",
+    "license": "Apache-2.0 OR MIT"
+  },
+  {
+    "dest": "real-world/mermaid.md",
+    "repo": "mermaid-js/mermaid",
+    "ref": "3d521b1ee5fc9079fe0659e776a1b2cdc37174b1",
+    "path": "README.md",
+    "license": "MIT"
+  },
+  {
+    "dest": "real-world/markdown-it.md",
+    "repo": "markdown-it/markdown-it",
+    "ref": "66ff3ada0c59d11819ca7ab40575d66f9c823fd2",
+    "path": "README.md",
+    "license": "MIT"
+  },
+  {
+    "dest": "real-world/gitignore.md",
+    "repo": "github/gitignore",
+    "ref": "57286c3887203259752b747db94e6c3ad10ec53d",
+    "path": "README.md",
+    "license": "CC0-1.0"
+  },
+  {
+    "dest": "real-world/hast-util-sanitize.md",
+    "repo": "syntax-tree/hast-util-sanitize",
+    "ref": "7f30d9e6261583efc544ff6a93ba54ca6e53e1b5",
+    "path": "readme.md",
+    "license": "MIT"
+  }
+]
