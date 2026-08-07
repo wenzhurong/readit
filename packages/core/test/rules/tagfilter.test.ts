@@ -62,4 +62,30 @@ describe('gfm tagfilter', () => {
     expect(mk().render('`<script>`\n')).toBe('<p><code>&lt;script&gt;</code></p>\n')
     expect(mk().render('\\<script>\n')).toBe('<p>&lt;script&gt;</p>\n')
   })
+
+  it('treats bare whitespace before > as a tag boundary, on both open and close tags', () => {
+    expect(filterDisallowedTags('<script >')).toBe('&lt;script >')
+    expect(filterDisallowedTags('</script >')).toBe('&lt;/script >')
+  })
+
+  it('chains a previously-registered html_block/html_inline renderer instead of replacing it', () => {
+    // Stub renderer standing in for some other SEMANTIC rule that already
+    // overrides html_block/html_inline and was .use()d before applyTagfilter
+    // (this is the scenario cross-rule contract C3(b) exists for). If
+    // applyTagfilter did a plain assignment instead of capturing and calling
+    // this prior rule, its `[[PREV:...]]` marker would vanish from the
+    // output below.
+    const md = new MarkdownIt({ html: true, linkify: false })
+    md.renderer.rules.html_block = (tokens, idx) => `[[PREV:${tokens[idx]?.content ?? ''}]]`
+    md.renderer.rules.html_inline = (tokens, idx) => `[[PREV:${tokens[idx]?.content ?? ''}]]`
+    applyTagfilter(md)
+
+    const block = md.render('<script>x</script>\n')
+    expect(block).toContain('[[PREV:')
+    expect(block).toContain('&lt;script>')
+
+    const inline = md.render('a <script> b\n')
+    expect(inline).toContain('[[PREV:')
+    expect(inline).toContain('&lt;script>')
+  })
 })
