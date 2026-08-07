@@ -15,6 +15,9 @@ import { TEX_PACKAGES } from './index.js'
 /**
  * Ask a live MathJax SVG output jax for its stylesheet text.
  * Used by tools/gen-svg-stylesheet.ts and by the drift test; never on the render path.
+ * Not hot-path-safe: unlike index.ts, each call registers a fresh adaptor/handler
+ * with MathJax's global handler list rather than reusing a shared singleton —
+ * fine for its low-call-count tooling/test usage, wrong for a per-formula render path.
  */
 export function extractSvgStylesheet(): string {
   const adaptor = liteAdaptor()

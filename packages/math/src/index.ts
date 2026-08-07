@@ -78,6 +78,10 @@ export function createMathRenderer(): MathRenderer {
       })
       const node = doc.convert(tex, { display }) as LiteElement
       stripLatexHints(adaptor, node)
+      // Escapes '&' and '"' (sufficient for a double-quoted HTML attribute value —
+      // '<'/'>' are not metacharacters there, matching how a browser's own
+      // outerHTML getter serializes attributes). Read only via attribute-safe
+      // DOM APIs (getAttribute/attribute bindings); never reinject via innerHTML.
       adaptor.setAttribute(node, 'data-tex', tex)
       return adaptor.outerHTML(node)
     },
