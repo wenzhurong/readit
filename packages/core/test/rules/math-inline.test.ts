@@ -123,6 +123,21 @@ describe('R9 masked dollars re-encode to \\$', () => {
   })
 })
 
+describe('astral characters keep the flattened offsets aligned', () => {
+  it('does not corrupt content when an astral character sits inside the span', () => {
+    // A naive `for (const ch of t.content)` flattener walks by code point:
+    // one loop iteration, and therefore one mask/orig slot, per emoji — even
+    // though the emoji itself occupies two UTF-16 code units in `s`. That
+    // single dropped slot shifts every mask/orig lookup after it by one, so
+    // the span this produces desyncs from its true boundaries.
+    expect(spans('$\u{1F600} x + y$ end.')).toEqual(['$\u{1F600} x + y$'])
+  })
+
+  it('still masks an escaped dollar that follows an astral character', () => {
+    expect(spans('$x\u{1F600}\\$4$ end.')).toEqual(['$x\u{1F600}\\$4$'])
+  })
+})
+
 describe('inlineMath modes', () => {
   it('strict drops the "(" allowance and digit openers', () => {
     expect(spans('pre ($x+y$ end.', 'strict')).toEqual([])
