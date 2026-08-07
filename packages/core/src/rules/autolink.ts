@@ -179,8 +179,9 @@ function autolinkRule(state: StateCore): void {
     let htmlLinkLevel = 0
 
     for (let i = tokens.length - 1; i >= 0; i--) {
-      // tokens[i] is always in-bounds here; the assertion is required only
-      // to satisfy noUncheckedIndexedAccess, it does not change behavior.
+      // tokens[i] is always in-bounds here (i is the for-loop's own index);
+      // the guard exists only to satisfy noUncheckedIndexedAccess and is
+      // never actually taken.
       const currentToken = tokens[i]
       if (currentToken === undefined) continue
 
