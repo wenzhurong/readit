@@ -1,8 +1,17 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { render } from '../src/index.js'
-import { createSpecEngine } from '../src/engine.js'
+import {
+  createSpecEngine,
+  SEMANTIC_RULE_BY_EXTENSION,
+  SEMANTIC_RULES,
+  SHAPE_RULES,
+  type Rule,
+} from '../src/engine.js'
+import { applyCodeBlock } from '../src/rules/codeblock.js'
+import { applyRawShape } from '../src/rules/rawshape.js'
+import { applyRawHtmlPolicy } from '../src/sanitize.js'
 import { DEFAULT_OPTIONS } from '../src/types.js'
 
 const SRC = readFileSync(join(import.meta.dirname, 'integration/kitchen-sink.md'), 'utf8')
@@ -153,5 +162,103 @@ describe('createSpecEngine loads only the semantic slot', () => {
     // align belongs to SEMANTIC; the wrapper shell belongs to SHAPE — see
     // cross-rule contract C1's split of Task 7.
     expect(md.render('| a |\n|:-:|\n| b |\n')).toContain('align="center"')
+  })
+})
+
+/**
+ * ## The slot ratchet
+ *
+ * The plan's C1 promised a ratchet: put a rule in the wrong array and a spec
+ * example flips loudly. That held while `createSpecEngine` loaded all of
+ * `SEMANTIC_RULES` unconditionally. Task 32a's harness refactor replaced that
+ * with a per-example lookup in `SEMANTIC_RULE_BY_EXTENSION`
+ * (test/spec/harness.ts), and `harness.ts` now never reads `SEMANTIC_RULES` at
+ * all — so a rule pushed into `SEMANTIC_RULES` but absent from the map is
+ * invisible to every one of the 1324 spec examples, and the ratchet was gone.
+ * Measured on this branch: of the 13 SHAPE-slot rules, injecting 9 of them
+ * (`applyFrontmatter`, `applyFootnote`, `applyMathInline`, `applyMathBlock`,
+ * `applyEmoji`, `applyAlerts`, `applyTaskList`, `applyDecorate`,
+ * `applyRawShape`) into a spec engine left the whole suite green.
+ *
+ * The two tests below restore it structurally rather than by adding more
+ * output assertions:
+ *
+ *  1. `SEMANTIC_RULES` and the map's values must be the SAME SET. A rule can
+ *     then only enter the SEMANTIC slot by also being given a cmark-gfm
+ *     extension name, and giving it one is exactly what puts it in front of
+ *     the spec examples. Misfiling becomes a failure here even when it would
+ *     produce no visible output drift.
+ *  2. Every `applyXxx` the source exports must be accounted for by one of the
+ *     three wiring sites, so a rule in NEITHER array is caught too. Test 1
+ *     alone cannot see that case.
+ */
+describe('rule registry', () => {
+  const names = (rules: readonly Rule[]): string[] => rules.map((r) => r.name).sort()
+
+  it('SEMANTIC_RULES is exactly the set SEMANTIC_RULE_BY_EXTENSION maps to', () => {
+    expect(names(SEMANTIC_RULES)).toEqual(names(Object.values(SEMANTIC_RULE_BY_EXTENSION)))
+  })
+
+  /**
+   * `createEngine` calls exactly three rules outside the two arrays, and each
+   * has a stated reason it cannot live in one — this is the "+3" in the
+   * completeness arithmetic below, written out rather than left as a literal:
+   *
+   *  - `applyCodeBlock(md, opts.highlighter)` and
+   *    `applyRawHtmlPolicy(md, opts.allowDangerousHtml)` take a second
+   *    argument, so neither matches `Rule = (md: MarkdownIt) => void`. The
+   *    arrays are typed `Rule[]`; these two simply do not fit.
+   *  - `applyRawShape(md)` fits the signature but must be registered AFTER
+   *    `applyRawHtmlPolicy` (engine.ts coupling #4, rules/rawshape.ts's C3(a)
+   *    note). Core rules run in push order and every array member runs before
+   *    the sanitizer, so membership in `SHAPE_RULES` would silently delete all
+   *    five of its decorations.
+   */
+  const RULES_CALLED_OUTSIDE_THE_ARRAYS: readonly Rule[] = [
+    applyCodeBlock as Rule,
+    applyRawHtmlPolicy as unknown as Rule,
+    applyRawShape,
+  ]
+
+  /**
+   * Three exported `applyXxx` bindings are NOT engine-level rules and are
+   * deliberately excluded from the count. Each is reachable only through one
+   * of the wired rules above, never from `createEngine` directly:
+   *
+   *  - `applyRawHtmlTransform` is the shared combinator in rules/clobber.ts
+   *    that the sanitizer, the clobber filter and `applyRawShape` are all
+   *    built on. It takes a transform, not just an `md`.
+   *  - `applyClobber` and `applySanitize` are the two branches
+   *    `applyRawHtmlPolicy` dispatches to on `allowDangerousHtml`.
+   */
+  const NOT_ENGINE_RULES: ReadonlySet<string> = new Set([
+    'applyRawHtmlTransform',
+    'applyClobber',
+    'applySanitize',
+  ])
+
+  it('every exported applyXxx is wired by exactly one of the three sites', () => {
+    const srcDir = join(import.meta.dirname, '../src')
+    const files = [
+      ...readdirSync(join(srcDir, 'rules'))
+        .filter((f) => f.endsWith('.ts'))
+        .map((f) => join(srcDir, 'rules', f)),
+      join(srcDir, 'sanitize.ts'),
+    ]
+    const exported = files
+      .flatMap((f) => [...readFileSync(f, 'utf8').matchAll(/^export (?:function|const) (apply\w+)/gm)])
+      .map((m) => m[1] as string)
+      .filter((n) => !NOT_ENGINE_RULES.has(n))
+      .sort()
+
+    const wired = names([...SEMANTIC_RULES, ...SHAPE_RULES, ...RULES_CALLED_OUTSIDE_THE_ARRAYS])
+
+    // Set equality, which subsumes the count. Measured 2026-08-08: 22 exported
+    // `applyXxx` bindings minus the 3 non-rules above == 19 == 4 SEMANTIC + 12
+    // SHAPE + 3 called outside the arrays.
+    expect(exported).toEqual(wired)
+    expect(SEMANTIC_RULES.length + SHAPE_RULES.length + RULES_CALLED_OUTSIDE_THE_ARRAYS.length).toBe(
+      exported.length,
+    )
   })
 })
