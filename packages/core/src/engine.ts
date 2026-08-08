@@ -36,19 +36,20 @@ export type Rule = (md: MarkdownIt) => void
  * 扩展名查那张表来挑规则的，所以「进了本数组却没进那张表」的规则对全部
  * 1324 条规格用例完全不可见（实测 13 条 SHAPE 规则里有 9 条能这样蒙混过关）。
  *
- * `applyTagfilter` 的槽位有一处**已知且刻意保留**的代价：它作为过滤器本该是
- * html_block/html_inline 渲染器链的**最外层**，而本数组最先加载，它只能是
- * 最内层。这条要求因此在 SEMANTIC 槽里结构性不可满足；移出数组会打破上面
- * 那条棘轮，而它要堵的是一个当前不可达的隐患，所以选择保留槽位、把要求
- * 说清楚。机制、后果与「未来的 SHAPE 规则必须自己怎么做」写在
- * rules/tagfilter.ts 的注释里，缺口本身由 tagfilter.test.ts 的
- * 「KNOWN GAP」用例钉住。
+ * `applyTagfilter` 在本数组里的槽位是**承重的**（规格套件按扩展名查
+ * `SEMANTIC_RULE_BY_EXTENSION`，GFM 例 652 要它），但作为过滤器它本该是
+ * html_block/html_inline 渲染器链的**最外层**，而本数组最先加载，它在这里
+ * 只能是最内层。这两条要求曾被当成二选一（要么移出数组、打破棘轮，要么
+ * 保留槽位、把缺口写进注释）。它们其实不冲突：`createEngine` 在最后**再
+ * 注册一次** `applyTagfilter`，槽位与最外层同时成立。可行的前提是
+ * `filterDisallowedTags` 幂等——见 rules/tagfilter.ts 的注释与
+ * tagfilter.test.ts 的穷举用例。
  */
 export const SEMANTIC_RULES: Rule[] = [
   applyStrikethrough,
   applyTableAlign,
   applyAutolink,
-  applyTagfilter, // ← 槽位承重（规格套件要它），代价见上方注释
+  applyTagfilter, // ← 槽位承重（规格套件要它）；另在 createEngine 末尾再注册一次，见上方注释
 ]
 
 /**
@@ -187,6 +188,15 @@ export function createEngine(opts: RenderOptions): MarkdownIt {
   applyCodeBlock(md, opts.highlighter)
   applyRawHtmlPolicy(md, opts.allowDangerousHtml)
   applyRawShape(md) // ← 必须在 applyRawHtmlPolicy 之后（见上方注释 #4）
+  // 第二次注册 applyTagfilter，**故意**的：SEMANTIC 槽让它成为
+  // html_block/html_inline 渲染器链的最内层，这一行让它同时成为最外层，于是
+  // 任何未来在 SHAPE 槽覆写这两条渲染器的规则，其 `prev(...) + X` 里的 X 也会
+  // 被过滤。之所以能这么做而不是二选一，是因为 filterDisallowedTags 幂等
+  // （tagfilter.ts 的注释 + tagfilter.test.ts 的穷举用例），双重过滤零字节差异
+  // （实测 166 份语料 × 两种模式 + 14 个标签 × 7 种形状 × 两种模式，0 差异）。
+  // applyRawShape 不参与这条链——它是 core rule，改的是 token.content，渲染器
+  // 无论注册在哪儿都只看最终内容。
+  applyTagfilter(md)
   return md
 }
 

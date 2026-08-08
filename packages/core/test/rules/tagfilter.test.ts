@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import MarkdownIt from 'markdown-it'
-import { applyTagfilter, filterDisallowedTags } from '../../src/rules/tagfilter.js'
+import { applyTagfilter, filterDisallowedTags, TAGFILTER_TAGS } from '../../src/rules/tagfilter.js'
+import { createEngine, createSpecEngine, SHAPE_RULES, type Rule } from '../../src/engine.js'
+import { DEFAULT_OPTIONS } from '../../src/types.js'
 
 function mk() {
   const md = new MarkdownIt({ html: true, linkify: false })
@@ -135,23 +137,16 @@ describe('gfm tagfilter', () => {
   })
 
   /**
-   * KNOWN GAP, the mirror image of the test above and the reason this rule's
-   * doc comment no longer claims it must be `.use()`d last.
+   * The mirror image of the test above, and the ordering hazard C3(b) is about:
+   * a stub registered AFTER `applyTagfilter` chains correctly (it calls `prev`)
+   * yet whatever it appends lands OUTSIDE the filter.
    *
-   * Above, the stub is registered BEFORE `applyTagfilter`, so tagfilter is the
-   * outer link and filters the stub's output. Here the stub is registered
-   * AFTER — which is what `createEngine` does to every rule, because
-   * `applyTagfilter` sits in `SEMANTIC_RULES` and that array runs first. The
-   * stub chains correctly per C3(b) (it calls `prev`), yet whatever it appends
-   * lands outside the filter and is NOT neutralised.
-   *
-   * Unreachable today: this rule is the only override of these two renderer
-   * rules in the whole engine. Pinned as an executable statement of what a
-   * future SHAPE-slot override has to handle itself — if this test ever starts
-   * failing because the appended `<script>` came back escaped, the ordering
-   * changed and the doc comment above needs rewriting with it.
+   * This is what a hand-built engine gets, and what `createEngine` used to give
+   * every SHAPE-slot rule, because `applyTagfilter` sits in `SEMANTIC_RULES`
+   * and that array runs first. Kept as the statement of the hazard; the suite
+   * below shows the real engine no longer has it.
    */
-  it('KNOWN GAP: a later chaining override appends outside the filter', () => {
+  it('a later chaining override appends outside the filter, in a hand-built engine', () => {
     const md = new MarkdownIt({ html: true, linkify: false })
     applyTagfilter(md)
     const prev = md.renderer.rules.html_block
@@ -159,5 +154,106 @@ describe('gfm tagfilter', () => {
       (prev?.(...args) ?? '') + '<script>alert(1)</script>\n'
 
     expect(md.render('<div>x</div>\n')).toBe('<div>x</div>\n<script>alert(1)</script>\n')
+  })
+})
+
+/**
+ * ## CLOSED GAP: tagfilter is the outermost renderer link in the real engine
+ *
+ * This used to be a "KNOWN GAP" test, and its comment claimed a detection it
+ * could not perform: it said "if this test ever starts failing because the
+ * appended `<script>` came back escaped, the ordering changed" — but it built
+ * its own `MarkdownIt` and hardcoded `applyTagfilter` first, so no change to
+ * `createEngine` could ever affect it. These tests use a real `createEngine`
+ * instance, so they track the thing they describe.
+ *
+ * The gap is closed by registering `applyTagfilter` a second time as
+ * `createEngine`'s last step. `SEMANTIC_RULES` keeps its member (the slot
+ * ratchet and GFM example 652 both need it) and the filter is also outermost.
+ * Idempotence is what makes double registration free — see the exhaustive case
+ * above and the byte-identity case below.
+ */
+describe('tagfilter is outermost in createEngine', () => {
+  /** A stand-in for a future SHAPE-slot rule that chains html_block per C3(b). */
+  const appendsAScript: Rule = (md) => {
+    const prev = md.renderer.rules.html_block
+    md.renderer.rules.html_block = (...args) =>
+      (prev?.(...args) ?? '') + '<script>alert(1)</script>\n'
+  }
+
+  /**
+   * The load-bearing test, and the one the old KNOWN GAP could not be: the stub
+   * is a real member of `SHAPE_RULES` for the duration, so the engine under
+   * test is built by `createEngine` itself. Delete `applyTagfilter(md)` from
+   * `createEngine`'s last line and this fails — which is exactly the detection
+   * the old comment claimed and the old test could not perform.
+   */
+  it('neutralises a payload appended by a SHAPE-slot override', () => {
+    SHAPE_RULES.push(appendsAScript)
+    try {
+      expect(createEngine(DEFAULT_OPTIONS).render('<div>x</div>\n', {})).toBe(
+        '<div>x</div>\n&lt;script>alert(1)&lt;/script>\n',
+      )
+    } finally {
+      SHAPE_RULES.pop()
+    }
+    expect(SHAPE_RULES).not.toContain(appendsAScript)
+  })
+
+  /**
+   * The limit of the fix, stated so it is not mistaken for total coverage: an
+   * override bolted onto a FINISHED engine is registered after the outermost
+   * filter and is therefore still outside it. Rules belong in the slots; the
+   * engine cannot wrap what does not exist yet.
+   */
+  it('does not wrap an override bolted on after createEngine returned', () => {
+    const md = createEngine(DEFAULT_OPTIONS)
+    appendsAScript(md)
+    expect(md.render('<div>x</div>\n', {})).toContain('<script>alert(1)</script>')
+  })
+
+  /**
+   * `createSpecEngine` deliberately does NOT re-register the filter — it loads
+   * only the rules it is handed, and the L1 spec suite hands it at most one.
+   * Pinned because tagfilter.ts's caveat #2 tells future authors to rely on it.
+   */
+  it('createSpecEngine gets only the innermost link', () => {
+    const md = createSpecEngine(DEFAULT_OPTIONS, [applyTagfilter])
+    appendsAScript(md)
+    expect(md.render('<div>x</div>\n', {})).toContain('<script>alert(1)</script>')
+  })
+
+  /**
+   * Why the second registration is affordable: it must not change a single byte
+   * for a document with no later override. Double-escaping (`&lt;` ->
+   * `&amp;lt;`) is the specific way idempotence could have failed, so it is
+   * asserted directly, in both modes.
+   *
+   * Measured over the whole corpus (166 documents × both `allowDangerousHtml`
+   * modes) and 14 tags × 7 chunk shapes × both modes: zero byte differences
+   * against the same engine without the second registration.
+   *
+   * Note which mode can see the escaping at all. Under the default
+   * `allowDangerousHtml: false` the sanitizer deletes these elements from
+   * `token.content` before any renderer runs, so the filter has nothing left to
+   * escape and `&lt;script>` never appears; the nine tags are only observably
+   * neutralised under `allowDangerousHtml: true`. Both modes are checked for
+   * byte-identity; only the dangerous one asserts the escaped form.
+   */
+  it('changes no bytes and never double-escapes, in either mode', () => {
+    for (const allowDangerousHtml of [false, true]) {
+      const md = createEngine({ ...DEFAULT_OPTIONS, allowDangerousHtml })
+      const twice = createEngine({ ...DEFAULT_OPTIONS, allowDangerousHtml })
+      applyTagfilter(twice) // a third registration: still the identity
+
+      for (const tag of TAGFILTER_TAGS) {
+        const src = `<${tag}>x</${tag}>\n\na <${tag}> b\n\n<div id="d">keep</div>\n`
+        const html = md.render(src, {})
+        expect(twice.render(src, {})).toBe(html)
+        expect(html).not.toContain('&amp;lt;')
+        expect(html).not.toContain(`<${tag}>`)
+        if (allowDangerousHtml) expect(html).toContain(`&lt;${tag}>`)
+      }
+    }
   })
 })

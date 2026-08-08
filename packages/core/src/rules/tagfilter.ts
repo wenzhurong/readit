@@ -37,44 +37,57 @@ export function filterDisallowedTags(html: string): string {
  * contract C3(b): a later rule that also touches raw-HTML rendering must not
  * silently clobber this one, and this one must not clobber an earlier one.
  *
- * ## The half of C3(b) this rule CANNOT satisfy, and what that means for you
+ * ## Why `createEngine` registers this rule TWICE
  *
  * A filter wants to be OUTERMOST — every other override's output should pass
  * through it. Chaining nests inner-first, so "outermost" means "registered
- * last". This rule is registered FIRST: it is a member of `SEMANTIC_RULES`
- * (engine.ts), and `createEngine` runs that array before `SHAPE_RULES` and
- * before everything else. It is therefore the INNERMOST link, and the
- * requirement an earlier version of this comment stated — "must be `.use()`d
- * after any other rule that overrides these two renderer rules" — is
- * structurally unsatisfiable from the SEMANTIC slot. It is corrected here
- * rather than acted on, because the slot is load-bearing for a different
- * reason: the GFM spec suite reaches this rule through
- * `SEMANTIC_RULE_BY_EXTENSION` (info string `tagfilter`, GFM example 652), and
- * `SEMANTIC_RULES` is pinned equal to that map's values by the slot ratchet in
- * test/integration.test.ts. Leaving the array would break the ratchet that
- * guards all thirteen SHAPE rules, to close a hazard that is latent — see
- * below — so the array membership wins and this comment tells the truth
- * instead.
- *
- * Concretely: with `md.renderer.rules.html_block = (...a) => prev(...a) + X`,
+ * last". From `SEMANTIC_RULES` this rule is registered FIRST: `createEngine`
+ * runs that array before `SHAPE_RULES` and before everything else, making this
+ * the INNERMOST link. With
+ * `md.renderer.rules.html_block = (...a) => prev(...a) + X` in a later slot,
  * this rule IS `prev`, so `X` is appended AFTER filtering and is not
- * neutralised. Pinned by "KNOWN GAP" in test/rules/tagfilter.test.ts.
+ * neutralised.
  *
- * Nothing overrides these two renderer rules today except this rule, so the
- * gap is unreachable. A future rule that wants to override them must close it
- * itself, by one of:
+ * The array slot cannot simply be given up: the GFM spec suite reaches this
+ * rule through `SEMANTIC_RULE_BY_EXTENSION` (info string `tagfilter`, GFM
+ * example 652), and `SEMANTIC_RULES` is pinned equal to that map's values by
+ * the slot ratchet in test/integration.test.ts. Moving out of the array would
+ * break the ratchet that guards all thirteen SHAPE rules.
  *
- *  1. Preferred — do not emit raw tag text from a renderer override at all.
+ * Stay-vs-move was a false dichotomy. `createEngine` keeps the array
+ * membership AND calls `applyTagfilter` again as its last step, so this rule is
+ * the innermost and the outermost link at once and the gap is CLOSED.
+ *
+ * That works because `filterDisallowedTags` is idempotent: after one pass the
+ * nine tags are already `&lt;`-escaped, and the regex needs a literal `<`
+ * before the tag name, so a second pass is the identity and can never produce
+ * `&amp;lt;`. Measured 2026-08-08: 200 000 random strings over an alphabet of
+ * `<`, `</`, `>`, `/`, space, `&lt;`, `&amp;`, quote, newline and the nine tag
+ * names, plus every string up to length 5 over an 8-symbol hostile alphabet
+ * (37 448 cases) — zero counterexamples; the exhaustive half is a test. Double
+ * registration is byte-free on the whole corpus (166 documents × both
+ * `allowDangerousHtml` modes) and on 14 tags × 7 chunk shapes × both modes.
+ *
+ * `rules/rawshape.ts` is unaffected either way: it is a CORE rule rewriting
+ * `token.content`, not a renderer override, so it is not part of this chain at
+ * all, and renderers always run after every core rule.
+ *
+ * ## What this still asks of a future rule
+ *
+ * The engine now wraps you, so `prev(...) + X` is safe in `createEngine`. Two
+ * caveats remain:
+ *
+ *  1. Preferred anyway — do not emit raw tag text from a renderer override.
  *     Rewrite `token.content` from a core rule instead (that is what
  *     `rules/rawshape.ts` does, and why its C3(a) note records that C3(b) is
- *     not engaged), or emit through a `readit_raw` token. Either way this
- *     rule's renderer still sees the final content and still filters it.
- *  2. Run `filterDisallowedTags` (exported above) over anything the override
- *     contributes on top of `prev(...)`. Filtering is idempotent — the nine
- *     tags are already `&lt;`-escaped once this rule has run — so applying it
- *     to the whole concatenation is safe.
- *
- * What a future rule must NOT do is assume this rule wraps it.
+ *     not engaged), or emit through a `readit_raw` token.
+ *  2. `createSpecEngine` does NOT re-register this rule — it loads only the
+ *     rules it is given, and the spec suite passes at most one. Anything built
+ *     by hand out of these `applyXxx` functions gets only the innermost link,
+ *     so a renderer override registered after `applyTagfilter` in such an
+ *     engine must run `filterDisallowedTags` (exported above) over its own
+ *     contribution. Idempotence makes applying it to the whole concatenation
+ *     safe.
  */
 /**
  * Wrap one renderer rule in `filterDisallowedTags`, chaining the rule that is

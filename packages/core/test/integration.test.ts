@@ -12,6 +12,7 @@ import {
 } from '../src/engine.js'
 import { applyCodeBlock } from '../src/rules/codeblock.js'
 import { applyRawShape } from '../src/rules/rawshape.js'
+import { applyTagfilter } from '../src/rules/tagfilter.js'
 import { applyRawHtmlPolicy } from '../src/sanitize.js'
 import { DEFAULT_OPTIONS } from '../src/types.js'
 
@@ -218,11 +219,19 @@ describe('rule registry', () => {
    *    note). Core rules run in push order and every array member runs before
    *    the sanitizer, so membership in `SHAPE_RULES` would silently delete all
    *    five of its decorations.
+   *
+   * `applyTagfilter` is a fourth CALL but not a fourth rule: it is a member of
+   * `SEMANTIC_RULES` and is deliberately registered a SECOND time as
+   * `createEngine`'s last step, so the filter is the innermost AND the
+   * outermost `html_block`/`html_inline` renderer link at once. The set logic
+   * below is by function identity, so the duplicate collapses on its own and
+   * the count stays 19 — see rules/tagfilter.ts for why this is free.
    */
   const RULES_CALLED_OUTSIDE_THE_ARRAYS: readonly Rule[] = [
     applyCodeBlock as Rule,
     applyRawHtmlPolicy as unknown as Rule,
     applyRawShape,
+    applyTagfilter, // ← also in SEMANTIC_RULES; registered twice on purpose
   ]
 
   /**
