@@ -1,5 +1,6 @@
 import GithubSlugger from 'github-slugger'
 import type { Env, MarkdownIt, StateCore, Token } from 'markdown-it'
+import { CLOBBER_PREFIX } from './clobber.js'
 
 /**
  * Byte-verbatim copy of the permalink icon GitHub emits, captured 2026-08-06 from
@@ -106,7 +107,8 @@ export function applyHeadingAnchors(md: MarkdownIt): void {
     return (
       '</' +
       token.tag +
-      '><a id="user-content-' +
+      '><a id="' +
+      CLOBBER_PREFIX +
       slug +
       '" class="anchor" aria-label="Permalink: ' +
       escapeAttr(label) +

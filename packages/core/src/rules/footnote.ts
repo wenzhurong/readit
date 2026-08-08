@@ -1,4 +1,5 @@
 import type { MarkdownIt, StateBlock, StateCore, StateInline, Token } from 'markdown-it'
+import { CLOBBER_PREFIX } from './clobber.js'
 
 interface FootnoteEntry {
   label: string
@@ -254,7 +255,7 @@ function esc(s: string): string {
 
 /** `user-content-fnref-<label>` for the first reference, `-<n>` for the rest. */
 function refId(meta: FootnoteMeta): string {
-  return 'user-content-fnref-' + esc(meta.label) + (meta.subId > 0 ? '-' + (meta.subId + 1) : '')
+  return CLOBBER_PREFIX + 'fnref-' + esc(meta.label) + (meta.subId > 0 ? '-' + (meta.subId + 1) : '')
 }
 
 function backLabel(meta: FootnoteMeta): string {
@@ -295,7 +296,9 @@ export function applyFootnote(md: MarkdownIt): void {
     const meta = metaOf(tokens, idx)
     if (!meta) return ''
     return (
-      '<sup><a href="#user-content-fn-' +
+      '<sup><a href="#' +
+      CLOBBER_PREFIX +
+      'fn-' +
       esc(meta.label) +
       '" id="' +
       refId(meta) +
@@ -314,7 +317,7 @@ export function applyFootnote(md: MarkdownIt): void {
   md.renderer.rules.footnote_item_open = (tokens, idx) => {
     const meta = metaOf(tokens, idx)
     if (!meta) return '<li>\n'
-    return '<li id="user-content-fn-' + esc(meta.label) + '">\n'
+    return '<li id="' + CLOBBER_PREFIX + 'fn-' + esc(meta.label) + '">\n'
   }
 
   md.renderer.rules.footnote_item_close = () => '</li>\n'

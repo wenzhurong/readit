@@ -2,7 +2,7 @@ import type GithubSlugger from 'github-slugger'
 import type { Element, ElementContent, Nodes, Root, RootContent } from 'hast'
 import { fromHtml } from 'hast-util-from-html'
 import type { MarkdownIt } from 'markdown-it'
-import { applyRawHtmlTransform, SENTINEL, type ChunkKind } from './clobber.js'
+import { applyRawHtmlTransform, CLOBBER_PREFIX, SENTINEL, type ChunkKind } from './clobber.js'
 import { isExternal } from './decorate.js'
 import { OCTICON_LINK, sharedSlugger } from './heading.js'
 
@@ -231,7 +231,7 @@ function wrap(el: Element, slugger: GithubSlugger, inLink: boolean, needsParagra
     const anchor = element(
       'a',
       {
-        id: `user-content-${slug}`,
+        id: `${CLOBBER_PREFIX}${slug}`,
         className: ['anchor'],
         ariaLabel: `Permalink: ${label}`,
         href: `#${slug}`,

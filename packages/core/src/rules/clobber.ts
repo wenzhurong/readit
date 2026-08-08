@@ -3,6 +3,15 @@ import type { Element, Root } from 'hast'
 import { fromHtml } from 'hast-util-from-html'
 import { toHtml } from 'hast-util-to-html'
 
+/**
+ * GitHub's anti-clobbering prefix. Every `id` readit emits carries it, whether
+ * it was rewritten onto author HTML by `prefixUserContentTree` below or minted
+ * by a rule: `rules/heading.ts` (anchor ids), `rules/rawshape.ts` (the same
+ * anchors over raw HTML), `rules/footnote.ts` (`user-content-fn-*` /
+ * `user-content-fnref-*`). All of them import this constant — the value is
+ * matched against GitHub byte-for-byte in the oracle fixtures, so it must not
+ * be possible to change it in one place and not the others.
+ */
 export const CLOBBER_PREFIX = 'user-content-'
 
 /**
