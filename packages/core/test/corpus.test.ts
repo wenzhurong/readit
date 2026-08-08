@@ -3,6 +3,7 @@ import { render } from '../src/index.js'
 import {
   type KnownMismatches,
   compareToFixture,
+  diffHunks,
   diffShape,
   discoverCorpus,
   findOrphanWhitelistKeys,
@@ -10,6 +11,8 @@ import {
   readCorpus,
   readFixture,
   readProvenance,
+  shapeCarriesNoSignal,
+  shapeMismatchMessage,
   validateKnownMismatches,
 } from './corpus-harness.js'
 import knownMismatchesJson from './known-mismatches.json' with { type: 'json' }
@@ -43,6 +46,15 @@ import knownMismatchesJson from './known-mismatches.json' with { type: 'json' }
  *     detection, so a new and entirely unrelated bug landing inside one of them was invisible.
  *     Each entry pins a `diff` shape (see `diffShape`) and the assertion below is "still failing,
  *     AND still failing exactly this much".
+ *
+ *     What direction 3 can and cannot see, measured rather than asserted: the shape moves iff a
+ *     line changes MATCH STATUS, so its blind surface on a file is exactly the lines that already
+ *     differ — 109 of 5249 lines across the 15 entries. That is bounded and disclosed, not total.
+ *     But on four entries it IS total: `frontend/mermaid-{large,syntax-error,valid}` and
+ *     `gfm/tagfilter` share no line at all with their oracle, which leaves `hunks` stuck at 1 and
+ *     `edits` equal to the two line counts. Those four (16 lines) pin `output` verbatim instead —
+ *     see `shapeCarriesNoSignal`, and direction 3b in the assertion below, which requires the pin
+ *     exactly when the magnitude degenerates and forbids it otherwise.
  */
 const NAMES = discoverCorpus()
 const PROVENANCE = readProvenance()
@@ -112,18 +124,66 @@ describe('corpus vs committed GitHub oracle fixtures (zero network)', () => {
     // this entry NAMES, not the file. If the magnitude moved, something changed that the recorded
     // prose does not describe.
     const shape = diffShape(result.actualLines, result.expectedLines)
-    expect(
-      shape,
-      `"${name}" still mismatches its oracle fixture, but by a different amount than recorded.\n` +
-        `Being on the ledger excuses only the ${entry.causes.length} cause(s) it names ` +
-        `(${entry.causes.map((c) => c.category).join(', ')}) — it is NOT a blanket exemption for ` +
-        'this file.\n' +
-        'The overwhelmingly likely reading of a change here is that a NEW, unrelated regression ' +
-        'landed inside an already-failing file: find it and fix it.\n' +
-        'Only once you have confirmed the change genuinely belongs to a cause already listed — or ' +
-        'you are adding a new, named, explained cause alongside it — should you re-pin `diff` in ' +
-        'test/known-mismatches.json. Re-pinning reflexively to get back to green throws away the ' +
-        'only protection these 15 files have.',
-    ).toEqual(entry.diff)
+
+    // The `{ hunks: 0, edits: 0 }`-while-unequal case. `validateKnownMismatches` requires a
+    // magnitude of at least 1, so a file whose only divergence is invisible to `toDiffLines`
+    // (whitespace inside a `<pre>`, say) could never be legally pinned — and the assertion below
+    // would report it as a baffling "expected {0,0} to equal {1,2}". No corpus file is in this
+    // state today; if one ever is, it gets told what actually happened.
+    if (shape.hunks === 0 && shape.edits === 0) {
+      expect.fail(
+        `"${name}" still mismatches its oracle fixture, but the difference is invisible to ` +
+          'toDiffLines: every line is identical, so the mismatch is inside a line the split does ' +
+          'not separate (whitespace inside a <pre>, most likely). A `diff` magnitude cannot ' +
+          'describe this — pin `output`, or extend toDiffLines so the difference becomes visible. ' +
+          'Run `npm run corpus:diff -- ' +
+          `${name}\` and compare the raw normalized strings.`,
+      )
+    }
+
+    if (shape.hunks !== entry.diff.hunks || shape.edits !== entry.diff.edits) {
+      // Only build the diagnostic on the failing path: diffHunks re-runs the O(n·m) alignment,
+      // and `real-world/hast-util-sanitize` is 1091 x 1390 lines. `expect`'s message argument is
+      // eager, so this cannot be inlined into the assertion without paying for it on every run.
+      expect(shape, shapeMismatchMessage(name, entry, shape, diffHunks(result.actualLines, result.expectedLines))).toEqual(
+        entry.diff,
+      )
+    }
+    expect(shape).toEqual(entry.diff)
+
+    // Direction 3b: the content pin, for entries where 3 degenerates.
+    //
+    // `{ hunks, edits }` measures how a file's mismatch is SHAPED, which only says something about
+    // content while some of the file still matches. When nothing matches — no shared line at all —
+    // `hunks` is stuck at 1 and `edits` is just the two line counts, so any rewrite that preserves
+    // the line count is completely invisible. Four entries are in that state (the three
+    // `frontend/mermaid-*` files and `gfm/tagfilter`, 16 lines in total), and for them the honest
+    // pin is not a magnitude at all but the output itself. The rule is enforced in both directions
+    // so it maintains itself: an entry that becomes fully blind is forced to add `output`, and one
+    // that stops being blind is told to drop it rather than carry a second thing to re-pin.
+    if (shapeCarriesNoSignal(shape, result.actualLines, result.expectedLines)) {
+      expect(
+        entry.output,
+        `"${name}" shares no line at all with its oracle, so its \`diff\` magnitude carries no ` +
+          'information about content: hunks is pinned at 1 and edits is just the two line counts, ' +
+          'and rewriting any line would move neither. This entry must pin `output` (readit\'s exact ' +
+          `normalized lines) in test/known-mismatches.json. Run \`npm run corpus:diff -- ${name}\` ` +
+          'to print the block to paste.',
+      ).toBeDefined()
+      expect(
+        result.actualLines,
+        `"${name}" pins its output verbatim because its \`diff\` magnitude cannot see content ` +
+          '(no line of readit\'s output matches the oracle). readit\'s output has changed. This is ' +
+          'the regression signal the magnitude pin structurally cannot give for this file — ' +
+          'diagnose it before re-pinning, exactly as you would a `diff` change.',
+      ).toEqual(entry.output)
+    } else {
+      expect(
+        entry.output,
+        `"${name}" carries an \`output\` pin but no longer needs one: it now shares at least one ` +
+          'line with its oracle, so `diff` measures its content again. Delete `output` from its ' +
+          'entry in test/known-mismatches.json rather than maintaining two pins for one file.',
+      ).toBeUndefined()
+    }
   })
 })

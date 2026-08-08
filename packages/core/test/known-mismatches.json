@@ -4,6 +4,13 @@
       "hunks": 1,
       "edits": 8
     },
+    "output": [
+      "<div class=\"highlight highlight-source-mermaid notranslate position-relative overflow-auto\" data-snippet-clipboard-copy-content=\"flowchart TD\n  n0 --> n1 --> n2 --> n3 --> n4 --> n5 --> n6 --> n7 --> n8 --> n9\n  n0 --> n9\n  n1 --> n8\n  n2 --> n7\n  n3 --> n6\n  n4 --> n5\" dir=\"auto\">",
+      "<pre>",
+      "flowchart TD\n  n0 --> n1 --> n2 --> n3 --> n4 --> n5 --> n6 --> n7 --> n8 --> n9\n  n0 --> n9\n  n1 --> n8\n  n2 --> n7\n  n3 --> n6\n  n4 --> n5",
+      "</pre>",
+      "</div>"
+    ],
     "causes": [
       {
         "category": "deviation",
@@ -17,6 +24,13 @@
       "hunks": 1,
       "edits": 8
     },
+    "output": [
+      "<div class=\"highlight highlight-source-mermaid notranslate position-relative overflow-auto\" data-snippet-clipboard-copy-content=\"flowchart LR\n  A[[[ --> ???\" dir=\"auto\">",
+      "<pre>",
+      "flowchart LR\n  A[[[ --> ???",
+      "</pre>",
+      "</div>"
+    ],
     "causes": [
       {
         "category": "deviation",
@@ -30,6 +44,13 @@
       "hunks": 1,
       "edits": 8
     },
+    "output": [
+      "<div class=\"highlight highlight-source-mermaid notranslate position-relative overflow-auto\" data-snippet-clipboard-copy-content=\"flowchart LR\n  A[Hard] --> B(Round)\" dir=\"auto\">",
+      "<pre>",
+      "flowchart LR\n  A[Hard] --> B(Round)",
+      "</pre>",
+      "</div>"
+    ],
     "causes": [
       {
         "category": "deviation",
@@ -82,6 +103,9 @@
       "hunks": 1,
       "edits": 2
     },
+    "output": [
+      "x y z a c&#x3C;/plaintext> "
+    ],
     "causes": [
       {
         "category": "readit-bug",
