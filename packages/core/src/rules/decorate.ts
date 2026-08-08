@@ -79,6 +79,23 @@ export function isExternal(href: string | number): boolean {
  *     the *author's* link gains rel="nofollow" (per rule 2) — but the
  *     synthetic wrapper from rule 3 is never applied, so there is no target.
  *
+ * ## Position requirement: AFTER `applyAutolink`
+ *
+ * Rule 2 above says "every external `<a>`", but this rule only ever sees
+ * `link_open` tokens that already exist when its core rule runs. Markdown
+ * links (`[x](url)`) are safe at any position — the built-in `inline` rule
+ * creates them before every pushed core rule. GFM extended autolinks are not:
+ * `rules/autolink.ts` MANUFACTURES their `link_open` from a `text` token in
+ * its own `core.ruler.push`ed rule. Both rules use `push`, so registration
+ * order is execution order, and registering this one first means the extended
+ * autolinks simply are not there yet — they silently render without
+ * `rel="nofollow"`, and no markdown-link test can catch it.
+ *
+ * `engine.ts` gets this right only as a by-product of `SEMANTIC_RULES` (which
+ * holds `applyAutolink`) loading before `SHAPE_RULES` (which holds this rule);
+ * it is recorded as coupling #5 there and pinned by the "ordering coupling"
+ * case in test/rules/decorate.test.ts.
+ *
  * Emoji images are exempt by construction: they are `readit_raw` tokens
  * (see emoji.ts / contract C3(a)), never markdown-it `image` tokens, so this
  * rule — which only looks at `image` tokens — never touches them. That

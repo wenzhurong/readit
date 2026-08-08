@@ -85,6 +85,37 @@ export const SEMANTIC_RULES: Rule[] = [
  *     `<markdown-accessiblity-table>` 外壳删掉、`class` 清空、`rel`/`target` 剥掉）。
  *     理由与形态写在 rules/rawshape.ts 顶部的 C3(a) 注释里。
  *
+ *  5. applyAutolink 必须在 applyDecorate 之前——**跨槽**耦合，今天成立只是因为
+ *     SEMANTIC 数组整体先于 SHAPE 数组加载，属于槽位结构的副产品，不是被声明过
+ *     的约束。机制：GFM 扩展自动链接的 link_open token 不是 markdown-it 的
+ *     inline 解析器产出的，而是 autolink.ts 的 core rule `readit_gfm_autolink`
+ *     在 text token 上**现场合成**的；applyDecorate 的 core rule `readit_decorate`
+ *     只认已经存在的 link_open token，给 isExternal 的那些 attrSet('rel',
+ *     'nofollow')。两条都用 core.ruler.push，注册顺序 == 执行顺序，所以 decorate
+ *     先跑时，扩展自动链接的 link_open 还不存在，nofollow 无从贴起。
+ *     实测（2026-08-08，`www.example.com and [md](http://other.com)`）：
+ *       正序 <a href="http://www.example.com" rel="nofollow">www.example.com</a>
+ *       换序 <a href="http://www.example.com">www.example.com</a>
+ *     注意换序**只**打掉扩展自动链接的 nofollow：同一行里 `[md](http://other.com)`
+ *     两种顺序下都保留 rel="nofollow"，因为它的 link_open 来自内建 `inline`
+ *     规则，而 `inline` 排在所有 push 进来的 core rule 之前。正因为如此，只用
+ *     markdown 链接写的测试永远测不出这条耦合。
+ *     钉在 test/rules/decorate.test.ts 的「ordering coupling」用例（直接两种顺序
+ *     各建一个引擎对比），另由 test/integration.test.ts 那条精确字节断言兜底。
+ *
+ *  6. 美元护栏 / emoji / 自动链接三者相对 `text_join` 的锚点（计划 C2 第 4 条）。
+ *     这条不靠数组顺序，靠各自的锚点，所以换数组位置不影响；列在这里是因为
+ *     applyRawShape 接手 #4 槽位时它被挤出了本枚举，而它仍然是承重的：
+ *       · applyMathInline 挂 `core.ruler.before('text_join')`——护栏要靠
+ *         `text_special` 仍是独立 token 才能做 R9 的 `\$` 遮罩；
+ *       · applyEmoji 挂 `core.ruler.after('text_join')`——`\:smile:` 在合并前是
+ *         text_special + text 两个 token，看不出候选；
+ *       · applyAutolink 用 `core.ruler.push`（即 text_join 之后）——要的正好相反，
+ *         实体必须已经并进 text.content 并解码，否则 `&amp;` 会把一条 URL 切成
+ *         三个 token。
+ *     护栏与自动链接的方向相反但互不干扰。三条要求各自写在
+ *     rules/math-inline.ts、rules/emoji.ts、rules/autolink.ts 的注释里。
+ *
  * 一处**刻意不成为**第五条耦合的地方：`applyMathBlock` 要处理 ```math 围栏，而
  * `applyCodeBlock` 在下面的循环**之后**才注册 `renderer.rules.fence`，会覆盖
  * 任何在 SHAPE 槽里装的 fence 渲染器。math-block.ts 因此不装 fence 渲染器，改在

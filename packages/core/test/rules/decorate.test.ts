@@ -224,4 +224,45 @@ describe('applyDecorate', () => {
       )
     })
   })
+  /**
+   * Ordering coupling with `applyAutolink`, recorded as engine.ts coupling #5.
+   *
+   * `applyAutolink` synthesises the `link_open` for a GFM extended autolink in
+   * a `core.ruler.push`ed rule; this rule decorates `link_open` tokens in
+   * another one. Push order is execution order, so registering this rule first
+   * means the autolink's tokens do not exist yet and rule 2 never fires on
+   * them. `createEngine` gets the order right only because SEMANTIC loads
+   * before SHAPE — nothing declares it — so it is pinned here directly, by
+   * building both orders rather than by asserting the canonical output alone.
+   *
+   * The second assertion in each case is the point: the markdown link on the
+   * same line keeps `rel="nofollow"` under BOTH orders, because its
+   * `link_open` comes from the built-in `inline` rule, which runs before every
+   * pushed core rule. A test written with markdown links can therefore never
+   * detect this coupling.
+   */
+  describe('ordering coupling: applyAutolink must be registered first', () => {
+    const SRC = 'www.example.com and [md](http://other.com)\n'
+    const engine = (first: typeof applyDecorate, second: typeof applyDecorate) => {
+      const m = new MarkdownIt('default', { html: true, linkify: false })
+      first(m)
+      second(m)
+      return m.render(SRC)
+    }
+
+    it('canonical order decorates the extended autolink', () => {
+      const html = engine(applyAutolink, applyDecorate)
+      expect(html).toContain('<a href="http://www.example.com" rel="nofollow">www.example.com</a>')
+      expect(html).toContain('<a href="http://other.com" rel="nofollow">md</a>')
+    })
+
+    it('permuted order silently drops nofollow from the extended autolink only', () => {
+      const html = engine(applyDecorate, applyAutolink)
+      expect(html).toContain('<a href="http://www.example.com">www.example.com</a>')
+      expect(html).not.toContain('<a href="http://www.example.com" rel="nofollow">')
+      // Unchanged: the markdown link is immune, which is exactly why this
+      // coupling went undocumented.
+      expect(html).toContain('<a href="http://other.com" rel="nofollow">md</a>')
+    })
+  })
 })

@@ -72,6 +72,13 @@ export function applyEmoji(md: MarkdownIt, customBase = 'emoji/'): void {
   // central registration a later task adds in engine.ts (see tasklist.ts).
   md.renderer.rules.readit_raw ??= (tokens, idx) => tokens[idx]!.content
 
+  // `after('text_join')` is load-bearing, not incidental: before the merge,
+  // `\:smile:` is a `text_special(':')` plus a `text('smile:')`, and neither
+  // half looks like a candidate. After it they are one `text` token, which is
+  // what makes readit substitute there — matching GitHub. Note this is the
+  // OPPOSITE anchor to `applyMathInline`'s dollar guard, which needs
+  // `text_special` still separate. See engine.ts coupling #6, and
+  // test/rules/emoji.test.ts's "fires on a backslash-escaped colon".
   md.core.ruler.after('text_join', 'readit_emoji', (state) => {
     for (const token of state.tokens) {
       if (token.type !== 'inline' || !token.children) continue

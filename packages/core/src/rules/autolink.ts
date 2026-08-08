@@ -316,6 +316,23 @@ function autolinkRule(state: StateCore): void {
  * Register the GFM extended-autolink rule. Requires `linkify: false`:
  * linkify-it 6 disables fuzzyLink by default, so markdown-it 15's own linkify
  * recognises none of the bare-domain / `www.` forms.
+ *
+ * ## Two position requirements, both load-bearing
+ *
+ * 1. AFTER `text_join`, which is what `core.ruler.push` gives (`text_join` is
+ *    the last built-in core rule). By then `text_special` tokens — `&amp;`,
+ *    `\.` — have been merged into `text.content` and decoded, so this rule
+ *    scans one continuous string with the same semantics as a cmark-gfm text
+ *    node. Anchored `before('text_join')` instead (where `applyMathInline`'s
+ *    dollar guard has to sit, for the opposite reason: it needs `text_special`
+ *    still distinguishable to mask `\$`), an entity would split one URL across
+ *    three tokens. See engine.ts coupling #6.
+ * 2. BEFORE `applyDecorate`. This rule SYNTHESISES `link_open` tokens that the
+ *    inline parser never produced; `applyDecorate`'s core rule only decorates
+ *    `link_open` tokens that already exist, so if it ran first no GFM extended
+ *    autolink would get `rel="nofollow"`. Both use `core.ruler.push`, so
+ *    registration order is execution order, and today that holds only because
+ *    `SEMANTIC_RULES` loads before `SHAPE_RULES`. See engine.ts coupling #5.
  */
 export function applyAutolink(md: MarkdownIt): void {
   md.core.ruler.push('readit_gfm_autolink', autolinkRule)
