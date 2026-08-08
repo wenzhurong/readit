@@ -1,6 +1,7 @@
+import type { Dirent } from 'node:fs'
 import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, posix, relative, sep } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   OracleError,
@@ -37,6 +38,23 @@ function fakeFetch(status: number, contentType: string | null, body: string): Fe
 }
 
 const GOOD_BODY = '<div id="file" class="" data-path="README"><div class="plain"><pre>Hello World!\n</pre></div></div>'
+
+/**
+ * Every path under `dir`, recursively, as sorted posix-style relative paths — `[]` if `dir` does
+ * not exist. Used to assert that a failed refresh left nothing behind ANYWHERE beneath the root,
+ * rather than only that the root's own direct children look right.
+ */
+async function treeOf(dir: string): Promise<string[]> {
+  let entries: Dirent[]
+  try {
+    entries = await readdir(dir, { recursive: true, withFileTypes: true })
+  } catch {
+    return []
+  }
+  return entries
+    .map((e) => relative(dir, join(e.parentPath, e.name)).split(sep).join(posix.sep))
+    .sort()
+}
 
 describe('oracle-refresh', () => {
   it('builds the pinned contents URL with the html media type ref', () => {
@@ -184,9 +202,12 @@ describe('oracle-refresh', () => {
     const original = process.env.GITHUB_TOKEN
     delete process.env.GITHUB_TOKEN
     try {
-      // No manifest/fixtures dir is supplied and none exists at the default location; if main()
-      // got past the token check it would throw ENOENT instead of returning 2. The absence of a
-      // thrown error is itself evidence the token guard ran first.
+      // 2 is the token-guard's own exit code, and it is what discriminates this path: main()
+      // wraps everything after the token check in try/catch and reports any later failure as 1.
+      // So "resolves to 2" means the guard returned before readManifest was ever called, whereas
+      // a guard that failed to fire would have gone on to read a manifest that does not exist at
+      // the default location and come back 1. (An earlier version of this comment claimed the
+      // absence of a thrown error was the evidence; it is not — nothing here can throw.)
       await expect(main([])).resolves.toBe(2)
     } finally {
       if (original !== undefined) process.env.GITHUB_TOKEN = original
@@ -245,7 +266,14 @@ describe('main error handling', () => {
       const output = errSpy.mock.calls.map((c) => String(c[0])).join('')
       expect(output).toMatch(/^oracle refresh failed: /)
       expect(output).toContain('expected HTTP 200, got 403')
-      expect(await readdir(dir)).not.toContain('oracle-provenance.json')
+      // This is the only assertion in the file that checks a FAILED refresh commits no
+      // provenance, and it used to look in the wrong place: `readdir(dir)` lists the root, but
+      // main() passes `join(root, 'fixtures')` to refreshAll, so oracle-provenance.json could
+      // only ever appear one level down — the old check would have passed no matter what got
+      // written. Walk the whole tree instead: the manifest this test wrote is the only thing
+      // that may exist afterwards, which pins "no provenance", "no fixtures directory" and "no
+      // half-written fixture" in one assertion.
+      expect(await treeOf(dir)).toEqual(['oracle-manifest.json'])
     } finally {
       errSpy.mockRestore()
     }
@@ -350,10 +378,11 @@ describe('vendor licence gate', () => {
     const written = await vendorKarlcow(dir, spy, KARLCOW)
     expect(written).toHaveLength(105) // 103 inputs + LICENSE.txt + PROVENANCE.json
 
+    // Exact full-array equality against the expected 105 names. That already says `case-000.out`
+    // and `README` were filtered out — the two `not.toContain` follow-ups this replaced could not
+    // fail unless this line had failed first.
     const files = (await readdir(join(dir, 'adversarial', 'karlcow'))).sort()
     expect(files).toEqual([...mdNames, 'LICENSE.txt', 'PROVENANCE.json'].sort())
-    expect(files).not.toContain('case-000.out')
-    expect(files).not.toContain('README')
 
     await expect(readFile(join(dir, 'adversarial', 'karlcow', 'case-042.md'), 'utf8')).resolves.toBe('content of case-042.md')
     await expect(readFile(join(dir, 'adversarial', 'karlcow', 'LICENSE.txt'), 'utf8')).resolves.toBe('MIT License text')
