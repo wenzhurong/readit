@@ -62,11 +62,32 @@ export function renderForSpec(markdown: string, extension: string): string {
 }
 
 /**
+ * 白名单理由必须带的前缀。
+ *
+ * 计划一的硬要求是 **TEMPORARY 计数为 0**：`PERMANENT` 的含义是「任何 JS 解析器都不可能
+ * 同时满足两边」（规格冻结导致的版本漂移、markdown-it 上游渲染器行为、cmark-gfm 自己都跳过
+ * 的例子），这是把一条规格例子放进白名单的**唯一**可接受理由。`TEMPORARY` 则是没还的债。
+ *
+ * 在此之前这条规则只以散文形式存在（见下面 BASE_EXTENSIONS 的注释），`runSpecSuite` 把理由
+ * 字符串当成不透明的一团，任何人都可以加一条 `TEMPORARY` 而套件照绿。
+ */
+export const PERMANENT_PREFIX = 'PERMANENT'
+
+/** 白名单里理由未标 PERMANENT 的编号（升序，数值序）。 */
+export function findNonPermanentReasons(whitelist: Record<string, string>): string[] {
+  return Object.entries(whitelist)
+    .filter(([, reason]) => typeof reason !== 'string' || !reason.startsWith(PERMANENT_PREFIX))
+    .map(([id]) => id)
+    .sort((a, b) => Number(a) - Number(b))
+}
+
+/**
  * 表驱动跑一套规格。
  * - 不在白名单里的例子失败 -> 测试失败（新增失败断构建）
  * - 在白名单里的例子失败 -> 测试通过
  * - 在白名单里的例子**通过** -> 测试失败，要求把该条从白名单删掉（防白名单腐烂）
  * - 白名单里有编号在本套件中不存在 -> 测试失败
+ * - 白名单里有条目理由不是 PERMANENT -> 测试失败（TEMPORARY 必须清零）
  */
 export function runSpecSuite(
   suiteId: SuiteId,
@@ -84,6 +105,21 @@ export function runSpecSuite(
       const ids = new Set(examples.map((e) => String(e.example)))
       const orphans = Object.keys(whitelist).filter((k) => !ids.has(k))
       expect(orphans).toEqual([])
+    })
+
+    it(`${suiteId}: every known-failure reason is PERMANENT (the TEMPORARY count must be zero)`, () => {
+      expect(
+        findNonPermanentReasons(whitelist),
+        `test/spec/known-failures.json["${suiteId}"] contains entries that are not marked ` +
+          `${PERMANENT_PREFIX}. Plan one's hard requirement is that the TEMPORARY count is zero.\n` +
+          `${PERMANENT_PREFIX} means "no JS parser could possibly match here" — a frozen-spec ` +
+          'version drift, an upstream markdown-it renderer behaviour, or an example cmark-gfm ' +
+          'itself skips. That is the ONLY acceptable reason to whitelist a spec example.\n' +
+          'A TEMPORARY entry is unpaid debt: fix the example, do not list it. And relabelling a ' +
+          'TEMPORARY entry as PERMANENT to get past this check is explicitly forbidden — Task ' +
+          '10-13 cleared all 14 original TEMPORARY entries by actually fixing them, none was ' +
+          'reclassified, and that is the record this assertion exists to protect.',
+      ).toEqual([])
     })
 
     for (const e of examples) {
