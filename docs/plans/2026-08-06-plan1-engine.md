@@ -9908,3 +9908,114 @@ git commit -m "feat(core): 链接与图片的 GitHub 装饰（nofollow / max-wid
 
 补上自审发现的覆盖缺口：SPEC §17.1 新增的两条 §6 规则此前无任务负责。"
 ```
+
+---
+
+## 追加任务（Task 24 实测后，用户定范围「只修大的两件 + 棘轮白名单」）
+
+> Task 24 首次把保真度主张放到 60 份真实语料上量，得到 **38/60**。22 个不匹配归因为
+> readit 真 bug 13 个成因 / D-MERMAID 3 文件（M5 范围外）/ 归一化器缺口 2 / unknown 0，
+> 该测量本身经独立复现确认可信（评审自己跑了套件、把 14 个不匹配重新过了真实 render()
+> 管线比字节、确认归一化器与 src/** 未被改动）。
+>
+> 用户裁定：本计划内只修**两件大的**——Task 34（块级数学，属计划缺口）与 Task 35
+> （原生 HTML 装饰，影响面最大）；其余 11 个成因 + 2 个归一化器缺口入棘轮白名单
+> （Task 36），归计划二。
+
+---
+
+### Task 34: 块级数学（`$$` 段落 + ```math 围栏）+ 回退元素外形
+
+> ⚠️ **这是一个计划缺口，不是 bug 修复。** SPEC §8.6 明写 `inlineMath: 'off'` 时
+> "`$$…$$` 块与 ```math 围栏仍工作"，但起草期没有任何任务负责这个机制：T25 只做了
+> R1–R8 行内美元护栏，T28 只做了 MathJax 渲染器。`packages/core/src/rules/math-inline.ts`
+> 是唯一的数学规则文件，里面没有任何块级路径。与 Task 33 同类。
+
+**实测地面真相 —— 先读夹具，不要照报告的散文实现。** Task 24 的报告在这里有一处
+归因错误：它说块级 `$$` 的失败症状包含"`\,` 甚至被 CommonMark 反斜杠反转义成字面 `,`"。
+**GitHub 自己的输出里也是 `,`。** 那是正确行为，不是缺陷。
+
+三份夹具就是验收标准（`data-run-id` 已由归一化器的 `NONDETERMINISTIC_ATTRS` 剥除，
+不必产出）：
+
+| 语料 | GitHub 实测输出 |
+|---|---|
+| `corpus/frontend/math-block.md`<br>`$$\n\int_0^1 x^2 \, dx = \frac{1}{3}\n$$` | `<p dir="auto"><math-renderer class="js-display-math" style="display: block">$$`<br>`\int_0^1 x^2 , dx = \frac{1}{3}`<br>`$$</math-renderer></p>` |
+| `corpus/frontend/math-fence.md`<br>```` ```math\n\sum_{n=1}^{\infty} …\n``` ```` | `<math-renderer class="js-display-math" style="display: block">$$\sum_{n=1}^{\infty} …$$</math-renderer>`（**顶层，无 `<p>`**） |
+| `corpus/frontend/math-inline.md` | `<math-renderer class="js-inline-math" style="display: inline-block">$e^{i\pi} + 1 = 0$</math-renderer>` |
+
+从这三行读出的四条硬事实，每一条都改变实现形状：
+
+1. **块级 `$$` 是行内层构造，不是块级构造。** 它被包在 `<p dir="auto">` 里，且 `\,`
+   经过了 CommonMark 转义处理 —— 两者都证明它走的是段落的 inline 流水线。
+   **所以复用 `math_inline` token（`markup === '$$'`），不要新建块级规则。**
+   当前失败的原因是扫描器在一个 inline token 的 children 里不跨 `softbreak` 合并
+   —— `$$\n…\n$$` 被切成 text/softbreak/text/softbreak/text。
+2. **```math 围栏是块级的**，顶层无 `<p>` 包裹 → 需要真正的块级 token。
+   围栏体被 trim 后由 GitHub **自己补上** `$$`…`$$` 定界符（源码里没有）。
+3. **回退元素的 class 随 display 切换**，当前 `math-inline.ts:331` 无论如何都写
+   `js-inline-math`，且两种情况都漏了 `style`。正确形状：
+   `display ? 'class="js-display-math" style="display: block"' : 'class="js-inline-math" style="display: inline-block"'`。
+4. **围栏不能靠覆盖 `md.renderer.rules.fence` 实现。** `createEngine` 里
+   `applyCodeBlock(md, opts.highlighter)` 在 `SHAPE_RULES` **之后**注册，会把 SHAPE
+   槽里任何 `fence` 渲染器覆盖掉。用 **core rule 改 token 类型**（`fence` +
+   `info === 'math'` → 新块级 token），这样 codeblock 的 `fence` 渲染器根本看不到它，
+   与注册顺序无关。
+
+**Files:**
+- Create: `packages/core/src/rules/math-block.ts`
+- Test: `packages/core/test/rules/math-block.test.ts`
+- Modify: `packages/core/src/rules/math-inline.ts`（回退外形；跨 softbreak 的 `$$` 跨度）
+- Modify: `packages/core/src/engine.ts`（`applyMathBlock` 加进 `SHAPE_RULES`，紧跟 `applyMathInline`）
+
+**Interfaces:**
+- Produces: `export function applyMathBlock(md: MarkdownIt): void`
+- 渲染器接缝与行内一致：`env.readit.math` 存在时 `renderer.render(tex, /* display */ true)`；
+  不存在时发上表的回退元素。**围栏传给渲染器的是纯 TeX（不含 `$$`）**，与
+  `math_inline` 的 `token.content` 语义一致。
+
+**槽位：SHAPE。** 规格不期望这些。
+
+**`'off'` 模式的硬约束：** `applyMathInline` 当前第一行就是 `if (mode === 'off') return`，
+会把块级一起关掉。SPEC §8.6 明确要求 `'off'` 时块级 `$$` 与 ```math **仍然工作**。
+块级路径必须在 mode 闸门**之外**。这条要有具名测试。
+
+**不得回归：** `packages/core/test/corpus/inline-math/` 下 159 条护栏语料
+（经 `NON_SNAPSHOT_DIRS` 排除出快照套件，但有自己的测试）必须继续全绿。
+R1–R8 行内判定逻辑不在本任务范围内 —— 不要为了让块级过而放宽行内护栏。
+
+- [ ] **Step 1: 写会失败的测试（TDD，先红后绿）**
+  覆盖：三份夹具各自的精确输出；`inlineMath: 'off'` 下块级两种形式仍工作；
+  围栏体首尾空白被 trim；`env.readit.math` 存在时走渲染器且 `display === true`；
+  非 `math` info 的围栏不受影响（仍走 codeblock 的 wrapper）。
+- [ ] **Step 2: 实现至绿**
+- [ ] **Step 3: 跑 `npm test`**，报告 `packages/core/test/corpus.test.ts` 里
+  `frontend/math-block`、`frontend/math-fence`、`frontend/math-inline` 三条的前后状态。
+  **其余语料的红是已知的（38/60），不是你引入的** —— 但如果**新增**了红，那是回归，必须报。
+
+---
+
+### Task 36: 语料不匹配的棘轮白名单
+
+> Task 24 刻意没建白名单，`npm test` 因此在根级首次变红。用户裁定建棘轮式白名单。
+
+**照搬项目已在用且已验证的模式** —— `known-failures.json` 的**双向棘轮**：
+白名单**外**出现新失败 → 断构建；白名单**内**的条目现在通过了 → **也**断构建。
+第二个方向是关键：它保证修好一条就必须删一条，白名单只能缩不能悄悄留。
+
+**Files:**
+- Create: `packages/core/test/known-mismatches.json`
+- Modify: `packages/core/test/corpus.test.ts`
+
+**每条条目必须具名带成因**，字段至少：语料路径、成因分类
+（`readit-bug` | `deviation` | `normalizer-gap`）、一行说明、以及对应的 Task 24
+报告成因编号。不允许无说明的裸路径 —— 白名单的价值全在于它是一份**可读的欠账清单**，
+不是一个静音开关。
+
+**内容来自 Task 24 报告的实测归因**，在 Task 34、Task 35 落地**之后**生成，
+这样它记录的是真实剩余欠账，而不是一份立刻就过期的清单。
+
+- [ ] **Step 1** 写棘轮逻辑的测试（双向都要有具名测试：注入一个假的新失败应断；
+  把一个已通过项塞进白名单应断）
+- [ ] **Step 2** 实现，填入剩余不匹配
+- [ ] **Step 3** `npm test` 必须**全绿**，并在报告里给出白名单条目数与分类计数
