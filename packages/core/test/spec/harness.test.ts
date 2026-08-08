@@ -48,6 +48,24 @@ describe('findNonPermanentReasons (the TEMPORARY-must-be-zero guard)', () => {
   it('flags a non-string reason instead of throwing on it', () => {
     expect(findNonPermanentReasons({ '42': null as never })).toEqual(['42'])
   })
+
+  /**
+   * 这条断言记录的是守卫的**上限**，不是它的能力：原地改标签、理由一字不动，
+   * 检查照过。写下来是为了让它别看起来像是完备的——一道被误以为完备的守卫，
+   * 比一道公开承认有缺口的守卫更危险。
+   *
+   * 为什么不补上：判断一条理由是否真的成立是语义判断，字符串检查做不到，除非
+   * 把理由文本也钉死，那会让每次措辞修订都变成假报警。拦住它的是 review——
+   * diff 里 TEMPORARY 变 PERMANENT 是醒目的一行，而 runSpecSuite 的失败信息
+   * 已明确点名这种做法被禁止。详见 harness.ts 中 PERMANENT_PREFIX 上方的说明。
+   */
+  it('KNOWN LIMIT: a relabel with identical prose passes — only review catches that', () => {
+    const reason = '某条足够长、足以通过 >10 字符断言的理由文字'
+    expect(findNonPermanentReasons({ '42': `TEMPORARY · ${reason}` })).toEqual(['42'])
+    expect(findNonPermanentReasons({ '42': `${PERMANENT_PREFIX} · ${reason}` })).toEqual([])
+    // 而且改完之后连长度断言也还满足，两道机械检查都拦不住。
+    expect(`${PERMANENT_PREFIX} · ${reason}`.slice(PERMANENT_PREFIX.length).trim().length).toBeGreaterThan(10)
+  })
 })
 
 /**

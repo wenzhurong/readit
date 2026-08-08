@@ -73,6 +73,24 @@ export function renderForSpec(markdown: string, extension: string): string {
  */
 export const PERMANENT_PREFIX = 'PERMANENT'
 
+/**
+ * 这道守卫的**已知上限**，写在这里而不是让它看起来是完备的：
+ *
+ * 它能挡住的是「新增一条没标 PERMANENT 的条目」和「只写裸前缀、不给理由」
+ * （后者由 harness.test.ts 的 >10 字符断言负责）。它挡不住**原地改标签**：
+ * 把 `TEMPORARY · 某条 30 字的理由` 改成 `PERMANENT · 某条 30 字的理由`，
+ * 前缀对了，理由长度也还在，两条断言都通过。
+ *
+ * 这是机械检查的固有边界——判断一条理由是否**真的**满足「任何 JS 解析器都不
+ * 可能同时满足两边」，是一个语义判断，字符串检查做不到，除非把理由本身也钉死
+ * （那会让每一次措辞修订都变成一次假报警）。所以真正拦住重贴标签的是 review：
+ * 改动 known-failures.json 的 diff 里，一条 TEMPORARY 变 PERMANENT 是一行醒目
+ * 的改动，而下面那条断言的失败信息明确点名这种做法是被禁止的。
+ *
+ * 记录在案的事实是：任务 10-13 把原有 14 条 TEMPORARY 全部**修好**清零，
+ * 一条都没有重新归类，这才是这道守卫要保护的记录。
+ */
+
 /** 白名单里理由未标 PERMANENT 的编号（升序，数值序）。 */
 export function findNonPermanentReasons(whitelist: Record<string, string>): string[] {
   return Object.entries(whitelist)

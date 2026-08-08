@@ -31,6 +31,26 @@ describe('typecheck is wired into CI', () => {
   it('is a peer gate, not a prerequisite, so a type error cannot hide a test failure', () => {
     expect(workflow).not.toMatch(/needs:\s*\[?\s*typecheck/)
   })
+
+  /**
+   * The assertion above stops the job from being made a PREREQUISITE. It does nothing about the
+   * cheaper way to neuter it: `continue-on-error: true` leaves the job present, named and green
+   * in the checks list while its failures stop blocking anything — so every other assertion in
+   * this file would still pass over a typecheck that had been quietly made advisory.
+   *
+   * Asserted across the whole workflow rather than just the typecheck job, and as a bare
+   * substring rather than a `: true` match, because it is equally fatal on `unit` and equally
+   * effective on a single step. There is no legitimate use of it in this file: both jobs exist
+   * to block a merge, which is precisely what the key switches off.
+   */
+  it('has no continue-on-error anywhere, on either job or any step', () => {
+    expect(
+      workflow,
+      'continue-on-error makes a job advisory: still listed, still green, no longer blocking. ' +
+        'If a job here should not gate a merge, delete it and say why — do not leave a check ' +
+        'that looks like a gate and is not.',
+    ).not.toContain('continue-on-error')
+  })
 })
 
 describe('typecheck actually covers the whole repo', () => {
