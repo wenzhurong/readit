@@ -93,21 +93,68 @@ export function compareToFixture(
  * are these shape figures, and the two are not expected to agree.
  */
 export interface DiffShape {
-  /** Maximal contiguous runs of change. A new, unrelated regression elsewhere adds one. */
+  /**
+   * Maximal contiguous runs of change: how many *separate places* in the file are wrong.
+   *
+   * Read this as fragmentation, NOT as coverage. A regression only adds a hunk if it lands on
+   * a line that currently MATCHES the oracle; a regression that lands on a line already inside
+   * an existing hunk moves neither number. See `shapeCarriesNoSignal` and the blind-surface
+   * note on `diffHunks` for how much of each ledger file that leaves unprotected.
+   */
   hunks: number
   /** Lines deleted plus lines inserted: `|a| + |b| - 2 * LCS(a, b)`. */
   edits: number
 }
 
+/** One maximal contiguous run of change, with where it sits in each side. */
+export interface DiffHunk {
+  /** 0-based index into the FULL `actualLines` array where this hunk's removed run begins. */
+  actualStart: number
+  /** 0-based index into the FULL `expectedLines` array where this hunk's added run begins. */
+  expectedStart: number
+  /** Lines present in `actual` and absent from `expected`, in document order. */
+  removed: string[]
+  /** Lines present in `expected` and absent from `actual`, in document order. */
+  added: string[]
+}
+
 /**
- * Measure the shape of the difference between two line arrays.
+ * Align two line arrays and return the maximal contiguous runs of change, in document order.
+ *
+ * This is the single alignment implementation in the harness: `diffShape` is derived from it,
+ * so the hunks a failure message prints are exactly the hunks the pin counts — they cannot
+ * drift apart into two disagreeing views of the same diff.
  *
  * Common prefix and suffix are stripped first — standard for shortest-edit-script problems,
  * where it provably does not change the answer — which keeps the quadratic table small for the
  * common case of a long file with a couple of localized diffs (`real-world/sindresorhus-is` is
  * 3055 lines with 2 changed ones).
+ *
+ * ## The tie-break is load-bearing, and only `hunks` depends on it
+ *
+ * `edits` is canonical: it is a function of LCS *length* alone, so every optimal alignment
+ * yields the same number. `hunks` is not — it depends on WHICH optimal alignment gets walked,
+ * and when the two backtrack directions are equally good, the comparison below is what picks
+ * one. Flipping it to its mirror (`table[i - 1][j] >= table[i][j - 1]`, preferring to consume
+ * `a`) is a silent re-pin: measured on this corpus it takes `real-world/mermaid` from 22 hunks
+ * to 12 with `edits` unchanged at 84, while every other entry holds still.
+ *
+ * That asymmetry is the diagnostic the ledger's failure message leans on — `edits` unchanged
+ * while `hunks` moves means the ALIGNER changed, not the renderer — so the tie-break is pinned
+ * by name in `corpus-harness.test.ts` ("the LCS tie-break is load-bearing…"), against a case
+ * brute-forced to distinguish it from its mirror. Do not "simplify" this comparison.
+ *
+ * ## What the shape cannot see
+ *
+ * A hunk records only that a run of lines differs, not what they say. Changing a line that is
+ * already inside a hunk leaves both numbers untouched, so the pin's blind surface on any file
+ * is exactly the lines that already differ. Measured over the 15 ledger entries that is 109 of
+ * 5249 lines; four entries (`frontend/mermaid-large`, `-syntax-error`, `-valid`, `gfm/tagfilter`)
+ * share no line at all with their oracle and are therefore 100% blind — `shapeCarriesNoSignal`
+ * detects exactly that case, and `corpus.test.ts` requires those entries to pin their `output`
+ * verbatim instead.
  */
-export function diffShape(actualLines: readonly string[], expectedLines: readonly string[]): DiffShape {
+export function diffHunks(actualLines: readonly string[], expectedLines: readonly string[]): DiffHunk[] {
   let lo = 0
   while (lo < actualLines.length && lo < expectedLines.length && actualLines[lo] === expectedLines[lo]) lo += 1
   let aHi = actualLines.length
@@ -118,8 +165,10 @@ export function diffShape(actualLines: readonly string[], expectedLines: readonl
   }
   const a = actualLines.slice(lo, aHi)
   const b = expectedLines.slice(lo, bHi)
-  if (a.length === 0 && b.length === 0) return { hunks: 0, edits: 0 }
-  if (a.length === 0 || b.length === 0) return { hunks: 1, edits: a.length + b.length }
+  if (a.length === 0 && b.length === 0) return []
+  if (a.length === 0 || b.length === 0) {
+    return [{ actualStart: lo, expectedStart: lo, removed: [...a], added: [...b] }]
+  }
 
   const n = a.length
   const m = b.length
@@ -135,30 +184,115 @@ export function diffShape(actualLines: readonly string[], expectedLines: readonl
       row[j] = ai === b[j - 1] ? prev[j - 1]! + 1 : Math.max(prev[j]!, row[j - 1]!)
     }
   }
-  const lcs = table[n]![m]!
 
-  // Walk one optimal alignment back to front, counting maximal runs of change. The tie-break
-  // (prefer consuming `b` when the two directions are equally good) only decides *which* optimal
-  // alignment is walked, and is fixed here so the hunk count is deterministic.
+  // Walk one optimal alignment back to front, collecting maximal runs of change. Because the
+  // walk is backwards, each run is accumulated in reverse and flipped when it is closed; the
+  // hunk list itself is reversed at the end so callers see document order.
+  const reversed: DiffHunk[] = []
+  let removedRev: string[] = []
+  let addedRev: string[] = []
+  let inHunk = false
   let i = n
   let j = m
-  let hunks = 0
-  let inHunk = false
+  const close = (): void => {
+    // `i`/`j` have already been walked back past the whole run, so they are its start.
+    reversed.push({
+      actualStart: lo + i,
+      expectedStart: lo + j,
+      removed: removedRev.reverse(),
+      added: addedRev.reverse(),
+    })
+    removedRev = []
+    addedRev = []
+    inHunk = false
+  }
   while (i > 0 || j > 0) {
     if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) {
+      if (inHunk) close()
       i -= 1
       j -= 1
-      inHunk = false
       continue
     }
-    if (!inHunk) {
-      hunks += 1
-      inHunk = true
+    inHunk = true
+    // The tie-break. See the "load-bearing" note above before touching this comparison.
+    if (j > 0 && (i === 0 || table[i]![j - 1]! >= table[i - 1]![j]!)) {
+      j -= 1
+      addedRev.push(b[j]!)
+    } else {
+      i -= 1
+      removedRev.push(a[i]!)
     }
-    if (j > 0 && (i === 0 || table[i]![j - 1]! >= table[i - 1]![j]!)) j -= 1
-    else i -= 1
   }
-  return { hunks, edits: n - lcs + (m - lcs) }
+  if (inHunk) close()
+  return reversed.reverse()
+}
+
+/**
+ * Measure the shape of the difference between two line arrays: how many separate places differ,
+ * and by how many line insertions/deletions in total.
+ */
+export function diffShape(actualLines: readonly string[], expectedLines: readonly string[]): DiffShape {
+  const hunks = diffHunks(actualLines, expectedLines)
+  let edits = 0
+  for (const h of hunks) edits += h.removed.length + h.added.length
+  return { hunks: hunks.length, edits }
+}
+
+/**
+ * True when the pinned shape carries no information about this file's CONTENT at all.
+ *
+ * `edits === |actual| + |expected|` says LCS is zero: not one line of readit's output matches
+ * any line of the oracle's. The alignment then has nothing to anchor on — `hunks` is stuck at 1
+ * and `edits` degenerates into the two line counts — so any change that rewrites a line without
+ * changing how many lines there are is completely invisible to the pin.
+ *
+ * Four ledger entries are in this state today (the three `frontend/mermaid-*` files, whose
+ * `div.highlight` wrapper shares nothing with GitHub's `<section data-type="mermaid">`, and
+ * `gfm/tagfilter`, whose entire normalized output is one line). For those, `corpus.test.ts`
+ * requires the entry to pin `output` verbatim — a magnitude cannot protect a file whose
+ * magnitude is a constant.
+ */
+export function shapeCarriesNoSignal(
+  shape: DiffShape,
+  actualLines: readonly string[],
+  expectedLines: readonly string[],
+): boolean {
+  return shape.edits > 0 && shape.edits === actualLines.length + expectedLines.length
+}
+
+/**
+ * Render hunks as a localized `-`/`+` listing for a failure message.
+ *
+ * Capped, because a ledger file's diff can be large by design (`real-world/hast-util-sanitize`
+ * is 305 edits) and a wall of that in a test failure is as unreadable as the two bare integers
+ * it replaces. The caps are on the number of hunks and the number of lines shown per hunk, never
+ * on the width of a line — `chaiConfig.truncateThreshold: 0` is set repo-wide precisely so that
+ * a long attribute list is not cut off mid-diff. `npm run corpus:diff -- <name>` prints the
+ * uncapped version.
+ */
+export function formatDiffHunks(
+  hunks: readonly DiffHunk[],
+  opts: { maxHunks?: number; maxLinesPerHunk?: number } = {},
+): string {
+  const maxHunks = opts.maxHunks ?? 6
+  const maxLines = opts.maxLinesPerHunk ?? 6
+  if (hunks.length === 0) return '  (no line-level difference)'
+  const out: string[] = []
+  hunks.slice(0, maxHunks).forEach((h, idx) => {
+    out.push(
+      `  hunk ${idx + 1}/${hunks.length} — actual line ${h.actualStart + 1}, oracle line ${h.expectedStart + 1} ` +
+        `(-${h.removed.length} +${h.added.length})`,
+    )
+    const shown: string[] = [
+      ...h.removed.slice(0, maxLines).map((l) => `    - ${l}`),
+      ...h.added.slice(0, maxLines).map((l) => `    + ${l}`),
+    ]
+    out.push(...shown)
+    const hidden = Math.max(0, h.removed.length - maxLines) + Math.max(0, h.added.length - maxLines)
+    if (hidden > 0) out.push(`    … ${hidden} more line(s) in this hunk`)
+  })
+  if (hunks.length > maxHunks) out.push(`  … ${hunks.length - maxHunks} more hunk(s)`)
+  return out.join('\n')
 }
 
 /**
@@ -178,6 +312,12 @@ export function diffShape(actualLines: readonly string[], expectedLines: readonl
  * the 15 listed files and nothing would notice. Each entry therefore also pins the *magnitude* of
  * its mismatch (`diff`), so the ratchet asserts "still failing, and still failing exactly this
  * much". A ledger entry excuses only the causes it names, not the whole file.
+ *
+ * The magnitude pin has a measured blind surface, and it is disclosed rather than glossed: it can
+ * only see a regression that changes a line's MATCH STATUS, so the lines it cannot see are exactly
+ * the ones already inside a hunk — 109 of 5249 across the ledger. Where that blind surface is the
+ * whole file (`shapeCarriesNoSignal`), the entry pins `output` verbatim instead; see that function
+ * and `DiffShape.hunks`.
  */
 export type MismatchCategory = 'readit-bug' | 'deviation' | 'normalizer-gap'
 
@@ -196,10 +336,78 @@ export interface MismatchEntry {
    * differing-line count.
    */
   diff: DiffShape
+  /**
+   * readit's exact normalized output lines, pinned verbatim.
+   *
+   * Required — and only required — when `shapeCarriesNoSignal` says the `diff` magnitude
+   * degenerates: when readit's output shares no line at all with the oracle's, `hunks` is stuck
+   * at 1 and `edits` is just the two line counts, so rewriting a line's content moves neither.
+   * A magnitude cannot protect a file whose magnitude is a constant, so those entries pin the
+   * content itself. `corpus.test.ts` enforces both halves of the rule: present when needed,
+   * and accurate.
+   *
+   * Deliberately NOT carried by the other 11 entries. There the magnitude does most of the work
+   * already, and a verbatim snapshot of `real-world/sindresorhus-is`'s 3055 lines would be a
+   * churn engine that gets re-pinned reflexively — the exact failure mode this ledger exists to
+   * avoid.
+   */
+  output?: string[]
   causes: MismatchCause[]
 }
 
 export type KnownMismatches = Record<string, MismatchEntry>
+
+/**
+ * The failure message for ratchet direction 3, built where it can be unit-tested rather than
+ * inlined into the assertion.
+ *
+ * Two integers ("expected { hunks: 3, edits: 7 } to deeply equal { hunks: 2, edits: 4 }") told a
+ * maintainer to go find a regression and gave them nothing to find it with — no locations, no
+ * lines — so the cheap way out was to re-pin and move on. This carries the localized hunk listing,
+ * names the tool that prints the uncapped version, and, crucially, distinguishes the one case that
+ * is NOT a regression at all.
+ *
+ * That case: `edits` is canonical (a function of LCS length, identical under every optimal
+ * alignment) while `hunks` depends on which optimal alignment `diffHunks` walks, which its
+ * tie-break decides. So `edits` unchanged + `hunks` moved is the signature of an ALIGNER change,
+ * not a rendering change — flipping the tie-break to its mirror re-pins `real-world/mermaid` from
+ * 22 hunks to 12 with `edits` still 84, and without this clause the message would confidently
+ * accuse a maintainer of a regression that does not exist.
+ */
+export function shapeMismatchMessage(
+  name: string,
+  entry: Pick<MismatchEntry, 'diff' | 'causes'>,
+  measured: DiffShape,
+  hunks: readonly DiffHunk[],
+): string {
+  const alignerClause =
+    measured.edits === entry.diff.edits && measured.hunks !== entry.diff.hunks
+      ? 'BUT FIRST — `edits` is UNCHANGED and only `hunks` moved. That is the signature of an ' +
+        'ALIGNER change, not a rendering change: `edits` depends only on LCS length and is the ' +
+        'same under every optimal alignment, while `hunks` depends on WHICH optimal alignment ' +
+        "diffHunks walks, which its tie-break picks. Check corpus-harness.ts's diffHunks (and " +
+        'its tie-break comparison in particular) for an edit before you go hunting for a ' +
+        'rendering regression — if that is what moved, re-pinning is correct and the prose ' +
+        'below does not apply.\n'
+      : ''
+  return (
+    `"${name}" still mismatches its oracle fixture, but by a different amount than recorded.\n` +
+    `  recorded: ${JSON.stringify(entry.diff)}\n  measured: ${JSON.stringify(measured)}\n` +
+    `Being on the ledger excuses only the ${entry.causes.length} cause(s) it names ` +
+    `(${entry.causes.map((c) => c.category).join(', ')}) — it is NOT a blanket exemption for ` +
+    'this file.\n' +
+    alignerClause +
+    'The current diff, hunk by hunk (capped; run `npm run corpus:diff -- ' +
+    `${name}\` for the full listing and a copy-pasteable re-pin block):\n` +
+    `${formatDiffHunks(hunks)}\n` +
+    'Otherwise the overwhelmingly likely reading of a change here is that a NEW, unrelated ' +
+    'regression landed inside an already-failing file: find it above and fix it.\n' +
+    'Only once you have confirmed the change genuinely belongs to a cause already listed — or ' +
+    'you are adding a new, named, explained cause alongside it — should you re-pin `diff` in ' +
+    'test/known-mismatches.json. Re-pinning reflexively to get back to green throws away the ' +
+    'only protection these 15 files have.'
+  )
+}
 
 const MISMATCH_CATEGORIES: readonly MismatchCategory[] = ['readit-bug', 'deviation', 'normalizer-gap']
 
@@ -233,6 +441,16 @@ export interface MismatchValidationError {
  * non-empty explanation, and a non-empty source reference. A bare path with no explanation is not
  * acceptable, and neither is an entry with no magnitude — this is what keeps both true, so that
  * adding a file to the ledger cannot be done without also recording how badly it currently fails.
+ *
+ * KNOWN LIMIT of the `>= 1` floor: a file whose ONLY divergence from its oracle is invisible to
+ * `toDiffLines` (say, whitespace inside a `<pre>` that survives normalization but not the line
+ * split) would mismatch with a measured shape of `{ hunks: 0, edits: 0 }` and could therefore
+ * never be legally pinned here. No corpus file is in that state today — all 15 pins are >= 1 —
+ * and the floor is worth keeping, because relaxing it to allow a zero magnitude would also let a
+ * genuinely-matching file be pinned as debt, which is direction 2's whole job to prevent. If it
+ * ever happens, `corpus.test.ts` catches it by name with a dedicated message rather than letting
+ * this validator report a confusing shape error; the fix there is a content pin (`output`), not
+ * a zero magnitude.
  */
 export function validateKnownMismatches(known: KnownMismatches): MismatchValidationError[] {
   const errors: MismatchValidationError[] = []
@@ -256,6 +474,14 @@ export function validateKnownMismatches(known: KnownMismatches): MismatchValidat
           'must pin diff as { hunks, edits } with both integers >= 1 — a ledger entry describes a ' +
           'file that still mismatches, so a magnitude of zero is never correct',
       })
+    }
+    // `output` is optional (only the fully-blind entries carry one), but if it is there it has to
+    // be a real array of lines — a malformed one would otherwise fail later as a confusing
+    // deep-equal against the rendered output rather than as a ledger-shape error here.
+    if (entry.output !== undefined) {
+      if (!Array.isArray(entry.output) || entry.output.length === 0 || entry.output.some((l) => typeof l !== 'string')) {
+        errors.push({ name, message: 'output, when present, must be a non-empty array of strings' })
+      }
     }
     const causes = entry.causes
     if (!Array.isArray(causes) || causes.length === 0) {

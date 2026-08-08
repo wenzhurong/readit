@@ -5,11 +5,15 @@ import { describe, expect, it } from 'vitest'
 import {
   NON_SNAPSHOT_DIRS,
   compareToFixture,
+  diffHunks,
   diffShape,
   discoverCorpus,
   findOrphanWhitelistKeys,
+  formatDiffHunks,
   ratchetShouldPass,
   readCorpus,
+  shapeCarriesNoSignal,
+  shapeMismatchMessage,
   validateKnownMismatches,
   type MismatchEntry,
 } from './corpus-harness.js'
@@ -221,6 +225,230 @@ describe('diffShape (the magnitude the mismatch ledger pins)', () => {
     const knownBad = ['a', 'RECORDED-BUG', 'c']
     const withExtra = ['a', 'RECORDED-BUG', 'c', '<div class="spurious">']
     expect(diffShape(withExtra, expected)).not.toEqual(diffShape(knownBad, expected))
+  })
+})
+
+/**
+ * The LCS tie-break is load-bearing, and until this block nothing asserted it.
+ *
+ * `diffHunks` walks ONE optimal alignment backwards. When both backtrack directions are equally
+ * good its tie-break picks the one that consumes `expected`. That choice is invisible to `edits`
+ * — a function of LCS length, identical under every optimal alignment — but it decides `hunks`,
+ * and therefore decides what 15 ledger entries are pinned to.
+ *
+ * A reviewer flipped the comparison to its mirror and every test in this file still passed, while
+ * `real-world/mermaid` silently re-pinned from 22 hunks to 12 (`edits` unchanged at 84). A
+ * maintainer would then have been told by `corpus.test.ts` that a new regression had landed inside
+ * an already-failing file, which would have been false — nothing changed but the aligner.
+ *
+ * The two cases below were found by brute-forcing every pair of {a,b}-strings up to length 4
+ * against both aligners: 28 of those pairs discriminate, and these are the two smallest that do it
+ * in OPPOSITE directions. Pinning both matters — a single case could be satisfied by an aligner
+ * that just minimises (or maximises) hunks, which is not what the committed one does.
+ */
+describe('diffHunks: the LCS tie-break is pinned, not incidental', () => {
+  it('prefers consuming `expected` on a tie (mirror gives 3 hunks here, not 2)', () => {
+    expect(diffShape(['a', 'a', 'a', 'b'], ['b', 'a', 'b', 'a'])).toEqual({ hunks: 2, edits: 4 })
+  })
+
+  it('and that is not "whichever gives fewer hunks" (mirror gives 2 here, not 3)', () => {
+    expect(diffShape(['b', 'a', 'a'], ['a', 'b', 'a', 'b'])).toEqual({ hunks: 3, edits: 3 })
+  })
+
+  /**
+   * The invariant the ledger's failure message tells maintainers to reason with: on a tie-break
+   * change `edits` cannot move, so `edits` unchanged + `hunks` moved means the aligner, not the
+   * renderer. Asserted here as the property it is — `edits` is fully determined by LCS length —
+   * so that "suspect the aligner" stays true advice rather than a comment that rots.
+   */
+  it('edits is aligner-independent: it is |a| + |b| - 2 * LCS, whichever alignment is walked', () => {
+    for (const [a, b] of [
+      [['a', 'a', 'a', 'b'], ['b', 'a', 'b', 'a']],
+      [['b', 'a', 'a'], ['a', 'b', 'a', 'b']],
+    ] as const) {
+      const lcsLength = (x: readonly string[], y: readonly string[]): number => {
+        const t = Array.from({ length: x.length + 1 }, () => new Array<number>(y.length + 1).fill(0))
+        for (let i = 1; i <= x.length; i += 1) {
+          for (let j = 1; j <= y.length; j += 1) {
+            t[i]![j] = x[i - 1] === y[j - 1] ? t[i - 1]![j - 1]! + 1 : Math.max(t[i - 1]![j]!, t[i]![j - 1]!)
+          }
+        }
+        return t[x.length]![y.length]!
+      }
+      expect(diffShape(a, b).edits).toBe(a.length + b.length - 2 * lcsLength(a, b))
+    }
+  })
+})
+
+/**
+ * `diffHunks` is what turned ratchet direction 3 from two bare integers into an actionable
+ * failure. The pin can only ever say "the magnitude moved"; these locations and lines are what
+ * lets a maintainer decide whether that movement is a regression to fix or a recorded cause to
+ * re-pin — the judgement the whole ledger depends on them making correctly.
+ */
+describe('diffHunks (the locations behind the magnitude)', () => {
+  it('reports nothing for identical input', () => {
+    expect(diffHunks(['a', 'b'], ['a', 'b'])).toEqual([])
+  })
+
+  it('locates a single changed line on both sides, with its content', () => {
+    expect(diffHunks(['a', 'X', 'c'], ['a', 'b', 'c'])).toEqual([
+      { actualStart: 1, expectedStart: 1, removed: ['X'], added: ['b'] },
+    ])
+  })
+
+  it('keeps two separate changes separate, in document order', () => {
+    expect(diffHunks(['X', 'b', 'Y'], ['a', 'b', 'c'])).toEqual([
+      { actualStart: 0, expectedStart: 0, removed: ['X'], added: ['a'] },
+      { actualStart: 2, expectedStart: 2, removed: ['Y'], added: ['c'] },
+    ])
+  })
+
+  it('groups adjacent changed lines into one hunk', () => {
+    expect(diffHunks(['a', 'X', 'Y', 'd'], ['a', 'b', 'c', 'd'])).toEqual([
+      { actualStart: 1, expectedStart: 1, removed: ['X', 'Y'], added: ['b', 'c'] },
+    ])
+  })
+
+  it('records a pure insertion as added-only and a pure deletion as removed-only', () => {
+    expect(diffHunks(['a', 'c'], ['a', 'b', 'c'])).toEqual([
+      { actualStart: 1, expectedStart: 1, removed: [], added: ['b'] },
+    ])
+    expect(diffHunks(['a', 'b', 'c'], ['a', 'c'])).toEqual([
+      { actualStart: 1, expectedStart: 1, removed: ['b'], added: [] },
+    ])
+  })
+
+  /**
+   * The locations must survive index cascade too, or they would point a maintainer at the wrong
+   * line — the same failure mode that makes a positional differing-line count useless as a pin.
+   */
+  it('locates a late change by its real position, not one shifted by an earlier insertion', () => {
+    const expected = Array.from({ length: 500 }, (_, i) => `line ${i}`)
+    const actual = ['inserted at the top', ...expected]
+    actual[400] = 'REGRESSION'
+    const hunks = diffHunks(actual, expected)
+    expect(hunks).toHaveLength(2)
+    expect(hunks[0]).toEqual({ actualStart: 0, expectedStart: 0, removed: ['inserted at the top'], added: [] })
+    expect(hunks[1]!.removed).toEqual(['REGRESSION'])
+    expect(hunks[1]!.added).toEqual(['line 399'])
+    expect(hunks[1]!.actualStart).toBe(400)
+    expect(hunks[1]!.expectedStart).toBe(399)
+  })
+
+  it('agrees with diffShape by construction — same alignment, so they cannot disagree', () => {
+    const a = ['a', 'X', 'c', 'd', 'Y', 'f']
+    const b = ['a', 'b', 'c', 'd', 'e', 'f']
+    const hunks = diffHunks(a, b)
+    expect(diffShape(a, b)).toEqual({
+      hunks: hunks.length,
+      edits: hunks.reduce((s, h) => s + h.removed.length + h.added.length, 0),
+    })
+  })
+})
+
+describe('formatDiffHunks (what the maintainer actually reads)', () => {
+  it('shows each hunk with a 1-based location on both sides and its -/+ lines', () => {
+    const text = formatDiffHunks(diffHunks(['a', 'X', 'c'], ['a', 'b', 'c']))
+    expect(text).toContain('hunk 1/1 — actual line 2, oracle line 2 (-1 +1)')
+    expect(text).toContain('    - X')
+    expect(text).toContain('    + b')
+  })
+
+  it('caps long hunks and says how much it withheld, rather than dumping 305 edits', () => {
+    const a = Array.from({ length: 40 }, (_, i) => `A${i}`)
+    const b = Array.from({ length: 40 }, (_, i) => `B${i}`)
+    const text = formatDiffHunks(diffHunks(a, b), { maxLinesPerHunk: 3 })
+    expect(text).toContain('    - A0')
+    expect(text).not.toContain('    - A39')
+    expect(text).toContain('more line(s) in this hunk')
+  })
+
+  it('caps the number of hunks too', () => {
+    const a = Array.from({ length: 20 }, (_, i) => (i % 2 === 0 ? `same${i}` : `A${i}`))
+    const b = Array.from({ length: 20 }, (_, i) => (i % 2 === 0 ? `same${i}` : `B${i}`))
+    const text = formatDiffHunks(diffHunks(a, b), { maxHunks: 2 })
+    expect(text).toContain('hunk 1/10')
+    expect(text).toContain('hunk 2/10')
+    expect(text).not.toContain('hunk 3/10')
+    expect(text).toContain('more hunk(s)')
+  })
+
+  it('says so plainly when there is nothing to show', () => {
+    expect(formatDiffHunks([])).toContain('no line-level difference')
+  })
+})
+
+/**
+ * Direction 3b's trigger. `{ hunks, edits }` only says something about a file's CONTENT while
+ * some of that file still matches its oracle; when nothing matches, `hunks` is stuck at 1 and
+ * `edits` is just the two line counts, so rewriting a line moves neither number. Four ledger
+ * entries are in exactly that state, and this predicate is what makes `corpus.test.ts` demand a
+ * verbatim `output` pin from them instead of trusting a magnitude that cannot see anything.
+ */
+describe('shapeCarriesNoSignal (when the magnitude pin degenerates)', () => {
+  it('is true when no line matches: hunks is stuck at 1 and edits is just the line counts', () => {
+    const a = ['<div class="highlight">', '<pre>', 'src', '</pre>', '</div>']
+    const b = ['<section data-type="mermaid">', 'src-oracle', '</section>']
+    const shape = diffShape(a, b)
+    expect(shape).toEqual({ hunks: 1, edits: 8 })
+    expect(shapeCarriesNoSignal(shape, a, b)).toBe(true)
+  })
+
+  it('demonstrates the blindness it detects: rewriting every line moves neither number', () => {
+    const a = ['<div class="highlight">', '<pre>', 'src', '</pre>', '</div>']
+    const b = ['<section data-type="mermaid">', 'src-oracle', '</section>']
+    const rewritten = ['<div class="WRONG">', '<pre id="spurious">', 'src', '</pre>', '</div>']
+    expect(diffShape(rewritten, b)).toEqual(diffShape(a, b))
+  })
+
+  it('is false as soon as a single line matches, because the alignment has something to anchor on', () => {
+    const a = ['<div class="highlight">', 'shared', '</div>']
+    const b = ['<section>', 'shared', '</section>']
+    expect(shapeCarriesNoSignal(diffShape(a, b), a, b)).toBe(false)
+  })
+
+  it('is false for a file that matches outright — there is no pin to degenerate', () => {
+    const a = ['x', 'y']
+    expect(shapeCarriesNoSignal(diffShape(a, a), a, a)).toBe(false)
+  })
+})
+
+/**
+ * The message is the deliverable of ratchet direction 3: the pin fires, and what the maintainer
+ * reads next decides whether they diagnose the change or re-pin it reflexively. It is built in
+ * the harness rather than inlined into the assertion so its two jobs can be asserted directly.
+ */
+describe('shapeMismatchMessage', () => {
+  const entry = {
+    diff: { hunks: 2, edits: 4 },
+    causes: [{ category: 'readit-bug' as const, explanation: 'x', source: 'y' }],
+  }
+
+  it('carries the recorded and measured shapes, the hunks, and the tool for the full listing', () => {
+    const hunks = diffHunks(['a', 'X', 'c'], ['a', 'b', 'c'])
+    const msg = shapeMismatchMessage('gfm/footnotes', entry, { hunks: 1, edits: 2 }, hunks)
+    expect(msg).toContain('recorded: {"hunks":2,"edits":4}')
+    expect(msg).toContain('measured: {"hunks":1,"edits":2}')
+    expect(msg).toContain('    - X')
+    expect(msg).toContain('npm run corpus:diff -- gfm/footnotes')
+    expect(msg).toContain('NEW, unrelated regression')
+  })
+
+  /**
+   * The clause that stops the message from confidently accusing a maintainer of a regression
+   * that does not exist. `edits` unchanged while `hunks` moved cannot be a rendering change.
+   */
+  it('names the aligner when edits held still and only hunks moved', () => {
+    const msg = shapeMismatchMessage('real-world/mermaid', entry, { hunks: 5, edits: 4 }, [])
+    expect(msg).toContain('`edits` is UNCHANGED and only `hunks` moved')
+    expect(msg).toContain('ALIGNER change')
+    expect(msg).toContain('tie-break')
+  })
+
+  it('does not raise the aligner when edits moved too — that really is a content change', () => {
+    const msg = shapeMismatchMessage('real-world/mermaid', entry, { hunks: 5, edits: 9 }, [])
+    expect(msg).not.toContain('ALIGNER change')
   })
 })
 

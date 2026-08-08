@@ -7,6 +7,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit && npm run typecheck --workspaces --if-present",
+    "corpus:diff": "tsx packages/core/scripts/corpus-diff.ts",
     "oracle:refresh": "tsx packages/core/scripts/oracle-refresh.ts",
     "oracle:manifest": "tsx packages/core/scripts/build-oracle-manifest.ts",
     "gen:svg-stylesheet": "vite-node tools/gen-svg-stylesheet.ts",
