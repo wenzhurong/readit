@@ -14,7 +14,9 @@
  *  1. `net.Socket.prototype.connect` — every TCP connect, and so also `http`,
  *     `https`, `tls` and `http2`, which all build on it. Pinned against IP
  *     literals, which skip `dns.lookup` and leave this as the only guard.
- *  2. `dns.lookup` — name resolution reached directly, without a connect.
+ *  2. Name resolution, on all four of the surfaces `node:dns` exposes it
+ *     through — see the block comment above the sweep for why one patch on
+ *     `dns.lookup` covered exactly one of them.
  *  3. `globalThis.fetch` — undici has its own connection path; patching it here
  *     also lets the violation name the full URL rather than just the host.
  *  4. `dgram.Socket.prototype.send` / `.connect` — UDP.
@@ -40,17 +42,27 @@
  * as the thing that makes "the suite is offline" true. This file exists to make
  * a violation *legible* on a developer laptop, where there is no namespace.
  *
- * UDP was the one gap in the enumeration above worth closing in-process rather
- * than leaving to the namespace: `dgram` did already fail, but only incidentally
- * and badly. Node routes a dgram destination through `lookup` even for an IP
- * literal (`net` short-circuits those), so layer 2 fired from inside Node's own
- * internal callback — surfacing as an unhandled exception that crashes the test
- * file while the caller's callback never runs. Patching `send`/`connect`
- * directly turns that into the same synchronous, named error every other layer
- * raises. See test/offline-gate.test.ts.
+ * Two gaps in the enumeration above were worth closing in-process rather than
+ * leaving to the namespace, because both were patchable and in-realm — neither
+ * is one of the five escapes just listed:
+ *
+ *  - **UDP.** `dgram` did already fail, but only incidentally and badly. Node
+ *    routes a dgram destination through `lookup` even for an IP literal (`net`
+ *    short-circuits those), so layer 2 fired from inside Node's own internal
+ *    callback — surfacing as an unhandled exception that crashes the test file
+ *    while the caller's callback never runs. Patching `send`/`connect` directly
+ *    turns that into the same synchronous, named error every other layer raises.
+ *  - **Name resolution other than `dns.lookup`.** Layer 2 used to be one patch
+ *    and claimed the whole layer; `dns.promises.lookup` and the entire
+ *    `dns.resolve*` / `dns.Resolver` family went straight past it. See the
+ *    sweep below for the measurements.
+ *
+ * See test/offline-gate.test.ts, which re-derives layer 2's coverage from the
+ * live `node:dns` modules rather than trusting this comment.
  */
 import dgram from 'node:dgram'
 import dns from 'node:dns'
+import dnsPromises from 'node:dns/promises'
 import net from 'node:net'
 
 export class OfflineViolationError extends Error {
@@ -143,10 +155,80 @@ dgram.Socket.prototype.connect = function patchedDgramConnect(this: dgram.Socket
   return (realDgramConnect as (...a: unknown[]) => void).apply(this, args)
 }
 
-const realLookup = dns.lookup
-;(dns as { lookup: unknown }).lookup = function patchedLookup(hostname: string, ...rest: unknown[]) {
-  if (!isLocal(hostname)) throw new OfflineViolationError('dns.lookup', hostname)
-  return (realLookup as (...a: unknown[]) => unknown)(hostname, ...rest)
+/**
+ * Layer 2 — name resolution, all of it.
+ *
+ * A single patch on `dns.lookup` was documented as "name resolution reached directly, without a
+ * connect". It was not that. `node:dns` reaches the resolver through four independent surfaces and
+ * only one of them is `dns.lookup`; measured on Node 22 with the previous guard loaded:
+ *
+ *   - `dns.lookup` / `dns.lookupService`  — getaddrinfo(3). The only surface that was patched.
+ *   - `dns.promises.*`                    — a SEPARATE binding. `dns.promises.lookup !== dns.lookup`
+ *                                           and it does not call it, so the tripwire never fired.
+ *   - `dns.resolve*` / `dns.reverse`      — c-ares. Bound to a default Resolver at module load
+ *                                           (`dns.resolve4.name` is `'bound queryA'`), so patching
+ *                                           `Resolver.prototype` does not reach them either.
+ *   - `new dns.Resolver()` / `new dns.promises.Resolver()` — two DISTINCT classes
+ *                                           (`dns.Resolver !== dns.promises.Resolver`); their
+ *                                           instances do dispatch through their prototypes.
+ *
+ * None of that was covered by the five disclosed escapes above — "native addons" means an N-API
+ * module, not `node:dns`'s own resolver — so it was a hole in the list, not an admission in it.
+ * All four surfaces are swept below. The impact was bounded (a leaked DNS query; any subsequent
+ * connect is still caught by layer 1) but it was real and cheap to close.
+ *
+ * Selection is by NAME rather than a hand-kept list, so a resolver a future Node adds is covered
+ * on arrival — `resolveTlsa` reached `node:dns` exactly that way (`@since v23.9.0, v22.15.0`, per
+ * the bundled `@types/node/dns.d.ts`), and a hand-kept list written before it would have missed it.
+ *
+ * Two policies, because the two paths differ in kind:
+ *
+ *  - getaddrinfo (`lookup`, `lookupService`) keeps the loopback exemption. `net.connect('localhost')`
+ *    resolves through it and local fixture servers depend on that staying open.
+ *  - c-ares (`resolve*`, `reverse`) is refused for every name, loopback included. A c-ares query is
+ *    a packet to a configured nameserver even when the name is `localhost`, so there is no name for
+ *    which it is offline. Nothing in this repo calls it.
+ *
+ * ESM named imports follow the patch: `import { lookup } from 'node:dns/promises'` is a live
+ * binding onto this same object (verified — the named import returns the patched function).
+ *
+ * The throw is synchronous even on the promise-shaped APIs, matching every other layer here. That
+ * is within Node's own contract for these functions (they throw synchronously on a bad argument
+ * too) and it is louder than a rejection nobody attached a handler to.
+ */
+const GETADDRINFO_APIS = new Set(['lookup', 'lookupService'])
+
+/** True for every `node:dns` export that can put a name query on the wire. */
+function isDnsEgressApi(name: string): boolean {
+  return GETADDRINFO_APIS.has(name) || name === 'reverse' || name.startsWith('resolve')
+}
+
+function guardDnsApi(owner: Record<string, unknown>, key: string, label: string): void {
+  const real = owner[key]
+  if (typeof real !== 'function') return
+  const viaCares = !GETADDRINFO_APIS.has(key)
+  owner[key] = function patchedDnsApi(this: unknown, ...args: unknown[]) {
+    // Every one of these APIs takes the name (or, for `reverse`/`lookupService`, the address) as
+    // its first argument. A c-ares call is refused whatever that argument is; a getaddrinfo call
+    // whose first argument is not a string is malformed rather than remote, so it falls through
+    // to Node's own argument validation instead of being reported as a network violation.
+    const target = typeof args[0] === 'string' ? args[0] : ''
+    if (viaCares || !isLocal(target)) {
+      throw new OfflineViolationError(label, target === '' ? '(unnamed target)' : target)
+    }
+    return (real as (...a: unknown[]) => unknown).apply(this, args)
+  }
+}
+
+for (const [owner, label] of [
+  [dns as unknown as Record<string, unknown>, 'dns'],
+  [dnsPromises as unknown as Record<string, unknown>, 'dns.promises'],
+  [dns.Resolver.prototype as unknown as Record<string, unknown>, 'dns.Resolver'],
+  [dnsPromises.Resolver.prototype as unknown as Record<string, unknown>, 'dns.promises.Resolver'],
+] as const) {
+  for (const key of Object.getOwnPropertyNames(owner)) {
+    if (isDnsEgressApi(key)) guardDnsApi(owner, key, `${label}.${key}`)
+  }
 }
 
 const realFetch = globalThis.fetch

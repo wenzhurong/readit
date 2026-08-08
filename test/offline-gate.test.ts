@@ -1,5 +1,6 @@
 import dgram from 'node:dgram'
 import dns from 'node:dns'
+import dnsp from 'node:dns/promises'
 import http from 'node:http'
 import https from 'node:https'
 import net from 'node:net'
@@ -60,6 +61,25 @@ describe('offline gate', () => {
     const wf = readFileSync(new URL('../.github/workflows/offline.yml', import.meta.url), 'utf8')
     expect(wf).toContain('sudo unshare --net')
     expect(wf).toContain('Verify the network namespace really has no egress')
+  })
+
+  /**
+   * `no-network.ts` names this workflow as "the thing that makes 'the suite is offline' true", so
+   * it has to actually block a merge. `continue-on-error: true` leaves the job present, named and
+   * green in the checks list while its failures stop gating anything — and the assertion above,
+   * which only reads for `unshare --net`, would still pass over a job that had been quietly made
+   * advisory. Same guard `ci-wiring.test.ts` puts on `test.yml`, for the same reason; asserted as
+   * a bare substring because it is equally fatal on a job and on a single step.
+   */
+  it('has no continue-on-error, so the no-egress job still gates a merge', () => {
+    const wf = readFileSync(new URL('../.github/workflows/offline.yml', import.meta.url), 'utf8')
+    expect(
+      wf,
+      'continue-on-error makes the no-egress job advisory: still listed, still green, no longer ' +
+        'blocking. This is the job the in-process gate defers to for everything it cannot see — ' +
+        'if it should not gate a merge, delete it and say so in no-network.ts, do not leave a ' +
+        'check that looks like a backstop and is not.',
+    ).not.toContain('continue-on-error')
   })
 
   it('rejects fetch to the CDN that starry-night reaches for', async () => {
@@ -134,6 +154,183 @@ describe('offline gate', () => {
 
   it('leaves a dns.lookup of localhost alone', () => {
     expect(() => dns.lookup('localhost', () => {})).not.toThrow()
+  })
+
+  /**
+   * Layer 2 used to be exactly one patch — `dns.lookup` — while the file's enumeration described
+   * it as "name resolution reached directly, without a connect". Measured with that guard loaded:
+   *
+   *     dns.promises.lookup === dns.lookup          false   (and it does not call it)
+   *     dns.resolve4                                 bound queryA  (c-ares, never via dns.lookup)
+   *     dns.Resolver === dns.promises.Resolver       false
+   *
+   * so `dns.promises.*` and the whole `dns.resolve*` / `dns.Resolver` family were unpatched,
+   * in-realm, JS-reachable egress that none of the five disclosed escapes covered. The tests
+   * below re-derive the coverage from the live modules instead of restating it in prose, because
+   * a prose enumeration is exactly what was wrong.
+   *
+   * Probes are RFC 2606 `.invalid` for names and RFC 5737 TEST-NET-1 for addresses, so a broken
+   * guard leaks a query for a name guaranteed not to exist rather than reaching anything real.
+   */
+  describe('layer 2: name resolution, on every surface node:dns exposes', () => {
+    const surfaces: [string, Record<string, unknown>, unknown][] = [
+      ['dns', dns as unknown as Record<string, unknown>, dns],
+      ['dns.promises', dnsp as unknown as Record<string, unknown>, dnsp],
+      ['dns.Resolver', dns.Resolver.prototype as unknown as Record<string, unknown>, new dns.Resolver()],
+      [
+        'dns.promises.Resolver',
+        dnsp.Resolver.prototype as unknown as Record<string, unknown>,
+        new dnsp.Resolver(),
+      ],
+    ]
+
+    /**
+     * Independently of `no-network.ts`'s own predicate: any own function property whose name is
+     * `lookup`, `lookupService`, `reverse`, or begins with `resolve` puts a name query on the wire.
+     */
+    const isEgressName = (n: string): boolean =>
+      n === 'lookup' || n === 'lookupService' || n === 'reverse' || n.startsWith('resolve')
+
+    const egressNames = (surface: Record<string, unknown>): string[] =>
+      Object.getOwnPropertyNames(surface)
+        .filter((n) => isEgressName(n) && typeof surface[n] === 'function')
+        .sort()
+
+    /** Call one dns entry point with a probe argument and report whether the gate stopped it. */
+    const probe = (surface: Record<string, unknown>, self: unknown, key: string): Error | 'no-error' => {
+      const args: unknown[] =
+        key === 'lookupService'
+          ? [TEST_NET, 80, () => {}]
+          : key === 'reverse'
+            ? [TEST_NET, () => {}]
+            : ['oracle.invalid', () => {}]
+      try {
+        const returned = (surface[key] as (...a: unknown[]) => unknown).apply(self, args)
+        // Only reachable with a broken guard, and only then does a promise exist to reject; swallow
+        // it so the diagnosis is this test's failure list rather than an unhandled rejection.
+        if (typeof (returned as PromiseLike<unknown> | undefined)?.then === 'function') {
+          void (returned as Promise<unknown>).catch(() => undefined)
+        }
+        return 'no-error'
+      } catch (err) {
+        return err as Error
+      }
+    }
+
+    it('stops every one of them, and there are far more than the one that used to be patched', () => {
+      const unguarded: string[] = []
+      const checked: string[] = []
+      for (const [label, surface, self] of surfaces) {
+        for (const key of egressNames(surface)) {
+          checked.push(`${label}.${key}`)
+          if (!(probe(surface, self, key) instanceof OfflineViolationError)) unguarded.push(`${label}.${key}`)
+        }
+      }
+      expect(unguarded, 'these node:dns entry points reached the resolver').toEqual([])
+      // The four surfaces contributed 17 + 17 + 15 + 15 = 64 entry points on the Node 22.23.1 this
+      // was written against. Asserted as a floor, not an equality: a future Node adding a record
+      // type must not fail the suite, but the sweep silently degenerating to a handful must.
+      expect(checked.length).toBeGreaterThanOrEqual(60)
+      // The four specific holes the finding named, by name.
+      expect(checked).toContain('dns.promises.lookup')
+      expect(checked).toContain('dns.resolve4')
+      expect(checked).toContain('dns.Resolver.resolve4')
+      expect(checked).toContain('dns.promises.Resolver.resolveTxt')
+    })
+
+    /**
+     * Why one patch could not have covered the others — the measurements, asserted rather than
+     * described, so "patching `dns.lookup` is enough" cannot come back as a plausible-sounding
+     * simplification.
+     */
+    it('the four surfaces really are distinct bindings', () => {
+      expect((dnsp as { lookup: unknown }).lookup).not.toBe((dns as { lookup: unknown }).lookup)
+      expect(dns.Resolver).not.toBe(dnsp.Resolver)
+      // `dns.resolve4` is bound to a default Resolver at module load, so it is not the prototype
+      // method and patching the prototype alone would leave it wide open.
+      expect((dns as unknown as Record<string, unknown>).resolve4).not.toBe(
+        (dns.Resolver.prototype as unknown as Record<string, unknown>).resolve4,
+      )
+    })
+
+    /**
+     * The inventory check, and the reason the sweep can select by name at all. Selecting by name
+     * means an egress API added under a name outside `lookup|lookupService|reverse|resolve*` would
+     * be missed silently — so this enumerates every OTHER function reachable on the two module
+     * objects and along both `Resolver` prototype chains, and pins them against the set that is
+     * deliberately not guarded. Every one of those is a local setting: `cancel` aborts pending
+     * queries, `get/setServers` and `setLocalAddress` configure the resolver, `get/setDefault
+     * ResultOrder` sorts getaddrinfo results. A new name appearing here is a decision someone has
+     * to make, not a silent pass.
+     *
+     * The chain matters: the query methods live on `Resolver.prototype` itself, while `cancel` and
+     * the setters live one level up on a shared base — so a sweep that only looked at the class's
+     * own prototype would not see a future addition to that base.
+     */
+    it('everything else reachable on the dns surfaces is a local setting, not egress', () => {
+      const notGuarded = new Set([
+        'constructor',
+        'Resolver',
+        'cancel',
+        'getServers',
+        'setServers',
+        'setLocalAddress',
+        'getDefaultResultOrder',
+        'setDefaultResultOrder',
+      ])
+      const chain = (start: object): object[] => {
+        const out: object[] = []
+        for (let p: object | null = start; p !== null && p !== Object.prototype; p = Object.getPrototypeOf(p)) out.push(p)
+        return out
+      }
+      const inventory: [string, object][] = [
+        ['dns', dns],
+        ['dns.promises', dnsp],
+        ...chain(dns.Resolver.prototype).map((p, i): [string, object] => [`dns.Resolver[proto ${i}]`, p]),
+        ...chain(dnsp.Resolver.prototype).map((p, i): [string, object] => [`dns.promises.Resolver[proto ${i}]`, p]),
+      ]
+      for (const [label, surface] of inventory) {
+        const bag = surface as Record<string, unknown>
+        const unexpected = Object.getOwnPropertyNames(bag)
+          .filter((n) => typeof bag[n] === 'function' && !isEgressName(n) && !notGuarded.has(n))
+          .sort()
+        expect(
+          unexpected,
+          `${label}: an unclassified function appeared. If it can reach a nameserver, add it to ` +
+            "no-network.ts's sweep; if it cannot, add it to this test's notGuarded set and say why.",
+        ).toEqual([])
+      }
+      // The chains are two levels deep today; if that ever collapses to one, the base-class
+      // methods have moved and the walk above is no longer covering what it claims to.
+      expect(chain(dns.Resolver.prototype)).toHaveLength(2)
+      expect(chain(dnsp.Resolver.prototype)).toHaveLength(2)
+    })
+
+    it('names the offender and the API, on the promise surface too', () => {
+      expect(() => dnsp.lookup('oracle.invalid')).toThrow(
+        /dns\.promises\.lookup tried to reach oracle\.invalid/,
+      )
+      expect(() => dns.resolve4('oracle.invalid', () => {})).toThrow(
+        /dns\.resolve4 tried to reach oracle\.invalid/,
+      )
+      expect(() => dns.reverse(TEST_NET, () => {})).toThrow(/dns\.reverse tried to reach 192\.0\.2\.1/)
+      expect(() => dns.lookupService(TEST_NET, 80, () => {})).toThrow(
+        /dns\.lookupService tried to reach 192\.0\.2\.1/,
+      )
+    })
+
+    /**
+     * c-ares is refused for every name, loopback included: unlike getaddrinfo it does not read
+     * /etc/hosts, it sends a packet to a configured nameserver, so there is no name for which
+     * `resolve4('localhost')` is an offline operation. getaddrinfo keeps the loopback exemption
+     * because `net.connect('localhost')` depends on it.
+     */
+    it('refuses c-ares even for localhost, while getaddrinfo keeps its loopback exemption', () => {
+      expect(() => dns.resolve4('localhost', () => {})).toThrow(OfflineViolationError)
+      expect(() => new dns.Resolver().resolve4('localhost', () => {})).toThrow(OfflineViolationError)
+      expect(() => dns.lookup('localhost', () => {})).not.toThrow()
+      expect(() => void dnsp.lookup('localhost').catch(() => undefined)).not.toThrow()
+    })
   })
 
   /**
