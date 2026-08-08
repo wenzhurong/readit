@@ -217,10 +217,15 @@ readit/
 | `applyAlerts` | SHAPE | 规格里没有 alerts |
 | `applyFrontmatter` | SHAPE | |
 | `applyEmoji` | SHAPE | |
-| `applyCodeBlock` | SHAPE | |
+| `applyCodeBlock` | SHAPE（数组外） | 带 `opts.highlighter` 第二参，不匹配 `Rule = (md) => void`，由 `createEngine` 在 SHAPE 循环之后单独调用 |
 | `applyMathInline` | SHAPE | 规格里 `$` 是普通字符 |
-| `applyRawHtmlPolicy` | SHAPE | 内部组合 clobber + sanitize；`user-content-` 前缀会破坏带 `id` 的规格用例 |
+| `applyMathBlock` | SHAPE | ```` ```math ```` 围栏；规格里它就是普通 fenced code。**不装 fence 渲染器**——`applyCodeBlock` 在 SHAPE 循环之后注册，会覆盖任何 SHAPE 槽里装的 fence 渲染器，所以它改在 core rule 里把 token 类型换成 `math_block` |
+| `applyDecorate` | SHAPE | `<img style="max-width:100%">`、外链 `rel="nofollow"`、裸图的 `<a target="_blank">` 全是 GitHub 外壳。⚠️ 必须排在 `applyAutolink`（SEMANTIC）之后，见 C2 耦合 #5 |
+| `applyRawHtmlPolicy` | SHAPE（数组外） | 带 `opts.allowDangerousHtml` 第二参，同样不匹配 `Rule`；内部组合 clobber + sanitize，`user-content-` 前缀会破坏带 `id` 的规格用例 |
+| `applyRawShape` | **两个数组都不进** | 签名是匹配的，但位置承重：它把带 class 的标记写进 html_block/html_inline 的 token.content（C3(a) 平时禁止的事），靠的是「卫生化器已经跑完」。core rule 按 push 顺序执行，数组里每一条都跑在 `readit_sanitize` / `readit_clobber` **之前**，所以只能由 `createEngine` 在 `applyRawHtmlPolicy` **之后**单独调用。进数组会静默灭掉它的五项装饰。见 C2 耦合 #4 |
 | `applySourceLine` | SHAPE | `data-line` 是 readit 自有产物 |
+
+共 19 条：4 条 SEMANTIC + 12 条 SHAPE 数组成员 + 3 条数组外由 `createEngine` 直接调用（`applyCodeBlock`、`applyRawHtmlPolicy`、`applyRawShape`）。这张表不再靠手工维护对齐——`test/integration.test.ts` 的「rule registry」套件拿源码里导出的 `applyXxx` 与两个数组加这三条做集合比对，漏一条就红。
 
 **⚠️ 对 Task 7 正文的修正：** G2 起草时不知道槽位的存在，把两件事写进了同一个 `applyTable`。不拆的话 GFM 表格那 8 个例子会因为多出的外壳而全部失败，且没有干净的白名单理由（外壳不是"任何 JS 解析器都不可能匹配"的那一类）。
 

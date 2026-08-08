@@ -16,7 +16,11 @@ import { DEFAULT_OPTIONS } from '../src/types.js'
 
 const SRC = readFileSync(join(import.meta.dirname, 'integration/kitchen-sink.md'), 'utf8')
 
-describe('all 17 rules in one engine', () => {
+// 19, not the 17 this used to say: 4 SEMANTIC + 12 SHAPE + the 3 `createEngine`
+// calls outside the arrays. The number is no longer maintained by hand — the
+// "rule registry" suite at the bottom of this file asserts it against the
+// source, so a stale count here is now a test failure there.
+describe('all 19 rules in one engine', () => {
   const html = render(SRC)
 
   it('frontmatter becomes a table, not an hr', () => {
