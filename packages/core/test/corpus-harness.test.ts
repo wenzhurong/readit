@@ -5,11 +5,13 @@ import { describe, expect, it } from 'vitest'
 import {
   NON_SNAPSHOT_DIRS,
   compareToFixture,
+  diffShape,
   discoverCorpus,
   findOrphanWhitelistKeys,
   ratchetShouldPass,
   readCorpus,
   validateKnownMismatches,
+  type MismatchEntry,
 } from './corpus-harness.js'
 import { discoverKarlcow, readKarlcow } from './corpus-adversarial.js'
 import { PATHOLOGICAL_CASES } from './corpus/adversarial/pathological.js'
@@ -17,9 +19,10 @@ import { PATHOLOGICAL_CASES } from './corpus/adversarial/pathological.js'
 describe('corpus inventory', () => {
   const names = discoverCorpus()
 
-  it('sits in the 45-60 file band mandated by SPEC 13.3', () => {
-    expect(names.length).toBeGreaterThanOrEqual(45)
-    expect(names.length).toBeLessThanOrEqual(60)
+  // Exact, not the SPEC 13.3 band — see the matching assertion in corpus.test.ts for why a band
+  // lets the corpus silently shrink underneath the fidelity number.
+  it('holds exactly the 60 committed files (SPEC 13.3 mandates 45-60)', () => {
+    expect(names.length).toBe(60)
   })
 
   it('covers the four snapshotted categories and excludes adversarial', () => {
@@ -141,10 +144,95 @@ describe('ratchetShouldPass (the two-way corpus-mismatch ratchet)', () => {
   })
 })
 
+/**
+ * The third ratchet direction (branch review, Critical 1). "Still unequal" alone made all 15
+ * ledger files exempt from every kind of regression detection: a new, unrelated bug could land
+ * inside one of them and the suite stayed green. `diffShape` is the magnitude the ledger pins so
+ * the assertion can be "still failing, AND still failing exactly this much".
+ *
+ * The property that matters is the last test here: a second, unrelated change must move the shape.
+ * Everything above it pins the behaviour that makes that property trustworthy — in particular that
+ * the measure is immune to index cascade, which is exactly what makes a naive
+ * compare-line-i-to-line-i count useless for this job.
+ */
+describe('diffShape (the magnitude the mismatch ledger pins)', () => {
+  it('reports nothing for identical input', () => {
+    expect(diffShape(['a', 'b', 'c'], ['a', 'b', 'c'])).toEqual({ hunks: 0, edits: 0 })
+  })
+
+  it('counts a single changed line as one hunk of two edits (one delete, one insert)', () => {
+    expect(diffShape(['a', 'X', 'c'], ['a', 'b', 'c'])).toEqual({ hunks: 1, edits: 2 })
+  })
+
+  it('counts two changes in separate places as two hunks', () => {
+    expect(diffShape(['X', 'b', 'Y'], ['a', 'b', 'c'])).toEqual({ hunks: 2, edits: 4 })
+  })
+
+  it('counts two adjacent changed lines as ONE hunk, not two', () => {
+    expect(diffShape(['a', 'X', 'Y', 'd'], ['a', 'b', 'c', 'd'])).toEqual({ hunks: 1, edits: 4 })
+  })
+
+  it('handles a pure insertion and a pure deletion', () => {
+    expect(diffShape(['a', 'c'], ['a', 'b', 'c'])).toEqual({ hunks: 1, edits: 1 })
+    expect(diffShape(['a', 'b', 'c'], ['a', 'c'])).toEqual({ hunks: 1, edits: 1 })
+  })
+
+  it('handles one side being empty', () => {
+    expect(diffShape([], ['a', 'b'])).toEqual({ hunks: 1, edits: 2 })
+    expect(diffShape(['a', 'b'], [])).toEqual({ hunks: 1, edits: 2 })
+    expect(diffShape([], [])).toEqual({ hunks: 0, edits: 0 })
+  })
+
+  /**
+   * The whole reason the pin is a shape and not a differing-line count. Inserting one line near
+   * the top shifts every later index, so a naive positional compare calls this "1001 differing
+   * lines" — a number that is mostly noise, changes completely on any unrelated edit, and would
+   * make the pin churn-prone enough that people would update it reflexively. The real answer is
+   * one hunk of one edit.
+   */
+  it('is immune to index cascade: one early insertion is one hunk, not a thousand differing lines', () => {
+    const expected = Array.from({ length: 1000 }, (_, i) => `line ${i}`)
+    const actual = ['inserted at the top', ...expected]
+    expect(diffShape(actual, expected)).toEqual({ hunks: 1, edits: 1 })
+
+    // The naive measure this replaces, for contrast.
+    const positional = expected.filter((line, i) => actual[i] !== line).length
+    expect(positional).toBe(1000)
+  })
+
+  /**
+   * The failure the ledger actually needs to catch, stated directly: a file that is already
+   * failing for a recorded reason picks up a SECOND, unrelated regression somewhere else. The
+   * shape must move, or the ledger entry is a blanket exemption.
+   */
+  it('moves when an already-failing file picks up a second, unrelated regression', () => {
+    const expected = ['a', 'b', 'c', 'd', 'e']
+    const knownBad = ['a', 'RECORDED-BUG', 'c', 'd', 'e']
+    const pinned = diffShape(knownBad, expected)
+    expect(pinned).toEqual({ hunks: 1, edits: 2 })
+
+    const alsoNewBug = ['a', 'RECORDED-BUG', 'c', 'NEW-UNRELATED-BUG', 'e']
+    expect(diffShape(alsoNewBug, expected)).not.toEqual(pinned)
+    expect(diffShape(alsoNewBug, expected)).toEqual({ hunks: 2, edits: 4 })
+  })
+
+  it('moves when a new regression only ADDS a line to an already-failing file', () => {
+    const expected = ['a', 'b', 'c']
+    const knownBad = ['a', 'RECORDED-BUG', 'c']
+    const withExtra = ['a', 'RECORDED-BUG', 'c', '<div class="spurious">']
+    expect(diffShape(withExtra, expected)).not.toEqual(diffShape(knownBad, expected))
+  })
+})
+
+/** A minimal well-formed ledger entry, for the validator/orphan tests below. */
+function entry(causes: MismatchEntry['causes'], diff = { hunks: 1, edits: 2 }): MismatchEntry {
+  return { diff, causes }
+}
+
 describe('findOrphanWhitelistKeys', () => {
   it('flags a whitelist key that names no real corpus file', () => {
     const orphans = findOrphanWhitelistKeys(
-      { 'gfm/does-not-exist': [{ category: 'readit-bug', explanation: 'x', source: 'y' }] },
+      { 'gfm/does-not-exist': entry([{ category: 'readit-bug', explanation: 'x', source: 'y' }]) },
       ['gfm/real-file'],
     )
     expect(orphans).toEqual(['gfm/does-not-exist'])
@@ -152,7 +240,7 @@ describe('findOrphanWhitelistKeys', () => {
 
   it('reports no orphans when every key names a real corpus file', () => {
     const orphans = findOrphanWhitelistKeys(
-      { 'gfm/real-file': [{ category: 'readit-bug', explanation: 'x', source: 'y' }] },
+      { 'gfm/real-file': entry([{ category: 'readit-bug', explanation: 'x', source: 'y' }]) },
       ['gfm/real-file', 'gfm/other-file'],
     )
     expect(orphans).toEqual([])
@@ -162,22 +250,22 @@ describe('findOrphanWhitelistKeys', () => {
 describe('validateKnownMismatches', () => {
   it('accepts a well-formed entry with no errors', () => {
     const errors = validateKnownMismatches({
-      'gfm/emoji': [
+      'gfm/emoji': entry([
         { category: 'readit-bug', explanation: 'custom emoji src is a local relative path', source: 'task-24 #4' },
-      ],
+      ]),
     })
     expect(errors).toEqual([])
   })
 
   it('rejects an entry with zero causes listed', () => {
-    const errors = validateKnownMismatches({ 'gfm/emoji': [] })
+    const errors = validateKnownMismatches({ 'gfm/emoji': entry([]) })
     expect(errors).toHaveLength(1)
     expect(errors[0]!.name).toBe('gfm/emoji')
   })
 
   it('rejects a cause with a category outside readit-bug|deviation|normalizer-gap', () => {
     const errors = validateKnownMismatches({
-      'gfm/emoji': [{ category: 'mystery' as never, explanation: 'x', source: 'y' }],
+      'gfm/emoji': entry([{ category: 'mystery' as never, explanation: 'x', source: 'y' }]),
     })
     expect(errors).toHaveLength(1)
     expect(errors[0]!.message).toContain('category')
@@ -185,7 +273,7 @@ describe('validateKnownMismatches', () => {
 
   it('rejects a cause with an empty explanation', () => {
     const errors = validateKnownMismatches({
-      'gfm/emoji': [{ category: 'readit-bug', explanation: '   ', source: 'y' }],
+      'gfm/emoji': entry([{ category: 'readit-bug', explanation: '   ', source: 'y' }]),
     })
     expect(errors).toHaveLength(1)
     expect(errors[0]!.message).toContain('explanation')
@@ -193,7 +281,7 @@ describe('validateKnownMismatches', () => {
 
   it('rejects a cause with an empty source reference', () => {
     const errors = validateKnownMismatches({
-      'gfm/emoji': [{ category: 'readit-bug', explanation: 'x', source: '' }],
+      'gfm/emoji': entry([{ category: 'readit-bug', explanation: 'x', source: '' }]),
     })
     expect(errors).toHaveLength(1)
     expect(errors[0]!.message).toContain('source')
@@ -201,13 +289,51 @@ describe('validateKnownMismatches', () => {
 
   it('reports one error per malformed cause, not just the first', () => {
     const errors = validateKnownMismatches({
-      'gfm/emoji': [
+      'gfm/emoji': entry([
         { category: 'mystery' as never, explanation: '', source: 'y' },
         { category: 'readit-bug', explanation: 'ok', source: 'ok' },
-      ],
+      ]),
     })
     // the first cause is wrong on two counts (category + explanation); the second is fine
     expect(errors.length).toBeGreaterThanOrEqual(2)
     expect(errors.every((e) => e.name === 'gfm/emoji')).toBe(true)
+  })
+
+  // The magnitude pin is what stops a ledger entry from becoming a blanket exemption, so an entry
+  // must not be able to exist without one — otherwise the easy way out of a shape mismatch would
+  // be to drop the field rather than investigate the regression it is reporting.
+  it('rejects an entry that pins no diff magnitude at all', () => {
+    const errors = validateKnownMismatches({
+      'gfm/emoji': { causes: [{ category: 'readit-bug', explanation: 'x', source: 'y' }] } as never,
+    })
+    expect(errors).toHaveLength(1)
+    expect(errors[0]!.message).toContain('diff')
+  })
+
+  it('rejects a diff magnitude of zero, which would describe a file that matches', () => {
+    const errors = validateKnownMismatches({
+      'gfm/emoji': entry([{ category: 'readit-bug', explanation: 'x', source: 'y' }], { hunks: 0, edits: 0 }),
+    })
+    expect(errors).toHaveLength(1)
+    expect(errors[0]!.message).toContain('diff')
+  })
+
+  it('rejects a non-integer diff magnitude', () => {
+    const errors = validateKnownMismatches({
+      'gfm/emoji': entry([{ category: 'readit-bug', explanation: 'x', source: 'y' }], {
+        hunks: 1,
+        edits: 2.5,
+      }),
+    })
+    expect(errors).toHaveLength(1)
+    expect(errors[0]!.message).toContain('diff')
+  })
+
+  it('rejects the pre-pin bare-array entry shape, so the old format cannot creep back in', () => {
+    const errors = validateKnownMismatches({
+      'gfm/emoji': [{ category: 'readit-bug', explanation: 'x', source: 'y' }] as never,
+    })
+    expect(errors).toHaveLength(1)
+    expect(errors[0]!.message).toContain('{ diff, causes }')
   })
 })
