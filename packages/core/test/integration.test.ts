@@ -15,6 +15,10 @@ import { applyRawShape } from '../src/rules/rawshape.js'
 import { applyTagfilter } from '../src/rules/tagfilter.js'
 import { applyRawHtmlPolicy } from '../src/sanitize.js'
 import { DEFAULT_OPTIONS } from '../src/types.js'
+import { normalizeSpecHtml, type SpecExample, type SuiteId } from './spec/harness.js'
+import commonmarkExamples from './spec/commonmark-0.31.2.json' with { type: 'json' }
+import gfmExamples from './spec/gfm-0.29.json' with { type: 'json' }
+import knownFailures from './spec/known-failures.json' with { type: 'json' }
 
 const SRC = readFileSync(join(import.meta.dirname, 'integration/kitchen-sink.md'), 'utf8')
 
@@ -181,13 +185,21 @@ describe('createSpecEngine loads only the semantic slot', () => {
  * (test/spec/harness.ts), and `harness.ts` now never reads `SEMANTIC_RULES` at
  * all — so a rule pushed into `SEMANTIC_RULES` but absent from the map is
  * invisible to every one of the 1324 spec examples, and the ratchet was gone.
- * Measured on this branch: of the 13 SHAPE-slot rules, injecting 9 of them
- * (`applyFrontmatter`, `applyFootnote`, `applyMathInline`, `applyMathBlock`,
- * `applyEmoji`, `applyAlerts`, `applyTaskList`, `applyDecorate`,
- * `applyRawShape`) into a spec engine left the whole suite green.
  *
- * The two tests below restore it structurally rather than by adding more
- * output assertions:
+ * "Then let the output assertions catch it" does not work either, and the
+ * `SHAPE-slot rules are invisible to the spec suite` test below measures
+ * exactly how badly: of the 13 candidates (the 12 `SHAPE_RULES` plus
+ * `applyRawShape`, which `createEngine` registers outside the arrays), 7 leave
+ * the whole 1324-example suite green even when they are genuinely loaded into
+ * the spec engine. An earlier version of this comment said 9 of 13 and named
+ * `applyDecorate` and `applyRawShape` among them; re-measured 2026-08-08 with
+ * the same injection the test performs, both are in fact caught — 74 and 102
+ * not-green examples respectively, the one figure here the test does not itself
+ * assert — and the real answer is 7. The 7 and its membership are no longer
+ * prose: the test recomputes them.
+ *
+ * The three tests below restore the ratchet structurally rather than by adding
+ * more output assertions:
  *
  *  1. `SEMANTIC_RULES` and the map's values must be the SAME SET. A rule can
  *     then only enter the SEMANTIC slot by also being given a cmark-gfm
@@ -203,6 +215,66 @@ describe('rule registry', () => {
 
   it('SEMANTIC_RULES is exactly the set SEMANTIC_RULE_BY_EXTENSION maps to', () => {
     expect(names(SEMANTIC_RULES)).toEqual(names(Object.values(SEMANTIC_RULE_BY_EXTENSION)))
+  })
+
+  /**
+   * The measurement the structural checks exist BECAUSE of, recomputed rather
+   * than quoted: how many SHAPE-slot rules a spec engine can load without a
+   * single one of the 1324 examples going red. Every one of the 13 candidates
+   * is loaded on top of whatever `renderForSpec` would have loaded, and the
+   * per-example verdict below is `runSpecSuite`'s own — a whitelisted example
+   * is "green" while it keeps failing, and red the moment it starts passing.
+   *
+   * ~300ms. It is worth that: this figure has now been wrong twice in prose,
+   * and it is the entire justification for preferring a set-equality check over
+   * output assertions.
+   */
+  it('SHAPE-slot rules are invisible to the spec suite: 7 of 13 leave it fully green', () => {
+    const BASE_EXTENSIONS = new Set(['', 'disabled'])
+    const suites: [SuiteId, SpecExample[]][] = [
+      ['commonmark-0.31.2', commonmarkExamples as SpecExample[]],
+      ['gfm-0.29', gfmExamples as SpecExample[]],
+    ]
+
+    const green = (suiteId: SuiteId, e: SpecExample, injected: Rule | null): boolean => {
+      const rule = SEMANTIC_RULE_BY_EXTENSION[e.extension]
+      if (rule === undefined && !BASE_EXTENSIONS.has(e.extension)) return false
+      const rules = rule ? [rule] : []
+      const md = createSpecEngine(
+        { ...DEFAULT_OPTIONS, allowDangerousHtml: true },
+        injected ? [...rules, injected] : rules,
+      )
+      let got: string
+      try {
+        got = normalizeSpecHtml(md.render(e.markdown, {}))
+      } catch {
+        return false
+      }
+      const matches = got === normalizeSpecHtml(e.html)
+      const whitelist: Record<string, string> = knownFailures[suiteId]
+      return whitelist[String(e.example)] !== undefined ? !matches : matches
+    }
+
+    // The suite really is green to begin with; otherwise "still green" is empty.
+    for (const [id, examples] of suites) {
+      expect(examples.filter((e) => !green(id, e, null))).toHaveLength(0)
+    }
+
+    const candidates: Rule[] = [...SHAPE_RULES, applyRawShape]
+    expect(candidates).toHaveLength(13)
+    const sneakPast = candidates
+      .filter((rule) => suites.every(([id, exs]) => exs.every((e) => green(id, e, rule))))
+      .map((rule) => rule.name)
+
+    expect(sneakPast).toEqual([
+      'applyFrontmatter',
+      'applyFootnote',
+      'applyMathInline',
+      'applyMathBlock',
+      'applyEmoji',
+      'applyAlerts',
+      'applyTaskList',
+    ])
   })
 
   /**
@@ -272,8 +344,26 @@ describe('rule registry', () => {
    *
    * The self-test below runs this same function over
    * test/integration/rule-forms/, which contains one of each missed form.
+   *
+   * ## What it still cannot see, stated so the guard does not read as total
+   *
+   *  1. File extensions. `TS_FILE` below covers `.ts`, `.mts`, `.cts` and
+   *     `.tsx`; a rule in a `.js` file, or in any extension not listed there,
+   *     is still invisible. (This used to be `.endsWith('.ts')`, so `.mts` /
+   *     `.cts` / `.tsx` were blind spots too.)
+   *  2. `export default () => {}` — an ANONYMOUS default export has no
+   *     recoverable name, so the `apply` prefix test below can never see it.
+   *     There is no fix inside the scan: the name simply is not there. It is
+   *     closed at the source end instead, by
+   *     `no src module has a default export` below.
+   *
+   * Neither is realistic under this repo's conventions — every rule is
+   * `export function applyXxx` in a `.ts` file — but both fail in the
+   * silent-pass direction, so both are named rather than assumed away.
    */
-  async function exportedApplyRules(dir: string): Promise<Map<string, Rule>> {
+  const TS_FILE = /\.(?:m|c)?tsx?$/
+
+  function tsFilesUnder(dir: string): string[] {
     const files: string[] = []
     const walk = (d: string): void => {
       for (const entry of readdirSync(d, { withFileTypes: true }).sort((a, b) =>
@@ -281,10 +371,15 @@ describe('rule registry', () => {
       )) {
         const p = join(d, entry.name)
         if (entry.isDirectory()) walk(p)
-        else if (entry.name.endsWith('.ts')) files.push(p)
+        else if (TS_FILE.test(entry.name)) files.push(p)
       }
     }
     walk(dir)
+    return files
+  }
+
+  async function exportedApplyRules(dir: string): Promise<Map<string, Rule>> {
+    const files = tsFilesUnder(dir)
 
     const found = new Map<string, Rule>()
     for (const file of files) {
@@ -373,6 +468,44 @@ describe('rule registry', () => {
       .flatMap((f) => [...readFileSync(f, 'utf8').matchAll(/^export (?:function|const) (apply\w+)/gm)])
       .map((m) => m[1] as string)
     expect(byRegex).toEqual([])
+  })
+
+  /**
+   * Blind spot 1, closed: the file walker now matches every TypeScript
+   * extension, not just `.ts`. Asserted directly because the src tree happens
+   * to contain only `.ts` files, so nothing else here would notice a
+   * regression in the pattern.
+   */
+  it('the file walker matches every TypeScript extension, not just .ts', () => {
+    for (const name of ['a.ts', 'a.mts', 'a.cts', 'a.tsx', 'a.d.ts']) {
+      expect(TS_FILE.test(name), name).toBe(true)
+    }
+    for (const name of ['a.js', 'a.json', 'a.md', 'a.tsbuildinfo', 'ts']) {
+      expect(TS_FILE.test(name), name).toBe(false)
+    }
+    // And it really is the walker's filter: every src file is picked up.
+    expect(tsFilesUnder(SRC_DIR).length).toBeGreaterThanOrEqual(20)
+  })
+
+  /**
+   * Blind spot 2, closed at the source end because it cannot be closed in the
+   * scan: `export default () => {}` gives the namespace object a `default`
+   * binding whose function has an empty `.name`, so no `apply` prefix is ever
+   * recoverable and an unwired rule in that form would pass silently.
+   *
+   * src/ has no default exports at all — every rule is a named
+   * `export function applyXxx` — so the form simply must not appear. Asserting
+   * that is what makes the guard above total over src/, and it is a convention
+   * worth holding anyway. `test/integration/rule-forms/` deliberately keeps a
+   * NAMED `export default function applyDefaultExport`, which the scan does see.
+   */
+  it('no src module has a default export, so the anonymous-default form cannot hide one', async () => {
+    const withDefault: string[] = []
+    for (const file of tsFilesUnder(SRC_DIR)) {
+      const mod: Record<string, unknown> = await import(pathToFileURL(file).href)
+      if ('default' in mod) withDefault.push(file.slice(SRC_DIR.length + 1))
+    }
+    expect(withDefault).toEqual([])
   })
 
   /**
