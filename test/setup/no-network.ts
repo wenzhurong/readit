@@ -8,7 +8,48 @@
  * silently succeeding on a developer laptop and failing on a user's machine.
  *
  * Loopback stays open so local fixture servers and Playwright's own transport work.
+ *
+ * ## What this file patches
+ *
+ *  1. `net.Socket.prototype.connect` — every TCP connect, and so also `http`,
+ *     `https`, `tls` and `http2`, which all build on it. Pinned against IP
+ *     literals, which skip `dns.lookup` and leave this as the only guard.
+ *  2. `dns.lookup` — name resolution reached directly, without a connect.
+ *  3. `globalThis.fetch` — undici has its own connection path; patching it here
+ *     also lets the violation name the full URL rather than just the host.
+ *  4. `dgram.Socket.prototype.send` / `.connect` — UDP.
+ *
+ * ## What this file does NOT cover, and cannot
+ *
+ * This is a monkey-patch inside one JS realm. It is a linting layer that names
+ * the offender, not a sandbox, and these escape it by construction:
+ *
+ *  - **Child processes.** A `child_process` spawn gets a fresh Node realm with
+ *    none of these patches applied.
+ *  - **Native addons.** An N-API module calling `connect(2)` itself never goes
+ *    through any of these JS entry points.
+ *  - **WASM/WASI socket access**, for the same reason.
+ *  - **Anything that opens a socket before this setup file is evaluated**, or
+ *    that captured a reference to the real function before we replaced it.
+ *  - **Raw `process.binding` / internal bindings**, which reach libuv directly.
+ *
+ * The backstop for every one of those is `.github/workflows/offline.yml`, which
+ * re-runs the whole suite under `sudo unshare --net` — a real, kernel-enforced
+ * empty network namespace — and first proves the namespace is actually isolated
+ * so the assertions inside it cannot be vacuous. Treat that job, not this file,
+ * as the thing that makes "the suite is offline" true. This file exists to make
+ * a violation *legible* on a developer laptop, where there is no namespace.
+ *
+ * UDP was the one gap in the enumeration above worth closing in-process rather
+ * than leaving to the namespace: `dgram` did already fail, but only incidentally
+ * and badly. Node routes a dgram destination through `lookup` even for an IP
+ * literal (`net` short-circuits those), so layer 2 fired from inside Node's own
+ * internal callback — surfacing as an unhandled exception that crashes the test
+ * file while the caller's callback never runs. Patching `send`/`connect`
+ * directly turns that into the same synchronous, named error every other layer
+ * raises. See test/offline-gate.test.ts.
  */
+import dgram from 'node:dgram'
 import dns from 'node:dns'
 import net from 'node:net'
 
@@ -66,6 +107,40 @@ net.Socket.prototype.connect = function patchedConnect(this: net.Socket, ...args
   const host = hostOf(args)
   if (!isLocal(host)) throw new OfflineViolationError('net.Socket.connect', host)
   return (realConnect as (...a: unknown[]) => net.Socket).apply(this, args)
+}
+
+/**
+ * The destination address in a `dgram` call, or `''` (treated as local) when there is none.
+ *
+ * Both shapes put the address in the first string argument at index >= 1:
+ *
+ *   send(msg, [offset, length,] [port,] [address,] [cb])
+ *   connect(port, [address,] [cb])
+ *
+ * Index 0 is skipped because `send`'s message may itself be a string. No string at all means
+ * either a connected socket (whose `connect` was already checked here) or the 127.0.0.1
+ * default — local either way.
+ */
+function dgramTargetOf(args: readonly unknown[]): string {
+  for (let i = 1; i < args.length; i += 1) {
+    const a = args[i]
+    if (typeof a === 'string') return a
+  }
+  return ''
+}
+
+const realSend = dgram.Socket.prototype.send
+dgram.Socket.prototype.send = function patchedSend(this: dgram.Socket, ...args: unknown[]) {
+  const host = dgramTargetOf(args)
+  if (!isLocal(host)) throw new OfflineViolationError('dgram.Socket.send', host)
+  return (realSend as (...a: unknown[]) => void).apply(this, args)
+}
+
+const realDgramConnect = dgram.Socket.prototype.connect
+dgram.Socket.prototype.connect = function patchedDgramConnect(this: dgram.Socket, ...args: unknown[]) {
+  const host = dgramTargetOf(args)
+  if (!isLocal(host)) throw new OfflineViolationError('dgram.Socket.connect', host)
+  return (realDgramConnect as (...a: unknown[]) => void).apply(this, args)
 }
 
 const realLookup = dns.lookup

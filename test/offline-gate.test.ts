@@ -1,3 +1,4 @@
+import dgram from 'node:dgram'
 import dns from 'node:dns'
 import http from 'node:http'
 import https from 'node:https'
@@ -133,6 +134,76 @@ describe('offline gate', () => {
 
   it('leaves a dns.lookup of localhost alone', () => {
     expect(() => dns.lookup('localhost', () => {})).not.toThrow()
+  })
+
+  /**
+   * UDP. A post-fix residual sweep on this gate covered ten TCP/TLS shapes and concluded they
+   * were all blocked; a separate note in the same review said `dgram` was unguarded and that a
+   * `dgram.send` to a TEST-NET address was simply accepted. Measured here, neither reading was
+   * right: the packet did NOT get out, because Node routes a dgram destination through `lookup`
+   * even for an IP literal (`net` short-circuits those with `isIP`), so the dns layer fired —
+   * but it fired from inside Node's own internal dgram callback, which surfaced as an unhandled
+   * exception that took down the test file while the caller's callback never ran at all.
+   *
+   * "Stopped, but only by accident and with a crash" is not a layer anyone should rely on, so
+   * `send`/`connect` are now patched directly and throw synchronously to the caller like every
+   * other layer. TEST-NET-1 throughout: if these guards ever break, the probes still cannot
+   * reach anything.
+   */
+  it('blocks dgram.send to an IP literal, synchronously and by name', () => {
+    const sock = dgram.createSocket('udp4')
+    try {
+      expect(() => sock.send(Buffer.from('probe'), 53, TEST_NET)).toThrow(OfflineViolationError)
+      expect(() => sock.send(Buffer.from('probe'), 53, TEST_NET)).toThrow(
+        /dgram\.Socket\.send tried to reach 192\.0\.2\.1/,
+      )
+    } finally {
+      sock.close()
+    }
+  })
+
+  it('blocks the dgram.send(msg, offset, length, port, address) overload too', () => {
+    const sock = dgram.createSocket('udp4')
+    const buf = Buffer.from('probe')
+    try {
+      expect(() => sock.send(buf, 0, buf.length, 53, TEST_NET)).toThrow(OfflineViolationError)
+    } finally {
+      sock.close()
+    }
+  })
+
+  it('blocks dgram.connect to a remote host', () => {
+    const sock = dgram.createSocket('udp4')
+    try {
+      expect(() => sock.connect(53, TEST_NET)).toThrow(OfflineViolationError)
+      expect(() => sock.connect(53, 'oracle.invalid')).toThrow(/dgram\.Socket\.connect tried to reach oracle\.invalid/)
+    } finally {
+      sock.close()
+    }
+  })
+
+  it('leaves a loopback dgram.send alone', async () => {
+    const sock = dgram.createSocket('udp4')
+    const err = await new Promise<Error | null>((resolve) => {
+      sock.send(Buffer.from('probe'), 65535, '127.0.0.1', (e) => resolve(e))
+    })
+    sock.close()
+    expect(err).toBeNull()
+  })
+
+  /**
+   * The enumeration in no-network.ts is a claim about coverage, and an incomplete one reads as a
+   * complete one. This gate exists because a previous review's "complete trigger set, confirmed
+   * by a sweep" turned out to be bounded by the breadth the claimant chose — so the file has to
+   * keep naming what it cannot see, and keep pointing at the namespace job that can.
+   */
+  it('no-network.ts states what it does NOT cover, and names the backstop', () => {
+    const src = readFileSync(new URL('./setup/no-network.ts', import.meta.url), 'utf8')
+    for (const uncovered of ['Child processes', 'Native addons', 'WASM', 'before this setup file is evaluated']) {
+      expect(src, `no-network.ts must disclose: ${uncovered}`).toContain(uncovered)
+    }
+    expect(src).toContain('.github/workflows/offline.yml')
+    expect(src).toContain('unshare --net')
   })
 
   it('leaves loopback open so local fixture servers still work', async () => {
