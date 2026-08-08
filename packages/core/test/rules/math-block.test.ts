@@ -180,6 +180,16 @@ describe('```math fence', () => {
     expect(html('```mathematica\nx\n```\n')).not.toContain('math-renderer')
   })
 
+  it('needs something to typeset in the body, mirroring the $$ paragraph guard', () => {
+    // An empty (or whitespace-only) fence body has nothing to typeset — same
+    // standard as the $$ paragraph path's `tex.trim() === ''` check. Left
+    // completely alone (still type `fence`), so `applyCodeBlock` renders it,
+    // rather than claiming it and emitting a degenerate
+    // `<math-renderer>$$$$</math-renderer>`.
+    expect(html('```math\n```\n')).not.toContain('math-renderer')
+    expect(html('```math\n   \n\n```\n')).not.toContain('math-renderer')
+  })
+
   it('survives a fence renderer registered after it, because it rewrites the token type', () => {
     // createEngine calls applyCodeBlock AFTER the SHAPE_RULES loop, so a
     // `md.renderer.rules.fence` override installed by this rule would simply be

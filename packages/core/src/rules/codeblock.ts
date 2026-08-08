@@ -24,10 +24,26 @@ export function scopeClassFor(lang: string): string | null {
   return scope === undefined ? null : `highlight-${scope.replace(/\./g, '-')}`
 }
 
+/**
+ * A fence's language: the first whitespace-delimited word of its info
+ * string, or `''` for a bare fence. This is CommonMark's own definition (the
+ * rest of the info string is the fence's business, not the language's) —
+ * not a GitHub-specific rule, so nothing here is measured against the corpus.
+ *
+ * Exported for `rules/math-block.ts`, which must recognize exactly the fence
+ * languages this file would otherwise treat as highlightable — see that
+ * file's `` ```math `` handling. Sharing the function (rather than each file
+ * keeping its own copy of the expression) is what makes that guarantee hold
+ * by construction instead of by comment.
+ */
+export function fenceLanguage(token: Token): string {
+  return token.info.trim().split(/\s+/)[0] ?? ''
+}
+
 function renderBlock(token: Token, highlighter: Highlighter | null): string {
   const code = token.content
   const trimmed = code.replace(/\n$/, '')
-  const lang = token.info.trim().split(/\s+/)[0] ?? ''
+  const lang = fenceLanguage(token)
   const copy = escapeAttr(trimmed)
   const line = token.attrGet('data-line')
   const dataLine = line === null ? '' : ` data-line="${line}"`

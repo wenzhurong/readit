@@ -1,4 +1,5 @@
 import type { MarkdownIt, StateCore, Token } from 'markdown-it'
+import { fenceLanguage } from './codeblock.js'
 import { mathFallbackElement, mathInlineRenderer, type ReaditEnv } from './math-inline.js'
 
 /**
@@ -46,11 +47,19 @@ export function applyMathBlock(md: MarkdownIt): void {
     for (const [i, tok] of tokens.entries()) {
       if (tok.type === 'fence') {
         if (fenceLanguage(tok) === 'math') {
-          tok.type = 'math_block'
-          // GitHub supplies the `$$` delimiters itself (the source has none)
-          // and does so around the trimmed body — including the trailing
-          // newline every fence token's content carries.
-          tok.content = tok.content.trim()
+          const trimmed = tok.content.trim()
+          // Nothing to typeset — the same standard `displayParagraphTex`
+          // applies below via `tex.trim() === ''`. Left completely alone
+          // (still type `fence`, content untouched) so `applyCodeBlock`
+          // renders it, rather than claiming it and producing a degenerate
+          // `<math-renderer>$$$$</math-renderer>`.
+          if (trimmed !== '') {
+            tok.type = 'math_block'
+            // GitHub supplies the `$$` delimiters itself (the source has
+            // none) and does so around the trimmed body — including the
+            // trailing newline every fence token's content carries.
+            tok.content = trimmed
+          }
         }
         continue
       }
@@ -88,15 +97,6 @@ export function applyMathBlock(md: MarkdownIt): void {
   // engine.ts's registerReaditRaw uses) is what lets this file stand alone in a
   // unit test without depending on the guard being applied too.
   md.renderer.rules.math_inline ??= mathInlineRenderer(md)
-}
-
-/**
- * The fence's language, derived by exactly the expression `codeblock.ts` uses.
- * Keeping the two derivations identical is what guarantees no fence can ever
- * be math to this rule and a highlightable language to that one.
- */
-function fenceLanguage(token: Token): string {
-  return token.info.trim().split(/\s+/)[0] ?? ''
 }
 
 /**
