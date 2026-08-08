@@ -147,12 +147,13 @@ export interface DiffHunk {
  * ## What the shape cannot see
  *
  * A hunk records only that a run of lines differs, not what they say. Changing a line that is
- * already inside a hunk leaves both numbers untouched, so the pin's blind surface on any file
- * is exactly the lines that already differ. Measured over the 15 ledger entries that is 109 of
- * 5249 lines; four entries (`frontend/mermaid-large`, `-syntax-error`, `-valid`, `gfm/tagfilter`)
- * share no line at all with their oracle and are therefore 100% blind — `shapeCarriesNoSignal`
- * detects exactly that case, and `corpus.test.ts` requires those entries to pin their `output`
- * verbatim instead.
+ * already inside a hunk leaves both numbers untouched, so the pin's blind surface on any file is
+ * exactly the removed side of its hunks — the lines of readit's output that already fail to match.
+ * The size of that surface across the ledger is not quoted here; `corpus.test.ts` recomputes it
+ * every run ("the magnitude pin's blind surface is 99 of 5249 lines"). Four entries
+ * (`frontend/mermaid-large`, `-syntax-error`, `-valid`, `gfm/tagfilter`) share no line at all with
+ * their oracle and are therefore 100% blind — `shapeCarriesNoSignal` detects exactly that case,
+ * and `corpus.test.ts` requires those entries to pin their `output` verbatim instead.
  */
 export function diffHunks(actualLines: readonly string[], expectedLines: readonly string[]): DiffHunk[] {
   let lo = 0
@@ -261,6 +262,50 @@ export function shapeCarriesNoSignal(
 }
 
 /**
+ * What direction 3b requires of one ledger entry right now, given its measured shape and readit's
+ * current output. Five states, and the ORDER they are decided in is the point.
+ *
+ *  - `must-pin`        blind, no `output`. Add one; the magnitude protects nothing here.
+ *  - `pin-must-match`  blind, has `output`. The pin is the only content protection; compare it.
+ *  - `content-moved`   NOT blind any more, has `output`, and the output has ALSO changed.
+ *  - `drop-pin`        NOT blind any more, has `output`, and the output is byte-identical.
+ *                      Only here is deleting the pin the whole story.
+ *  - `no-pin`          NOT blind, no `output`. The normal state of the other 11 entries.
+ *
+ * `content-moved` exists because the previous version of this decision had only four states and
+ * collapsed it into `drop-pin`, whose message tells a maintainer to delete the pin. That state is
+ * reachable with the shape held still, so the instruction fired over an undiagnosed rendering
+ * change. A reviewer's probe, pinned in `corpus-harness.test.ts`:
+ *
+ *     oracle  ['<section data-type="mermaid">', 'SRC', '</section>']            (3 lines)
+ *     today   5 lines, none matching            -> {hunks:1, edits:8}, blind
+ *     after   ['<section data-type="mermaid">', 'a','b','c','d','e','f']
+ *                                               -> {hunks:1, edits:8}, NOT blind
+ *
+ * `{1,8}` is preserved, so direction 3 passes; blindness ends because the new first line happens
+ * to match the oracle's. Every one of readit's lines changed, and the only guidance the entry got
+ * was "delete `output`". Narrow, but it is precisely the reflexive re-pin 3b exists to prevent,
+ * and the message was what caused it. The content is compared FIRST now, and deletion is
+ * authorized only once it has held still.
+ */
+export type ContentPinObligation = 'must-pin' | 'pin-must-match' | 'content-moved' | 'drop-pin' | 'no-pin'
+
+export function contentPinObligation(
+  shape: DiffShape,
+  actualLines: readonly string[],
+  expectedLines: readonly string[],
+  entry: Pick<MismatchEntry, 'output'>,
+): ContentPinObligation {
+  if (shapeCarriesNoSignal(shape, actualLines, expectedLines)) {
+    return entry.output === undefined ? 'must-pin' : 'pin-must-match'
+  }
+  if (entry.output === undefined) return 'no-pin'
+  const pinned = entry.output
+  const same = pinned.length === actualLines.length && pinned.every((l, i) => l === actualLines[i])
+  return same ? 'drop-pin' : 'content-moved'
+}
+
+/**
  * Render hunks as a localized `-`/`+` listing for a failure message.
  *
  * Capped, because a ledger file's diff can be large by design (`real-world/hast-util-sanitize`
@@ -315,9 +360,10 @@ export function formatDiffHunks(
  *
  * The magnitude pin has a measured blind surface, and it is disclosed rather than glossed: it can
  * only see a regression that changes a line's MATCH STATUS, so the lines it cannot see are exactly
- * the ones already inside a hunk — 109 of 5249 across the ledger. Where that blind surface is the
- * whole file (`shapeCarriesNoSignal`), the entry pins `output` verbatim instead; see that function
- * and `DiffShape.hunks`.
+ * the ones already inside a hunk. `corpus.test.ts` recomputes that figure from the committed
+ * corpus on every run rather than restating it here. Where the blind surface is the whole file
+ * (`shapeCarriesNoSignal`), the entry pins `output` verbatim instead; see that function and
+ * `DiffShape.hunks`.
  */
 export type MismatchCategory = 'readit-bug' | 'deviation' | 'normalizer-gap'
 
@@ -344,12 +390,48 @@ export interface MismatchEntry {
    * at 1 and `edits` is just the two line counts, so rewriting a line's content moves neither.
    * A magnitude cannot protect a file whose magnitude is a constant, so those entries pin the
    * content itself. `corpus.test.ts` enforces both halves of the rule: present when needed,
-   * and accurate.
+   * and accurate — and, since the rule is enforced in BOTH directions, `output` is not available
+   * as a partial pin. A non-blind entry may not carry one at all.
    *
    * Deliberately NOT carried by the other 11 entries. There the magnitude does most of the work
    * already, and a verbatim snapshot of `real-world/sindresorhus-is`'s 3055 lines would be a
    * churn engine that gets re-pinned reflexively — the exact failure mode this ledger exists to
    * avoid.
+   *
+   * ## What these three mermaid pins cost when M5 lands: nothing
+   *
+   * Stated on this branch as "the three mermaid `output` pins will need re-pinning when M5
+   * lands". They will not. At M5 readit emits `<section data-type="mermaid">`, which is the whole
+   * of each entry's recorded diff (its cause records that the mermaid source text is already
+   * identical on both sides), so those three entries start MATCHING, direction 2 fires, and the
+   * entries are deleted outright — `output` with them. That is a debt payoff, not a re-pin.
+   * `real-world/mermaid` is the one that does get re-pinned: 20 of its 22 hunks are the ten
+   * fences (two hunks each, a `-5` and a `+3`), and the remaining two are unrelated causes, so
+   * that entry survives M5 with a much smaller magnitude.
+   *
+   * ## The `real-world/mermaid` residual, and why it stops here
+   *
+   * `real-world/mermaid` is not blind, so it carries no `output`, and it holds 52 of the ledger's
+   * 99 blind lines — the largest single residual. The reason previously recorded for leaving it
+   * ("closing it would mean snapshotting 904 lines") was wrong by an order of magnitude: the
+   * blind surface is the removed side of its hunks, 52 lines / 8,671 bytes, against 904 lines /
+   * 43,427 bytes for the whole normalized output. The real reasons, measured:
+   *
+   *  - 50 of the 52 are the ten D-MERMAID fence wrappers (10 x `<div class="highlight
+   *    highlight-source-mermaid …">`, `<pre>`, the source line, `</pre>`, `</div>`) — one named,
+   *    recorded cause, whose exact construct is ALREADY pinned verbatim three times over by the
+   *    three `frontend/mermaid-*` entries, and which the same M5 event retires. The marginal
+   *    content this residual leaves unprotected is 2 lines: one `<img>` and one `<a class=
+   *    "anchor">`, each of which is a separately recorded cause on this same entry.
+   *  - `output` cannot be used to close it. Direction 3b forbids an `output` pin on a non-blind
+   *    entry, and that "forbids it otherwise" half is exactly what makes 3b self-maintaining;
+   *    weakening it to allow a partial pin here would cost more than it buys. Closing the
+   *    residual properly means a THIRD pin type — a hash of readit's own normalized output,
+   *    oracle-independent so an `oracle:refresh` cannot churn it — plus its validator rules, its
+   *    both-direction enforcement, and a decision about the other 10 non-blind entries.
+   *
+   * That is a mechanism, not a data edit, and it is recorded as debt rather than added in a
+   * closing round. See the branch-review-fix-6 report.
    */
   output?: string[]
   causes: MismatchCause[]
@@ -373,6 +455,14 @@ export type KnownMismatches = Record<string, MismatchEntry>
  * not a rendering change — flipping the tie-break to its mirror re-pins `real-world/mermaid` from
  * 22 hunks to 12 with `edits` still 84, and without this clause the message would confidently
  * accuse a maintainer of a regression that does not exist.
+ *
+ * The signature is NOT exclusive to an aligner change, and the clause says so and hands over the
+ * mechanical answer instead of leaving the maintainer to eyeball a comparison operator. A real
+ * regression can produce it: repair one recorded 1-line hunk while breaking a line adjacent to
+ * another and `edits` holds at 4 while `hunks` goes 2 -> 1 (asserted in `corpus-harness.test.ts`
+ * as "the aligner signature is a heuristic"). What decides it is that both tie-break tests in
+ * `corpus-harness.test.ts` go red under a tie-break change and stay green under a rendering one,
+ * so the clause tells the maintainer to run those rather than to read `diffHunks`.
  */
 export function shapeMismatchMessage(
   name: string,
@@ -388,7 +478,15 @@ export function shapeMismatchMessage(
         "diffHunks walks, which its tie-break picks. Check corpus-harness.ts's diffHunks (and " +
         'its tie-break comparison in particular) for an edit before you go hunting for a ' +
         'rendering regression — if that is what moved, re-pinning is correct and the prose ' +
-        'below does not apply.\n'
+        'below does not apply.\n' +
+        'You do not have to read that comparison to find out. Run the two tie-break tests in ' +
+        'corpus-harness.ts\'s companion, `corpus-harness.test.ts` ("diffHunks: the LCS tie-break ' +
+        'is pinned, not incidental"): both were brute-forced to discriminate the committed ' +
+        'aligner from its mirror, and both go red under a tie-break change. If they are GREEN, ' +
+        'the aligner has not changed and this IS a rendering change — read on. This signature is ' +
+        'a heuristic, not a proof: fixing one recorded 1-line hunk while breaking a line adjacent ' +
+        'to another leaves `edits` at 4 and moves `hunks` 2 -> 1, so a real regression can ' +
+        'produce it too. The tie-break tests are what tell the two apart.\n'
       : ''
   return (
     `"${name}" still mismatches its oracle fixture, but by a different amount than recorded.\n` +

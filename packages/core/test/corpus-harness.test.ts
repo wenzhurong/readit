@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   NON_SNAPSHOT_DIRS,
   compareToFixture,
+  contentPinObligation,
   diffHunks,
   diffShape,
   discoverCorpus,
@@ -415,6 +416,68 @@ describe('shapeCarriesNoSignal (when the magnitude pin degenerates)', () => {
 })
 
 /**
+ * Direction 3b's decision, and specifically the ORDER it decides in. The four-state version of
+ * this logic told a maintainer to delete the only content protection a file had, in response to a
+ * rendering change it could not see — and the state where it did that is reachable.
+ */
+describe('contentPinObligation (which 3b obligation an entry is under)', () => {
+  const oracle = ['<section data-type="mermaid">', 'SRC', '</section>']
+  const obligation = (
+    actual: readonly string[],
+    output: string[] | undefined,
+  ): ReturnType<typeof contentPinObligation> =>
+    contentPinObligation(diffShape(actual, oracle), actual, oracle, { output })
+
+  it('demands a pin from a blind entry that has none', () => {
+    expect(obligation(['a', 'b', 'c', 'd', 'e'], undefined)).toBe('must-pin')
+  })
+
+  it('checks the pin of a blind entry that has one', () => {
+    expect(obligation(['a', 'b', 'c', 'd', 'e'], ['a', 'b', 'c', 'd', 'e'])).toBe('pin-must-match')
+  })
+
+  it('asks for nothing from a non-blind entry with no pin (the other 11 entries)', () => {
+    expect(obligation(['<section data-type="mermaid">', 'x', '</section>'], undefined)).toBe('no-pin')
+  })
+
+  /**
+   * The reviewer's probe, run rather than described. Blindness ends because the new first line
+   * happens to match the oracle's, but `{ hunks: 1, edits: 8 }` is PRESERVED, so direction 3 sees
+   * nothing at all — and every line of readit's output changed underneath it. The old `else`
+   * branch reached exactly one conclusion here: "delete `output`".
+   */
+  it('reports the content change when a pinned entry stops being blind AND its output moved', () => {
+    const today = ['a', 'b', 'c', 'd', 'e']
+    const after = ['<section data-type="mermaid">', 'a', 'b', 'c', 'd', 'e', 'f']
+
+    // Direction 3 is satisfied across the transition: the magnitude is identical.
+    expect(diffShape(today, oracle)).toEqual({ hunks: 1, edits: 8 })
+    expect(diffShape(after, oracle)).toEqual({ hunks: 1, edits: 8 })
+    // And 3b's trigger flips, which is what used to route this into the deletion message.
+    expect(shapeCarriesNoSignal(diffShape(today, oracle), today, oracle)).toBe(true)
+    expect(shapeCarriesNoSignal(diffShape(after, oracle), after, oracle)).toBe(false)
+
+    expect(obligation(after, today)).toBe('content-moved')
+    expect(obligation(after, today)).not.toBe('drop-pin')
+  })
+
+  /**
+   * The other half of the same rule: deletion IS authorized, but only once the content has been
+   * shown to hold still. Here readit's output is byte-identical to the pin and the entry stopped
+   * being blind because the ORACLE moved — nothing to diagnose, so the pin is pure bookkeeping.
+   */
+  it('authorizes deleting the pin only when readit output is byte-identical to it', () => {
+    const unchanged = ['<section data-type="mermaid">', 'x', '</section>']
+    expect(obligation(unchanged, [...unchanged])).toBe('drop-pin')
+  })
+
+  it('compares the pin by value, not by identity, and notices a length-only change', () => {
+    const after = ['<section data-type="mermaid">', 'x', '</section>']
+    expect(obligation(after, ['<section data-type="mermaid">', 'x'])).toBe('content-moved')
+  })
+})
+
+/**
  * The message is the deliverable of ratchet direction 3: the pin fires, and what the maintainer
  * reads next decides whether they diagnose the change or re-pin it reflexively. It is built in
  * the harness rather than inlined into the assertion so its two jobs can be asserted directly.
@@ -449,6 +512,37 @@ describe('shapeMismatchMessage', () => {
   it('does not raise the aligner when edits moved too — that really is a content change', () => {
     const msg = shapeMismatchMessage('real-world/mermaid', entry, { hunks: 5, edits: 9 }, [])
     expect(msg).not.toContain('ALIGNER change')
+  })
+
+  /**
+   * The ALL-CAPS aligner warning is the loudest thing on the screen, and until this the only next
+   * step it offered was to go and read a comparison operator. The project now has a near-decisive
+   * mechanical answer — the two tie-break tests above, both of which go red under a tie-break
+   * change — so the clause hands that over rather than withholding it.
+   */
+  it('hands over the mechanical check instead of asking the maintainer to eyeball the aligner', () => {
+    const msg = shapeMismatchMessage('real-world/mermaid', entry, { hunks: 5, edits: 4 }, [])
+    expect(msg).toContain('corpus-harness.test.ts')
+    expect(msg).toContain('the LCS tie-break is pinned, not incidental')
+    expect(msg).toContain('If they are GREEN, the aligner has not changed')
+    // And it does not overclaim: the signature is a heuristic, not a proof.
+    expect(msg).toContain('heuristic, not a proof')
+  })
+
+  /**
+   * Why the clause has to be a heuristic, demonstrated rather than asserted in prose: a REAL
+   * regression can produce `edits` unchanged + `hunks` moved. Repair the recorded 1-line hunk at
+   * index 1 and break the line next to the recorded one at index 3, and the two hunks merge into
+   * one while the edit count does not budge. This is the exact arithmetic the message quotes.
+   */
+  it('the aligner signature is a heuristic: a rendering change can produce it too', () => {
+    const expected = ['a', 'b', 'c', 'd', 'e']
+    const recorded = ['a', 'X', 'c', 'Y', 'e']
+    expect(diffShape(recorded, expected)).toEqual({ hunks: 2, edits: 4 })
+
+    // hunk 1 fixed (X -> b); the line after the second recorded hunk breaks (e -> Z).
+    const alsoChanged = ['a', 'b', 'c', 'Y', 'Z']
+    expect(diffShape(alsoChanged, expected)).toEqual({ hunks: 1, edits: 4 })
   })
 })
 
