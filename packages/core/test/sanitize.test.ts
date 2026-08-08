@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import MarkdownIt from 'markdown-it'
+import GithubSlugger from 'github-slugger'
 import { defaultSchema } from 'hast-util-sanitize'
 import { applyAlerts } from '../src/rules/alerts.js'
 import { applyHeadingAnchors, OCTICON_LINK } from '../src/rules/heading.js'
@@ -11,7 +12,12 @@ import {
   sanitizeUserHtml,
   STRIPPED_WITH_CONTENT,
 } from '../src/sanitize.js'
-import { transformRawHtmlChunks } from '../src/rules/clobber.js'
+import {
+  prefixUserContentTree,
+  transformRawHtmlChunks,
+  type RawHtmlTransform,
+} from '../src/rules/clobber.js'
+import { decorateRawTree } from '../src/rules/rawshape.js'
 import { render } from '../src/index.js'
 
 function md(allowDangerousHtml: boolean) {
@@ -162,8 +168,11 @@ describe('sanitize', () => {
  *  2. The PARSER drops the separator before any transform runs. `<col>` alone
  *     does this, by putting parse5's fragment parser into "in column group"
  *     insertion mode, where character tokens are discarded. It therefore
- *     reaches every caller, not just the sanitizer — see
- *     test/rules/clobber.test.ts.
+ *     reaches every caller, not just the sanitizer, which is why the sweep
+ *     below runs all three in-repo transforms rather than only `sanitizeTree`.
+ *     What it COSTS each caller is pinned where that caller lives:
+ *     test/rules/clobber.test.ts for `applyClobber`, test/rules/rawshape.test.ts
+ *     for `applyRawShape`.
  *
  * `<script>` matters most, because it makes the original crash reachable
  * through a wholly ordinary document: `a <script>q</script> b` chunks to
@@ -188,9 +197,6 @@ describe('KNOWN LIMITATION: the raw-HTML run split, and everything that breaks i
    * automatically, and anything that starts triggering for some OTHER reason
    * fails here. `col` is the one hand-written entry, because it is a parse5
    * fact rather than a schema fact.
-   *
-   * Two chunk shapes per tag, matching how markdown-it really hands raw HTML
-   * over: a balanced pair, and a pair carrying an attribute.
    */
   const SWEPT_TAGS = `a abbr address article aside audio b base bdi bdo blockquote body br
     button canvas caption cite code col colgroup data datalist dd del details dfn dialog div
@@ -201,23 +207,94 @@ describe('KNOWN LIMITATION: the raw-HTML run split, and everything that breaks i
     select slot small source span strike strong style sub summary sup svg table tbody td
     template textarea tfoot th thead time title tr track u ul var video wbr xmp`.split(/\s+/)
 
-  it('exactly STRIPPED_WITH_CONTENT plus <col> breaks the split, and nothing else', () => {
-    const expected = [...new Set([...STRIPPED_WITH_CONTENT, 'col'])].sort()
-    const triggers = new Set<string>()
-    for (const tag of SWEPT_TAGS) {
-      for (const chunks of [
-        [`<${tag}>`, `</${tag}>`],
-        [`<${tag} id="i">`, `</${tag}>`],
-      ]) {
-        // `keepChunksUnchanged` would hide the failure; a sentinel value cannot.
-        const out = transformRawHtmlChunks(chunks, sanitizeTree, [], {}, (cs) => cs.map(() => 'DEGRADED'))
-        if (out[0] === 'DEGRADED') triggers.add(tag)
+  /**
+   * Seven chunk shapes per tag, matching how markdown-it really hands raw HTML
+   * over. Position matters and cannot be dropped: `<col>` only discards the
+   * separator while the fragment is still in the template insertion mode, so
+   * shapes 3, 5 and 6 — which put another START TAG in front of it — do not
+   * trigger at all, while 0, 1, 2 and 4 do.
+   */
+  const SHAPES: ((tag: string) => string[])[] = [
+    (t) => [`<${t}>`, `</${t}>`],
+    (t) => [`<${t} id="i">`, `</${t}>`],
+    (t) => [`<${t}>`, `</${t}>`, '<b>', '</b>'],
+    (t) => ['<b>', '</b>', `<${t}>`, `</${t}>`],
+    (t) => [`<${t}/>`, '<b>', '</b>'],
+    (t) => ['<div>', `<${t}>`, `</${t}>`, '</div>'],
+    (t) => ['<table>', `<${t}>`, `</${t}>`, '</table>'],
+  ]
+
+  /**
+   * Every transform this repo hands to `transformRawHtmlChunks`. The trigger
+   * set is a property of the TRANSFORM, not of the module, and swept per
+   * transform for exactly that reason: `sanitizeTree` deletes elements and so
+   * owns mechanism 1, while the other two delete nothing and can only ever be
+   * hit by mechanism 2.
+   */
+  const TRANSFORMS: Record<string, RawHtmlTransform> = {
+    sanitizeTree,
+    prefixUserContentTree,
+    decorateRawTree: (tree, kinds) => decorateRawTree(tree, new GithubSlugger(), kinds),
+  }
+
+  /**
+   * 122 tags × 7 shapes × 3 transforms == 2562 cases, asserted below so the
+   * arithmetic quoted in src/sanitize.ts and src/rules/clobber.ts is the
+   * arithmetic this file actually performs. Runs in ~60ms.
+   */
+  it('the trigger set per transform: STRIPPED_WITH_CONTENT for the sanitizer, <col> for all three', () => {
+    const sanitizerTriggers = [...new Set([...STRIPPED_WITH_CONTENT, 'col'])].sort()
+    const triggers: Record<string, Set<string>> = {}
+    let cases = 0
+    for (const [name, transform] of Object.entries(TRANSFORMS)) {
+      const found = new Set<string>()
+      for (const shape of SHAPES) {
+        for (const tag of SWEPT_TAGS) {
+          // `keepChunksUnchanged` would hide the failure; a sentinel value cannot.
+          const out = transformRawHtmlChunks(shape(tag), transform, [], {}, (cs) =>
+            cs.map(() => 'DEGRADED'),
+          )
+          cases++
+          if (out[0] === 'DEGRADED') found.add(tag)
+        }
       }
+      triggers[name] = found
     }
-    expect([...triggers].sort()).toEqual(expected)
+
+    expect(SWEPT_TAGS).toHaveLength(122)
+    expect(cases).toBe(122 * 7 * 3)
+    expect([...triggers.sanitizeTree!].sort()).toEqual(sanitizerTriggers)
+    // The two transforms that delete nothing: only the parser-level trigger.
+    expect([...triggers.prefixUserContentTree!].sort()).toEqual(['col'])
+    expect([...triggers.decorateRawTree!].sort()).toEqual(['col'])
     // Guards the derivation itself: if this ever fails, `strip` changed and the
     // comments naming `script` need re-reading, not just this expectation.
     expect(defaultSchema.strip).toEqual(['script'])
+  })
+
+  /**
+   * The position-sensitivity the shape list exists to cover, stated as its own
+   * assertion so the "4 of the 7 shapes" figure in `rules/clobber.ts` is
+   * measured rather than remembered. A fragment starts in the template
+   * insertion mode, where `<col>` switches parse5 to "in column group" and
+   * character tokens are discarded; the first START tag in the run leaves that
+   * mode for "in body", where `<col>` is simply ignored and the separator
+   * survives. Text and comments do not leave it, so `a <col> b` still triggers.
+   */
+  it('<col> only drops the separator while no start tag has preceded it', () => {
+    const degrades = (chunks: string[]): boolean =>
+      transformRawHtmlChunks(chunks, (tree) => tree, [], {}, (cs) => cs.map(() => 'D'))[0] === 'D'
+
+    expect(degrades(['<col>', '</col>'])).toBe(true)
+    expect(degrades(['x', '<col>', 'y'])).toBe(true)
+    expect(degrades(['<!--c-->', '<col>', 'y'])).toBe(true)
+    expect(degrades(['</b>', '<col>', 'y'])).toBe(true)
+    expect(degrades(['<b>', '<col>', 'y'])).toBe(false)
+    expect(degrades(['<div>', '<col>', 'y'])).toBe(false)
+
+    const perShape = SHAPES.map((shape) => degrades(shape('col')))
+    expect(perShape).toEqual([true, true, true, false, true, false, false])
+    expect(perShape.filter(Boolean)).toHaveLength(4)
   })
 
   /**

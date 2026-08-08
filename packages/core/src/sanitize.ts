@@ -70,9 +70,10 @@ export const STRIPPED_WITH_CONTENT: readonly string[] = [
  * The run is split on a text sentinel sitting between chunks, so anything that
  * makes that text disappear lands here. An earlier version of this comment,
  * and of the two in `rules/clobber.ts`, named only `<template>`. That badly
- * understated how ordinary the input is. Measured 2026-08-08 over 134 tags in
- * seven chunk shapes (1876 cases, pinned by the sweep in
- * test/sanitize.test.ts), exactly two mechanisms and three tags:
+ * understated how ordinary the input is. The sweep in test/sanitize.test.ts —
+ * the 122 tags listed there × 7 chunk shapes × the 3 in-repo transforms, 2562
+ * cases, all committed and re-run on every `npm test` — finds exactly two
+ * mechanisms and three tags:
  *
  *  1. `STRIPPED_WITH_CONTENT` above — `script` (from `defaultSchema.strip`)
  *     and `template`. `a <script>q</script> b` chunks to
@@ -82,8 +83,11 @@ export const STRIPPED_WITH_CONTENT: readonly string[] = [
  *     reachable through a far more ordinary document than "a page documenting
  *     web components".
  *  2. `<col>`, where parse5's fragment parser discards the sentinel before any
- *     transform runs. That one is not this stage's doing and reaches every
- *     caller — see `rules/clobber.ts`.
+ *     transform runs. That one is not this stage's doing, so it is the one
+ *     trigger the sweep also finds for the other two transforms — see
+ *     `rules/clobber.ts` for what it costs each caller, and note that it is
+ *     position-sensitive: it only bites while no start tag has preceded it in
+ *     the run (4 of the 7 swept shapes).
  *
  * ## Why not `keepChunksUnchanged`
  *

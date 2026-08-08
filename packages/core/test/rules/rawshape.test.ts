@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import MarkdownIt from 'markdown-it'
+import GithubSlugger from 'github-slugger'
+import { fromHtml } from 'hast-util-from-html'
+import { toHtml } from 'hast-util-to-html'
 import { render } from '../../src/index.js'
-import { applyRawHtmlPolicy } from '../../src/sanitize.js'
+import { applyRawHtmlPolicy, sanitizeUserHtml } from '../../src/sanitize.js'
 import { OCTICON_LINK } from '../../src/rules/heading.js'
-import { applyRawShape } from '../../src/rules/rawshape.js'
+import { applyRawShape, decorateRawTree } from '../../src/rules/rawshape.js'
 
 /**
  * The rule under test only makes sense downstream of the sanitizer — it writes
@@ -373,5 +376,126 @@ describe('applyRawShape', () => {
 
   it('leaves a document with no raw HTML completely alone', () => {
     expect(md().render('# H\n\npara\n')).toBe('<h1>H</h1>\n<p>para</p>\n')
+  })
+})
+
+/**
+ * ## What a stray `<col>` costs this rule, in each mode
+ *
+ * `applyRawShape` takes `keepChunksUnchanged`, so when the run no longer splits
+ * back it emits the chunks verbatim and every decoration in the DOCUMENT is
+ * lost — not just the one near the trigger, because all raw chunks share one
+ * run. `<col>` is the only known way in (test/sanitize.test.ts sweeps 122 tags ×
+ * 7 shapes against this rule's transform and finds nothing else), and it gets
+ * there through the PARSER rather than through any transform.
+ *
+ * Round 3's report recorded this the wrong way round — it called the safe mode
+ * the unpinned one. Measured 2026-08-08, it is the other way:
+ *
+ *  - DEFAULT mode costs this rule nothing. `col` is absent from
+ *    `defaultSchema.tagNames` and has no children to unwrap, so the sanitizer
+ *    has already deleted it (`sanitizeUserHtml('<col>\n') === '\n'`) by the time
+ *    this rule sees the tokens. This rule's own split then succeeds and all five
+ *    decorations survive. The safe-mode document below is still degraded — but
+ *    by the SANITIZER, locally, and only where its own chunk pair was split
+ *    (the inline `<a>`); that degradation is test/sanitize.test.ts's subject.
+ *  - `allowDangerousHtml: true` pays the whole bill. Nothing deletes the
+ *    `<col>`, so this rule's split fails and the document comes back bare.
+ *
+ * ## Why `keepChunksUnchanged` is still the right answer here
+ *
+ * The alternative is the sanitizer's: decorate each chunk on its own. For
+ * `applyClobber` that was rejected last round because a chunk is an unbalanced
+ * fragment, so prefixing it re-serialises `<div id="a">\n` as
+ * `<div id="user-content-a">\n</div>` and the wrapper closes before its content.
+ * That reasoning transfers — this rule reads the same unbalanced chunks — and it
+ * is strictly worse here, because this transform RESTRUCTURES rather than
+ * rewriting an attribute. Measured on `['<h2>\n', '</h2>\n']`, per-chunk
+ * decoration emits the `markdown-heading` wrapper and the whole anchor into
+ * chunk 0 and blanks chunk 1, so besides closing the wrapper before the heading
+ * text it mints `id="user-content-"` / `href="#"` / an empty `aria-label`, and
+ * burns the empty slug in the slugger shared with `rules/heading.ts`. The
+ * measurement is executable, below.
+ *
+ * Nothing safety-relevant turns on either choice: decorations are cosmetic, and
+ * `applyRawShape` runs after whatever policy applies, so the bytes it declines
+ * to touch are bytes the policy already cleared.
+ */
+describe('applyRawShape degradation: a stray <col>', () => {
+  const BODY =
+    '<h2>H</h2>\n\n<img src="r.png" alt="r">\n\n<table><tr><td>c</td></tr></table>\n\n' +
+    '<p>p</p>\n\n<a href="https://ext.example/x">e</a>\n'
+
+  /**
+   * All five decorations in one document, grouped as rawshape.ts's C3(a) note
+   * groups them: `dir="auto"`; the `markdown-heading` wrapper with its anchor;
+   * the `markdown-accessiblity-table` shell; the image filter's `style` plus
+   * its synthetic `<a target="_blank">` and `<p>`; `rel="nofollow"` on an
+   * external link.
+   */
+  const DECORATED =
+    '<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">H</h2>' +
+    ANCHOR_OPEN('h', 'H') +
+    OCTICON_LINK +
+    '</a></div>\n' +
+    '<p dir="auto"><a target="_blank" rel="noopener noreferrer" href="r.png">' +
+    '<img src="r.png" alt="r" style="max-width: 100%;"></a></p>\n' +
+    '<markdown-accessiblity-table><table><tbody><tr><td>c</td></tr></tbody></table>' +
+    '</markdown-accessiblity-table>\n' +
+    '<p dir="auto">p</p>\n' +
+    '<p><a href="https://ext.example/x" rel="nofollow">e</a></p>\n'
+
+  it('control: with no <col>, both modes decorate identically', () => {
+    expect(md(false).render(BODY)).toBe(DECORATED)
+    expect(md(true).render(BODY)).toBe(DECORATED)
+  })
+
+  it('default mode: the sanitizer deletes <col> first, so all five decorations survive', () => {
+    expect(sanitizeUserHtml('<col>\n')).toBe('\n')
+    expect(md(false).render(`<col>\n\n${BODY}`)).toBe(
+      // The deleted `<col>` block, then the same five decorations as DECORATED.
+      '\n' +
+        DECORATED.replace(
+          // The one difference, and it belongs to the SANITIZER's per-chunk
+          // fallback, not to this rule: the inline `<a href>` / `</a>` pair is
+          // two chunks, so sanitizing them separately closes the anchor early
+          // and leaves the link text beside it. Every rawshape decoration —
+          // including this anchor's own `rel="nofollow"` — is still there.
+          '<a href="https://ext.example/x" rel="nofollow">e</a>',
+          '<a href="https://ext.example/x" rel="nofollow"></a>e',
+        ),
+    )
+  })
+
+  it('allowDangerousHtml: a stray <col> strips every decoration from the whole document', () => {
+    expect(md(true).render(`<col>\n\n${BODY}`)).toBe(
+      '<col>\n' +
+        '<h2>H</h2>\n' +
+        '<img src="r.png" alt="r">\n' +
+        '<table><tr><td>c</td></tr></table>\n' +
+        '<p>p</p>\n' +
+        '<p><a href="https://ext.example/x">e</a></p>\n',
+    )
+  })
+
+  /**
+   * The rejected alternative, kept executable so "just degrade per-chunk like
+   * the sanitizer does" cannot be applied here without seeing what it costs.
+   */
+  it('per-chunk decoration would corrupt the structure and mint an empty anchor', () => {
+    const slugger = new GithubSlugger()
+    const perChunk = ['<h2>\n', '</h2>\n'].map((chunk) =>
+      toHtml(decorateRawTree(fromHtml(chunk, { fragment: true }), slugger, ['block'])),
+    )
+    expect(perChunk[1]).toBe('\n')
+    expect(perChunk[0]).toBe(
+      '<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">\n</h2>' +
+        '<a id="user-content-" class="anchor" aria-label="Permalink: \n" href="#">' +
+        OCTICON_LINK +
+        '</a></div>',
+    )
+    // And the shared slugger has now spent the empty slug, so a later real
+    // heading with an empty label would be pushed to `-1`.
+    expect(slugger.slug('')).toBe('-1')
   })
 })

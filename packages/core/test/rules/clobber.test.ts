@@ -201,14 +201,17 @@ describe('clobber', () => {
    *
    * The previous fix round's report claimed of this caller: "Measured: this
    * caller does not actually reach the branch." It does. `<col>` is the one tag
-   * (of 134 swept in seven chunk shapes) whose degradation is caused by the
-   * PARSER rather than by the transform — parse5's fragment parser enters "in
-   * column group" insertion mode and discards the run separator — so it
-   * triggers with no sanitizer involved at all, in the mode where none runs.
+   * (of the 122 swept in 7 chunk shapes against this very transform in
+   * test/sanitize.test.ts) whose degradation is caused by the PARSER rather
+   * than by the transform — parse5's fragment parser enters "in column group"
+   * insertion mode and discards the run separator — so it triggers with no
+   * sanitizer involved at all, in the mode where none runs.
    *
    * The consequence is unpleasant and was unstated: a stray `<col>` silently
    * disables the anti-clobbering pass for the WHOLE document, because every raw
-   * chunk shares one run.
+   * chunk shares one run. `applyRawShape` pays the same bill in the same mode,
+   * for the same reason and with the same fallback; that half lives in
+   * test/rules/rawshape.test.ts.
    *
    * Accepted rather than fixed, on three grounds, all measured:
    *

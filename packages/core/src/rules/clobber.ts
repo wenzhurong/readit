@@ -35,10 +35,18 @@ export const CLOBBER_PREFIX = 'user-content-'
  *  - inside a `<col>`, where the PARSER drops the separator before any
  *    transform runs: parse5's fragment parser switches to "in column group"
  *    insertion mode, which discards character tokens. Unlike the case above
- *    this is nothing the transform did, so it reaches EVERY caller —
- *    `applyClobber` and `applyRawShape` as much as `applySanitize`. It is the
- *    only tag that does this out of 134 swept in seven chunk shapes
- *    (test/sanitize.test.ts).
+ *    this is nothing the transform did, so it is the only trigger that reaches
+ *    EVERY caller — `applyClobber` and `applyRawShape` as much as
+ *    `applySanitize`. Out of the 122 tags swept in 7 chunk shapes against all
+ *    three transforms (test/sanitize.test.ts) it is also the only tag that does
+ *    this at all.
+ *
+ *    It is position-sensitive, which is why the blast radius is not uniform: a
+ *    fragment starts in the template insertion mode, and the FIRST start tag in
+ *    the run leaves it for "in body", where `<col>` is merely ignored. So
+ *    `a <col> b` and a leading `<col>` drop the separator, while `<b>` or
+ *    `<div>` before it means nothing is lost (4 of the 7 swept shapes trigger,
+ *    3 do not).
  *
  * The sentinel uses U+E000 (private use area) so it can never collide with real
  * document text, and unlike ASCII whitespace or NUL it survives the HTML
@@ -84,11 +92,24 @@ export type RawHtmlTransform = (tree: Root, kinds: readonly ChunkKind[], env: En
  *    design. Re-emitting the input is therefore exactly as safe as the stage
  *    that produced it; the only loss is the decoration/prefixing.
  *
- *    That loss is DOCUMENT-WIDE, because every raw chunk shares one run: a
- *    single stray `<col>` costs the whole document its `user-content-` prefixes
- *    (`applyClobber`) or its raw-HTML decorations (`applyRawShape`). Pinned by
- *    test/rules/clobber.test.ts. Per-chunk degradation was considered and
- *    rejected for these two — see the note on `keepChunksUnchanged` below.
+ *    That loss is DOCUMENT-WIDE, because every raw chunk shares one run, and it
+ *    is `allowDangerousHtml: true` that pays for it in both cases:
+ *
+ *      · `applyClobber` only exists in that mode, so a stray `<col>` costs the
+ *        whole document its `user-content-` prefixes there. Pinned by
+ *        test/rules/clobber.test.ts.
+ *      · `applyRawShape` runs in BOTH modes, but only degrades in the dangerous
+ *        one, and this used to be recorded the wrong way round. In the default
+ *        mode `col` is absent from `defaultSchema.tagNames` and has no children
+ *        to unwrap, so the sanitizer has already deleted it
+ *        (`sanitizeUserHtml('<col>\n')` === `'\n'`) by the time this rule runs;
+ *        its split then succeeds and all five decorations survive. In the
+ *        dangerous mode nothing deletes it, so a single stray `<col>` strips
+ *        every raw-HTML decoration from the whole document. Both halves pinned
+ *        by test/rules/rawshape.test.ts.
+ *
+ *    Per-chunk degradation was considered and rejected for these two — see the
+ *    note on `keepChunksUnchanged` below.
  *  - `applySanitize` must NOT. Handing author HTML back unchanged from the
  *    sanitizer would convert a crash into an XSS hole, which is strictly worse
  *    than the crash. It supplies its own fallback — see `sanitize.ts`.
@@ -130,13 +151,34 @@ export type RawHtmlFallback = (
  * in this mode anyway: `<img src=x onerror="alert(1)">` already renders
  * verbatim there (measured), so an unprefixed `id` cannot make it worse.
  *
- * `applyRawShape` follows for the same reason plus one more: it runs in BOTH
- * modes, and in the default one its input has already been sanitized, so the
- * only thing per-chunk degradation could buy is decorations on a tree that has
- * already lost the structure they attach to.
+ * `applyRawShape` follows for the same reason, and the reason is if anything
+ * stronger here, because its transform does more than rewrite an attribute: it
+ * also RESTRUCTURES. Measured 2026-08-08 on the chunk pair `['<h2>\n',
+ * '</h2>\n']` (an `<h2>` with markdown between its tags):
  *
- * What this does cost, and what the tests pin, is blast radius: the loss is
- * document-wide, not local to the offending element.
+ *     keepChunksUnchanged  <h2>\n                    ·  </h2>\n
+ *     per-chunk decoration <div class="markdown-heading" dir="auto">
+ *                            <h2 class="heading-element" dir="auto">\n</h2>
+ *                            <a id="user-content-" class="anchor"
+ *                               aria-label="Permalink: \n" href="#">…</a>
+ *                          </div>                    ·  \n
+ *
+ * So per-chunk buys nothing and costs three things at once: the wrapper closes
+ * before the heading text it is supposed to wrap (the same structural
+ * corruption as above), the anchor is minted from an empty label — `href="#"`,
+ * `id="user-content-"`, an empty `aria-label` — and the slugger shared with
+ * `rules/heading.ts` is consumed with that empty slug, so a later real heading
+ * can collide with it. Decorations on a tree that has already lost the
+ * structure they attach to are not worth a corrupted document.
+ *
+ * The one asymmetry with `applyClobber` runs the other way and is a relief
+ * rather than a cost: `applyRawShape` runs in both modes, but the sanitizer
+ * deletes the only known trigger before it can reach this rule, so in the
+ * default mode this fallback is not reachable from `<col>` at all.
+ *
+ * What this does cost, and what the tests pin, is blast radius: in
+ * `allowDangerousHtml: true` the loss is document-wide, not local to the
+ * offending element.
  */
 export const keepChunksUnchanged: RawHtmlFallback = (chunks) => [...chunks]
 
