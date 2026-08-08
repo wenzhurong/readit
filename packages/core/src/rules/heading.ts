@@ -1,5 +1,5 @@
 import GithubSlugger from 'github-slugger'
-import type { MarkdownIt, StateCore, Token } from 'markdown-it'
+import type { Env, MarkdownIt, StateCore, Token } from 'markdown-it'
 
 /**
  * Byte-verbatim copy of the permalink icon GitHub emits, captured 2026-08-06 from
@@ -14,6 +14,35 @@ export const OCTICON_LINK =
 export interface HeadingAnchorMeta {
   readitSlug: string
   readitLabel: string
+}
+
+/** Scratch state, not an option — see C3(c), which governs `env.readit` only. */
+interface SluggerEnv extends Env {
+  readitSlugger?: GithubSlugger
+}
+
+/**
+ * One slugger per document, shared by every rule that mints an anchor id.
+ * `rules/rawshape.ts` anchors headings the author wrote as literal HTML; with
+ * a slugger of its own, `<h2>Dup</h2>` beside a markdown `## Dup` produced two
+ * elements both claiming `id="user-content-dup"` — duplicate ids, a
+ * correctness bug and not a cosmetic one.
+ *
+ * Per *document*, not per md instance: an md instance can render many
+ * documents, and a slugger that outlived one of them would start suffixing the
+ * next document's first heading. `env` is fresh for every `md.render()` call
+ * (markdown-it substitutes `{}` when the caller passes none), so hanging it
+ * there gets the lifetime right for free.
+ *
+ * The allocation ORDER still deviates from GitHub: rules run in registration
+ * order, so every markdown heading is slugged before any raw one, whereas
+ * GitHub walks one finished tree in document order. On a collision the two
+ * pipelines therefore disagree about which heading keeps the bare slug. Pinned
+ * by a test in test/rules/rawshape.test.ts rather than left to be discovered.
+ */
+export function sharedSlugger(env: Env): GithubSlugger {
+  const scoped = env as SluggerEnv
+  return (scoped.readitSlugger ??= new GithubSlugger())
 }
 
 /**
@@ -44,7 +73,7 @@ function escapeAttr(value: string): string {
  */
 export function applyHeadingAnchors(md: MarkdownIt): void {
   md.core.ruler.push('readit_heading_anchor', (state: StateCore) => {
-    const slugger = new GithubSlugger()
+    const slugger = sharedSlugger(state.env)
     const tokens = state.tokens
     for (let i = 0; i < tokens.length; i++) {
       const open = tokens[i]

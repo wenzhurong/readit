@@ -1,4 +1,4 @@
-import type { MarkdownIt, Token } from 'markdown-it'
+import type { Env, MarkdownIt, Token } from 'markdown-it'
 import type { Element, Root } from 'hast'
 import { fromHtml } from 'hast-util-from-html'
 import { toHtml } from 'hast-util-to-html'
@@ -19,16 +19,41 @@ export const CLOBBER_PREFIX = 'user-content-'
  * The sentinel uses U+E000 (private use area) so it can never collide with real
  * document text, and unlike ASCII whitespace or NUL it survives the HTML
  * parser's text normalisation unchanged.
+ *
+ * Exported so a transform can locate the chunk boundaries inside the merged
+ * tree it is handed — see `rules/rawshape.ts`, which needs to know which chunk
+ * an element came from, and has to keep the sentinel out of text it derives
+ * slugs and labels from.
  */
-const SENTINEL = 'readit-raw-html'
+export const SENTINEL = 'readit-raw-html'
+
+/**
+ * Which markdown-it token a chunk came from. `transformRawHtmlChunks` merges
+ * every chunk of a document into ONE tree, which flattens the distinction
+ * away — an element from an `html_inline` chunk and one from an `html_block`
+ * chunk both land as root-level children of that tree — so a transform that
+ * needs to tell them apart has to be told, per chunk, in `chunks` order.
+ */
+export type ChunkKind = 'block' | 'inline'
+
+/**
+ * `kinds[i]` describes `chunks[i]`. `env` is the render environment, for
+ * transforms keeping per-document scratch state on it (`rules/rawshape.ts`
+ * shares `readitSlugger` with `rules/heading.ts` that way). A transform that
+ * needs neither may declare a single parameter, as `prefixUserContentTree`
+ * and `sanitizeTree` both do.
+ */
+export type RawHtmlTransform = (tree: Root, kinds: readonly ChunkKind[], env: Env) => Root
 
 export function transformRawHtmlChunks(
   chunks: readonly string[],
-  transform: (tree: Root) => Root,
+  transform: RawHtmlTransform,
+  kinds: readonly ChunkKind[] = [],
+  env: Env = {},
 ): string[] {
   if (chunks.length === 0) return []
   const tree = fromHtml(chunks.join(SENTINEL), { fragment: true })
-  const parts = toHtml(transform(tree)).split(SENTINEL)
+  const parts = toHtml(transform(tree, kinds, env)).split(SENTINEL)
   if (parts.length !== chunks.length) {
     throw new Error(
       `raw HTML run lost its structure: ${chunks.length} chunks in, ${parts.length} out`,
@@ -41,15 +66,21 @@ export function transformRawHtmlChunks(
 export function applyRawHtmlTransform(
   md: MarkdownIt,
   ruleName: string,
-  transform: (tree: Root) => Root,
+  transform: RawHtmlTransform,
 ): void {
   md.core.ruler.push(ruleName, (state) => {
     const targets: Token[] = []
+    const kinds: ChunkKind[] = []
     for (const token of state.tokens) {
-      if (token.type === 'html_block') targets.push(token)
-      else if (token.type === 'inline' && token.children) {
+      if (token.type === 'html_block') {
+        targets.push(token)
+        kinds.push('block')
+      } else if (token.type === 'inline' && token.children) {
         for (const child of token.children) {
-          if (child.type === 'html_inline') targets.push(child)
+          if (child.type === 'html_inline') {
+            targets.push(child)
+            kinds.push('inline')
+          }
         }
       }
     }
@@ -57,6 +88,8 @@ export function applyRawHtmlTransform(
     const out = transformRawHtmlChunks(
       targets.map((t) => t.content),
       transform,
+      kinds,
+      state.env,
     )
     for (const [i, token] of targets.entries()) token.content = out[i] ?? token.content
     return true

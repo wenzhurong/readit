@@ -7,7 +7,7 @@ import { DEFAULT_OPTIONS } from '../src/types.js'
 
 const SRC = readFileSync(join(import.meta.dirname, 'integration/kitchen-sink.md'), 'utf8')
 
-describe('all 16 rules in one engine', () => {
+describe('all 17 rules in one engine', () => {
   const html = render(SRC)
 
   it('frontmatter becomes a table, not an hr', () => {
@@ -107,6 +107,24 @@ describe('all 16 rules in one engine', () => {
   it('footnote section is emitted with unsalted ids', () => {
     expect(html).toContain('id="user-content-fn-1"')
     expect(html).not.toMatch(/user-content-fn-1-[0-9a-f]{32}/)
+  })
+
+  /**
+   * applyRawShape is the one rule `createEngine` registers OUTSIDE the
+   * SHAPE_RULES loop — after `applyRawHtmlPolicy`, per engine.ts coupling #4.
+   * Nothing here would fail if that call were dropped except the corpus suite,
+   * so this asserts the wiring at the engine level, on the same document as
+   * every other rule.
+   */
+  it('decorates elements the author wrote as literal HTML, not just markdown ones', () => {
+    expect(html).toContain(
+      '<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">原生标题</h2>',
+    )
+    expect(html).toContain('href="#原生标题"')
+    expect(html).toContain(
+      '<p dir="auto"><a target="_blank" rel="noopener noreferrer" href="raw.png">' +
+        '<img src="raw.png" alt="raw" style="max-width: 100%;"></a></p>',
+    )
   })
 })
 

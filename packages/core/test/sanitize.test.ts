@@ -68,6 +68,17 @@ describe('sanitize', () => {
     )
   })
 
+  /**
+   * NOTE: `md()` above builds a bare MarkdownIt with only `applyAlerts` and
+   * `applyRawHtmlPolicy` — the sanitizer in ISOLATION, which is what this file
+   * tests. Since Task 35 the expected bytes below are deliberately NOT what
+   * `render()` produces and NOT what GitHub produces: the full engine also
+   * loads `applyRawShape`, which decorates this image into
+   * `<p dir="auto"><a target="_blank" rel="noopener noreferrer nofollow" …>
+   * <img … style="max-width: 100%;"></a></p>` (see test/rules/rawshape.test.ts).
+   * Do not "fix" this expectation toward the oracle — that would stop testing
+   * the sanitizer and start testing the pipeline.
+   */
   it('renders a raw-HTML <img> as an image, not as escaped literal text', () => {
     expect(md(false).render('<img src="http://x/y.png" alt="z">\n')).toBe(
       '<img src="http://x/y.png" alt="z">\n',

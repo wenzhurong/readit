@@ -18,6 +18,7 @@ import { applyDirAuto } from './rules/dirauto.js'
 import { applyDecorate } from './rules/decorate.js'
 import { applyCodeBlock } from './rules/codeblock.js'
 import { applySourceLine } from './rules/sourceline.js'
+import { applyRawShape } from './rules/rawshape.js'
 import { applyRawHtmlPolicy } from './sanitize.js'
 
 /** 一条渲染规则。文件位于 src/rules/<name>.ts，形如 export function applyXxx(md: MarkdownIt): void */
@@ -62,7 +63,16 @@ export const SEMANTIC_RULES: Rule[] = [
  *     这条理由对它们不成立——sourceline.ts 自己的注释已经把这个边界说清楚了，
  *     这里不重复验证，只是不能拿它们来证伪「最后」这个默认策略。
  *
- * 一处**刻意不成为**第四条耦合的地方：`applyMathBlock` 要处理 ```math 围栏，而
+ *  4. applyRawShape 必须在 applyRawHtmlPolicy 之后，而且**不在这个数组里**——这条
+ *     是承重的，不是风格问题。core rule 按 push 顺序执行，数组里每一条都跑在
+ *     `readit_sanitize` / `readit_clobber` 之前。applyRawShape 往
+ *     html_block/html_inline 的 token.content 里写带 class 的标记（C3(a) 平时禁止
+ *     的事），靠的正是「卫生化器已经跑完、永远看不到它」这一点。把它挪进数组、
+ *     或者把 applyRawHtmlPolicy 挪到它后面，五项装饰会被静默全灭（`style` 剥掉、
+ *     `<markdown-accessiblity-table>` 外壳删掉、`class` 清空、`rel`/`target` 剥掉）。
+ *     理由与形态写在 rules/rawshape.ts 顶部的 C3(a) 注释里。
+ *
+ * 一处**刻意不成为**第五条耦合的地方：`applyMathBlock` 要处理 ```math 围栏，而
  * `applyCodeBlock` 在下面的循环**之后**才注册 `renderer.rules.fence`，会覆盖
  * 任何在 SHAPE 槽里装的 fence 渲染器。math-block.ts 因此不装 fence 渲染器，改在
  * core rule 里把 token 类型改成 `math_block`——代码块渲染器根本看不到它。它的
@@ -132,6 +142,7 @@ export function createEngine(opts: RenderOptions): MarkdownIt {
   for (const apply of SHAPE_RULES) apply(md)
   applyCodeBlock(md, opts.highlighter)
   applyRawHtmlPolicy(md, opts.allowDangerousHtml)
+  applyRawShape(md) // ← 必须在 applyRawHtmlPolicy 之后（见上方注释 #4）
   return md
 }
 

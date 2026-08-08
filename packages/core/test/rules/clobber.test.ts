@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import MarkdownIt from 'markdown-it'
+import GithubSlugger from 'github-slugger'
 import {
   applyClobber,
   prefixUserContent,
   transformRawHtmlChunks,
+  type ChunkKind,
 } from '../../src/rules/clobber.js'
+import { decorateRawTree } from '../../src/rules/rawshape.js'
 
 function md() {
   const m = new MarkdownIt({ html: true })
@@ -72,5 +75,42 @@ describe('clobber', () => {
       '\n',
       '<table></table>\n',
     ])
+  })
+
+  /**
+   * The same limitation, one notch worse under a transform that actually
+   * changes the tree. `applyRawShape` wraps every `<table>` in
+   * `<markdown-accessiblity-table>`, and because foster-parenting has already
+   * collapsed the split table into a single element sitting in the SECOND
+   * chunk, the wrapper lands there too — both tags end up on the wrong side of
+   * the markdown content the author put between them.
+   *
+   * Asserted with the real transform rather than the identity one above:
+   * the identity assertion cannot fail no matter how the transform behaves, so
+   * on its own it would let this degradation drift in unnoticed. The output is
+   * still well-formed, just relocated.
+   */
+  it('KNOWN LIMITATION: the table wrapper lands in the re-ordered chunk too', () => {
+    const kinds: ChunkKind[] = ['block', 'block']
+    expect(
+      transformRawHtmlChunks(
+        ['<table>\n', '</table>\n'],
+        (tree, chunkKinds) => decorateRawTree(tree, new GithubSlugger(), chunkKinds),
+        kinds,
+      ),
+    ).toEqual(['\n', '<markdown-accessiblity-table><table></table></markdown-accessiblity-table>\n'])
+  })
+
+  // The same transform over a non-table split pair keeps both tags where the
+  // author put them — the re-ordering above really is specific to `<table>`.
+  it('keeps a split <div> in place under the same transform', () => {
+    const kinds: ChunkKind[] = ['block', 'block']
+    expect(
+      transformRawHtmlChunks(
+        ['<div id="a">\n', '</div>\n'],
+        (tree, chunkKinds) => decorateRawTree(tree, new GithubSlugger(), chunkKinds),
+        kinds,
+      ),
+    ).toEqual(['<div id="a">\n', '</div>\n'])
   })
 })
