@@ -24,10 +24,35 @@ describe('all 16 rules in one engine', () => {
     expect(html).toContain('id="user-content-')
   })
 
-  it('autolinks www, url with balanced parens, and email', () => {
-    expect(html).toContain('href="http://www.example.com"')
-    expect(html).toContain('href="https://example.com/a(b)"')
-    expect(html).toContain('href="mailto:foo@bar.baz"')
+  it('autolinks www, url with balanced parens, and email; external autolinks get rel="nofollow"', () => {
+    // Exact strings, not a bare href substring check: review round 1 found that
+    // `toContain('href="...")` passes identically whether or not applyDecorate's
+    // rel="nofollow" is present, so it can't actually pin that behavior.
+    expect(html).toContain('<a href="http://www.example.com" rel="nofollow">www.example.com</a>')
+    expect(html).toContain(
+      '<a href="https://example.com/a(b)" rel="nofollow">https://example.com/a(b)</a>',
+    )
+    // mailto: does not get nofollow — measured GitHub behavior (Task 33 fix round 1,
+    // SPEC §17.1 rule #15's "all autolinks" prose was an over-generalization from http(s)).
+    expect(html).toContain('<a href="mailto:foo@bar.baz">foo@bar.baz</a>')
+  })
+
+  it('decorates images: bare image gets a blank-target wrapper, already-linked image keeps its author href', () => {
+    // Discriminates applyDecorate's third behavior (wrap a bare image) from its
+    // second (leave an author-linked image alone, just add nofollow to the link) —
+    // review round 1 found the fixture had no image markdown at all, so none of
+    // style="max-width", the synthetic wrapper, or the already-linked exemption
+    // ever ran in this test.
+    expect(html).toContain(
+      '<a target="_blank" rel="noopener noreferrer" href="preview.png">' +
+        '<img src="preview.png" alt="预览图" style="max-width: 100%;"></a>',
+    )
+    expect(html).toContain(
+      '<a href="https://example.com/site" rel="nofollow">' +
+        '<img src="logo.png" alt="Logo" style="max-width: 100%;"></a>',
+    )
+    // The already-linked image's anchor must not also get the bare-image treatment.
+    expect(html).not.toContain('target="_blank" rel="noopener noreferrer" href="https://example.com/site"')
   })
 
   it('renders the alert with its octicon', () => {

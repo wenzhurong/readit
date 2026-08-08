@@ -9,6 +9,8 @@ tags:
 
 段落里有 www.example.com 和 https://example.com/a(b) 和 foo@bar.baz。
 
+裸图片 ![预览图](preview.png) 与已被作者链接包裹的图片 [![Logo](logo.png)](https://example.com/site)。
+
 > [!WARNING]
 > 这是一条告警。
 
