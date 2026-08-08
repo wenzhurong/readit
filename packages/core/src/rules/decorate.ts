@@ -8,8 +8,19 @@ import type { MarkdownIt, StateCore, Token } from 'markdown-it'
  * same as a plain `github.com` link. (An earlier pass only had `github.com`
  * itself directly measured and carried the other two as plausible inference
  * — that gap is closed now.)
+ *
+ * `help.github.com` and `docs.github.com` come from the oracle fixture
+ * `test/fixtures/real-world/gitignore.html`, where five links to those two
+ * hosts come back with no `rel` at all. Same host-based exemption, two more
+ * hosts — GitHub's documentation domains are "GitHub itself" too.
  */
-const GITHUB_HOSTS: ReadonlySet<string> = new Set(['github.com', 'www.github.com', 'gist.github.com'])
+const GITHUB_HOSTS: ReadonlySet<string> = new Set([
+  'github.com',
+  'www.github.com',
+  'gist.github.com',
+  'help.github.com',
+  'docs.github.com',
+])
 
 /**
  * `http(s)://` links to a non-GitHub host count as "external"; so does a
@@ -38,8 +49,13 @@ const GITHUB_HOSTS: ReadonlySet<string> = new Set(['github.com', 'www.github.com
  * a cast otherwise. (Same underlying typing gap as `dirauto.ts`'s
  * `String(cls)`; not unified here since the shapes differ — a boolean-typed
  * `typeof` guard vs. a `String()` coercion — but it's the same root cause.)
+ *
+ * Exported for `rules/rawshape.ts`, which applies the same rule to `<a>`
+ * elements the author wrote as literal HTML. Importing it rather than copying
+ * the predicate is deliberate: the exemption set above has already drifted
+ * once when it lived in two places.
  */
-function isExternal(href: string | number): boolean {
+export function isExternal(href: string | number): boolean {
   if (typeof href === 'number') return false
   const normalized = href.startsWith('//') ? `https:${href}` : href
   if (!/^https?:\/\//i.test(normalized)) return false
@@ -102,11 +118,16 @@ export function applyDecorate(md: MarkdownIt): void {
           t.attrSet('style', 'max-width: 100%;')
 
           if (linkDepth === 0) {
+            // The synthetic link's href IS the image src, so an external src
+            // makes the synthetic link external and rule 2 applies to it too:
+            // `rel="noopener noreferrer nofollow"`. Oracle bytes, from
+            // test/fixtures/github-only/image-absolute-external.html.
+            const src = t.attrGet('src') ?? ''
             const open = new state.Token('link_open', 'a', 1)
             open.attrs = [
               ['target', '_blank'],
-              ['rel', 'noopener noreferrer'],
-              ['href', t.attrGet('src') ?? ''],
+              ['rel', isExternal(src) ? 'noopener noreferrer nofollow' : 'noopener noreferrer'],
+              ['href', src],
             ]
             const close = new state.Token('link_close', 'a', -1)
             out.push(open, t, close)

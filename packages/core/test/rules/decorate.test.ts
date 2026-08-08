@@ -33,6 +33,39 @@ describe('applyDecorate', () => {
       )
     })
 
+    // Oracle bytes, from test/fixtures/github-only/image-absolute-external.html
+    // and .../anchor-image.html: the synthetic wrapper around an *external*
+    // image carries `rel="noopener noreferrer nofollow"`, one token longer than
+    // the relative case below. Same `isExternal` predicate as behavior 2 — the
+    // synthetic href is the image's own src, so an external src makes the
+    // synthetic link external too.
+    it('adds nofollow to the synthetic anchor when the image src is external', () => {
+      expect(md().render('![a](https://img.shields.io/badge/a-b-blue.svg)\n')).toBe(
+        '<p><a target="_blank" rel="noopener noreferrer nofollow" ' +
+          'href="https://img.shields.io/badge/a-b-blue.svg">' +
+          '<img src="https://img.shields.io/badge/a-b-blue.svg" alt="a" ' +
+          'style="max-width: 100%;"></a></p>\n',
+      )
+    })
+
+    // Oracle bytes, from test/fixtures/real-world/sindresorhus-is.html and
+    // .../tauri.html: a relative src keeps the two-token rel.
+    it('keeps the two-token rel when the image src is relative', () => {
+      expect(md().render('![a](header.gif)\n')).toBe(
+        '<p><a target="_blank" rel="noopener noreferrer" href="header.gif">' +
+          '<img src="header.gif" alt="a" style="max-width: 100%;"></a></p>\n',
+      )
+    })
+
+    // A github.com src is external-looking but exempt, so it must land on the
+    // relative case's two-token rel, not the three-token one.
+    it('keeps the two-token rel when the image src is on an exempt GitHub host', () => {
+      expect(md().render('![a](https://github.com/o/r/x.png)\n')).toBe(
+        '<p><a target="_blank" rel="noopener noreferrer" href="https://github.com/o/r/x.png">' +
+          '<img src="https://github.com/o/r/x.png" alt="a" style="max-width: 100%;"></a></p>\n',
+      )
+    })
+
     // Measured 2026-08-07: real GitHub wraps ![a]() exactly the same way,
     // href="" and all — this isn't a readit-only quirk of `?? ''`.
     it('wraps even an image with an empty src, matching measured GitHub output', () => {
@@ -92,6 +125,19 @@ describe('applyDecorate', () => {
       )
       expect(md().render('[a](https://gist.github.com/o/r)\n')).toBe(
         '<p><a href="https://gist.github.com/o/r">a</a></p>\n',
+      )
+    })
+
+    // Oracle bytes, from test/fixtures/real-world/gitignore.html: five links to
+    // help.github.com / docs.github.com come back with no `rel` at all. The
+    // exemption set is host-based, so these two documentation hosts belong in
+    // it alongside github.com / www.github.com / gist.github.com.
+    it('does NOT add nofollow to a help.github.com or docs.github.com link', () => {
+      expect(md().render('[a](https://help.github.com/articles/ignoring-files)\n')).toBe(
+        '<p><a href="https://help.github.com/articles/ignoring-files">a</a></p>\n',
+      )
+      expect(md().render('[a](https://docs.github.com/en/get-started)\n')).toBe(
+        '<p><a href="https://docs.github.com/en/get-started">a</a></p>\n',
       )
     })
 
