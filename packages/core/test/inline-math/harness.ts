@@ -27,11 +27,23 @@ function build(html: boolean): MarkdownItInstance {
   return md
 }
 
-/** The delimited inline-math spans readit produces, in document order. */
+/**
+ * Both shapes of the no-renderer fallback element, so this stays "every math
+ * span readit produced" and cannot silently drop one by matching too narrowly.
+ * The class and the `style` are matched as a pair, not as two independent
+ * alternations, so a half-applied shape change fails here instead of slipping
+ * through. Exact shape lives in `mathFallbackElement` and is pinned by name in
+ * `test/rules/math-inline.test.ts`; this regex only has to find the elements.
+ */
+const MATH_ELEMENT_SOURCE =
+  '<math-renderer (?:class="js-inline-math" style="display: inline-block"' +
+  '|class="js-display-math" style="display: block")>([\\s\\S]*?)</math-renderer>'
+
+/** The delimited math spans readit produces, in document order. */
 export function mathSpans(src: string, inlineMath: InlineMathMode = 'github', html = false): string[] {
   const env: ReaditEnv = { readit: { inlineMath } }
   const out = build(html).render(src, env)
-  const re = /<math-renderer class="js-inline-math">([\s\S]*?)<\/math-renderer>/g
+  const re = new RegExp(MATH_ELEMENT_SOURCE, 'g')
   const spans: string[] = []
   let m: RegExpExecArray | null
   // noUncheckedIndexedAccess: a capture group is `string | undefined` even

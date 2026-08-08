@@ -2,12 +2,22 @@ import { describe, expect, it } from 'vitest'
 import MarkdownIt from 'markdown-it'
 import { applyMathInline, type ReaditEnv } from '../../src/rules/math-inline.js'
 
+/**
+ * Both shapes of the no-renderer fallback element — `$…$` is inline, `$$…$$`
+ * is display — matched class-and-style together so a half-applied shape change
+ * fails loudly here instead of quietly returning fewer spans. The shapes
+ * themselves are pinned by "no-renderer fallback element" below.
+ */
+const MATH_ELEMENT_SOURCE =
+  '<math-renderer (?:class="js-inline-math" style="display: inline-block"' +
+  '|class="js-display-math" style="display: block")>([\\s\\S]*?)</math-renderer>'
+
 function spans(src: string, inlineMath: 'github' | 'strict' | 'off' = 'github'): string[] {
   const md = new MarkdownIt()
   applyMathInline(md)
   const env: ReaditEnv = { readit: { inlineMath } }
   const html = md.render(src, env)
-  const re = /<math-renderer class="js-inline-math">([\s\S]*?)<\/math-renderer>/g
+  const re = new RegExp(MATH_ELEMENT_SOURCE, 'g')
   const out: string[] = []
   let m: RegExpExecArray | null
   while ((m = re.exec(html)) !== null) {
@@ -186,6 +196,34 @@ describe('inlineMath modes', () => {
     expect(render('pre $x+y$ end.', 'github')).toContain('math-renderer')
     expect(render('pre $x+y$ end.', 'off')).not.toContain('math-renderer')
     expect(render('pre $x+y$ end.', 'github')).toContain('math-renderer')
+  })
+})
+
+describe('no-renderer fallback element', () => {
+  /**
+   * SPEC 3.2 says `<math-renderer class="js-inline-math">…</math-renderer>`
+   * and is incomplete; SPEC 14 records the correction, and the three
+   * `test/fixtures/frontend/math-*.html` oracles measure it: the element also
+   * carries `style`, and both `class` and `style` switch on display vs inline.
+   * `data-run-id` is GitHub-side salt and is stripped by the normalizer's
+   * NONDETERMINISTIC_ATTRS, so readit does not emit it.
+   */
+  const fallback = (src: string): string => {
+    const md = new MarkdownIt()
+    applyMathInline(md)
+    return md.render(src, { readit: { inlineMath: 'github' } } satisfies ReaditEnv)
+  }
+
+  it('emits the inline shape for a $…$ span', () => {
+    expect(fallback('a $x^2$ b')).toBe(
+      '<p>a <math-renderer class="js-inline-math" style="display: inline-block">$x^2$</math-renderer> b</p>\n',
+    )
+  })
+
+  it('emits the display shape for a $$…$$ span', () => {
+    expect(fallback('a $$x^2$$ b')).toBe(
+      '<p>a <math-renderer class="js-display-math" style="display: block">$$x^2$$</math-renderer> b</p>\n',
+    )
   })
 })
 

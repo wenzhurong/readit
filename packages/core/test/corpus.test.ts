@@ -11,8 +11,9 @@ import { compareToFixture, discoverCorpus, readCorpus, readFixture, readProvenan
  *
  * `{ math: null, highlighter: null }`: Phase A's render() is synchronous and takes an already
  * resolved renderer; passing null exercises the deterministic no-network fallback path
- * (`<math-renderer class="js-inline-math">…</math-renderer>` / plain highlighted-shell markup)
- * rather than requiring a live MathJax/starry-night instance inside a zero-network test run.
+ * (`<math-renderer class="js-inline-math" style="display: inline-block">…</math-renderer>`, or
+ * its `js-display-math` / `display: block` twin for the two block forms; plain highlighted-shell
+ * markup) rather than requiring a live MathJax/starry-night instance in a zero-network test run.
  *
  * Deliberately NOT a whitelist of "known mismatches": every corpus file is asserted equal to its
  * oracle fixture, full stop. A file that does not match today fails loudly and by name — that is

@@ -9,6 +9,7 @@ import { applyTagfilter } from './rules/tagfilter.js'
 import { applyFrontmatter } from './rules/frontmatter.js'
 import { applyFootnote } from './rules/footnote.js'
 import { applyMathInline } from './rules/math-inline.js'
+import { applyMathBlock } from './rules/math-block.js'
 import { applyEmoji } from './rules/emoji.js'
 import { applyAlerts } from './rules/alerts.js'
 import { applyTaskList } from './rules/tasklist.js'
@@ -60,11 +61,20 @@ export const SEMANTIC_RULES: Rule[] = [
  *     是手工拼字符串读 `attrGet('data-line')`，与数组位置无关，所以「必须最后」
  *     这条理由对它们不成立——sourceline.ts 自己的注释已经把这个边界说清楚了，
  *     这里不重复验证，只是不能拿它们来证伪「最后」这个默认策略。
+ *
+ * 一处**刻意不成为**第四条耦合的地方：`applyMathBlock` 要处理 ```math 围栏，而
+ * `applyCodeBlock` 在下面的循环**之后**才注册 `renderer.rules.fence`，会覆盖
+ * 任何在 SHAPE 槽里装的 fence 渲染器。math-block.ts 因此不装 fence 渲染器，改在
+ * core rule 里把 token 类型改成 `math_block`——代码块渲染器根本看不到它。它的
+ * core rule 也锚在 `after('inline')`（而不是引用 `readit_math_inline` 这个名字），
+ * 所以它与 applyMathInline 的相对注册顺序同样不承重。下面把它排在 applyMathInline
+ * 紧后面只是为了可读性；换位置不影响正确性，math-block.test.ts 有具名用例钉住这一点。
  */
 export const SHAPE_RULES: Rule[] = [
   applyFrontmatter,
   applyFootnote,
   applyMathInline,
+  applyMathBlock,
   applyEmoji,
   applyAlerts,
   applyTableWrapper,

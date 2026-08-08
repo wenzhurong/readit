@@ -1,4 +1,4 @@
-import type { Env, MarkdownIt, StateCore, Token } from 'markdown-it'
+import type { Env, MarkdownIt, RendererRule, StateCore, Token } from 'markdown-it'
 import type { ExplainEntry, InlineMathMode, MathRenderer } from '../types.js'
 
 /** Environment object threaded through `md.render(src, env)` by the engine. */
@@ -294,6 +294,44 @@ function rewriteChildren(
 }
 
 /**
+ * SPEC §3.2 degradation: exactly what github.com serves when no math renderer
+ * is configured. `delimited` is the payload *including* its `$`/`$$`
+ * delimiters — GitHub's `<math-renderer>` text content is the round-trippable
+ * source, which is what makes copy-paste yield TeX.
+ *
+ * Both the class and the `style` switch on `display`. SPEC §3.2 writes only
+ * `class="js-inline-math"` and no `style` at all; §14 records the correction
+ * and `test/fixtures/frontend/math-{inline,block,fence}.html` measure it. The
+ * third attribute GitHub emits, `data-run-id`, is per-response salt that the
+ * corpus normalizer strips (`NONDETERMINISTIC_ATTRS`), so readit does not
+ * invent one — Phase A has no source of non-determinism to spend on it.
+ */
+export function mathFallbackElement(md: MarkdownIt, delimited: string, display: boolean): string {
+  const shape = display
+    ? 'class="js-display-math" style="display: block"'
+    : 'class="js-inline-math" style="display: inline-block"'
+  return `<math-renderer ${shape}>${md.utils.escapeHtml(delimited)}</math-renderer>`
+}
+
+/**
+ * The `math_inline` renderer. Exported as a factory rather than registered
+ * only by `applyMathInline`, because `math-block.ts` emits `math_inline`
+ * tokens too (a `$$` paragraph is an inline-level construct — see that file)
+ * and must be able to render them on its own.
+ */
+export function mathInlineRenderer(md: MarkdownIt): RendererRule {
+  return (tokens, idx, _options, env): string => {
+    const token = tokens[idx]
+    if (!token) return ''
+    const display = token.markup === '$$'
+    const renderer = (env as ReaditEnv | undefined)?.readit?.math
+    if (renderer) return renderer.render(token.content, display)
+    const d = token.markup
+    return mathFallbackElement(md, d + token.content + d, display)
+  }
+}
+
+/**
  * Registers the dollar guard as a core rule, positioned after `inline` (so
  * emphasis/link/code tokens already exist and act as opaque boundaries) and
  * before `text_join` (so backslash escapes are still distinguishable
@@ -319,15 +357,5 @@ export function applyMathInline(md: MarkdownIt): void {
     }
   })
 
-  md.renderer.rules.math_inline = (tokens, idx, _options, env): string => {
-    const token = tokens[idx]
-    if (!token) return ''
-    const display = token.markup === '$$'
-    const renderer = (env as ReaditEnv | undefined)?.readit?.math
-    if (renderer) return renderer.render(token.content, display)
-    // SPEC §3.2 degradation: exactly what github.com serves when no math
-    // renderer is configured.
-    const d = token.markup
-    return `<math-renderer class="js-inline-math">${md.utils.escapeHtml(d + token.content + d)}</math-renderer>`
-  }
+  md.renderer.rules.math_inline = mathInlineRenderer(md)
 }
