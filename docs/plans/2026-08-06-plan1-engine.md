@@ -10019,3 +10019,143 @@ R1–R8 行内判定逻辑不在本任务范围内 —— 不要为了让块级�
   把一个已通过项塞进白名单应断）
 - [ ] **Step 2** 实现，填入剩余不匹配
 - [ ] **Step 3** `npm test` 必须**全绿**，并在报告里给出白名单条目数与分类计数
+
+---
+
+### Task 35: 原生 HTML 的 SHAPE 层装饰（applyRawShape）
+
+> 本任务的机制由一次**只读架构调研**确定，调研做了可运行原型并实测了增量，不是纸上建议。
+> 下面每一条"实测"都有原型或直接运行 markdown-it/卫生化器为据。
+
+**问题：** `applyDirAuto` / `applyDecorate` / `applyHeadingAnchors` / `applyTableWrapper`
+全都挂在 markdown-it 自己的语义 token 上（`paragraph_open`、`image`、`heading_open`、
+`table_open`、`link_open`）。GitHub 的流水线装饰的是**最终 HTML**，不管元素来自 Markdown
+语法还是作者手写的 HTML。真实 README 里这是最大的单一失配来源。
+
+**机制：** 新增 SHAPE 规则 `applyRawShape`，复用**已有的** `applyRawHtmlTransform`
+hast 接缝（`rules/clobber.ts:41`），在 `createEngine` 里注册于
+`applyRawHtmlPolicy(md, opts.allowDangerousHtml)` **之后**。
+
+> **它不进 `SHAPE_RULES` 数组，这是承重的。** core rule 按 push 顺序执行，数组里所有规则
+> 都跑在卫生化**之前**。实测跑一遍卫生化，装饰会被全灭：
+> ```
+> <img style="max-width: 100%;">              → <img>                （style 剥掉）
+> <markdown-accessiblity-table><table>…       → <table>…             （外壳整个删掉）
+> <div class="markdown-heading"><h2 class=…>  → <div><h2 class="">   （class 清空）
+> <a rel="nofollow"> / <a target="_blank">    → <a>                  （两个都剥）
+> ```
+> 实测 `createEngine` 的核心规则顺序：
+> `… readit_task_list → readit_heading_anchor → readit_dir_auto → readit_decorate
+> → readit_sourceline → readit_sanitize`。`readit_raw_shape` 排在 `readit_sanitize` 之后。
+>
+> **`createSpecEngine` 两条都没有**，所以规格套件 649/652 与 658/672 **在构造上不可能动**。
+
+**Files:**
+- Create: `packages/core/src/rules/rawshape.ts`
+- Test: `packages/core/test/rules/rawshape.test.ts`
+- Modify: `packages/core/src/engine.ts`（`applyRawHtmlPolicy` 之后加一行；文档块加耦合 #4）
+- Modify: `packages/core/src/rules/clobber.ts`（导出 `SENTINEL`；`applyRawHtmlTransform`
+  的 transform 类型加 `kinds` 形参）
+- Modify: `packages/core/src/rules/decorate.ts`（导出 `GITHUB_HOSTS` 与 `isExternal`）
+- Modify: `packages/core/src/rules/heading.ts:47`（slugger 改为 `state.env.readitSlugger ??= …`）
+
+**Interfaces:**
+```ts
+export type ChunkKind = 'block' | 'inline'
+export function decorateRawTree(tree: Root, slugger: GithubSlugger, kinds: readonly ChunkKind[]): Root
+export function applyRawShape(md: MarkdownIt): void   // core rule 'readit_raw_shape'
+```
+
+**已解决：Task 24 实现者没把握的那个 `html_block` 问题。** 直接跑 markdown-it 15 实测：
+- `<img src="…" alt="…" width="120">\n` → **一个 `html_block` token**，`map=[0,1]`，
+  **无 `paragraph_open`**。`img` 不在 CommonMark 条件 6 的块标签表里，所以这是**条件 7**
+  （完整开标签独占一行）。`applyDirAuto` 挂在 `paragraph_open` 上（`dirauto.ts:10-15`），
+  因此**永远不可能触发**。
+- `text <img src="a.png"> more\n` → `paragraph_open` / `inline`（含 `html_inline` 子）/ `paragraph_close`。
+
+**GitHub 的 `<p>` 不来自它的解析器。** 反证（全部取自夹具）：顶层 `<a name="legacy">` 不得
+`<p>`；`<br>\n<br>` 不得 `<p>`；顶层 `<a href>…</a>` 的 html_block 不得 `<p>`。
+`<p>` 是 GitHub 的**图片过滤器**为「无 `<a>` 祖先的裸 `<img>`」单独发的。4 个正例
+（`image-raw-html`、`tauri` 第 1 行、`sindresorhus-is` 第 7 行、`mermaid` 第 41 行）
++ 3 个反例一致。
+
+→ readit 的条件：`<img>` 无 `<a>` 祖先 **且** 是合并树的根级子节点 **且** 其 chunk 是 `html_block`。
+
+> **chunk-kind 闸门是承重的，不是防御性的。** 原型不加这个闸门时实测得到
+> `<p dir="auto">text <p dir="auto">…</p> more</p>`。`transformRawHtmlChunks` 把
+> block 与 inline chunk **合并成一棵树**，所以光靠树中位置分不出来——这就是 `kinds`
+> 必须穿进 transform 的原因。
+
+**覆盖（五项装饰全覆盖，均对着 oracle 验过）：**
+
+| 装饰 | 覆盖的原生 HTML 形态 |
+|---|---|
+| `dir="auto"` | `p`、`h1`–`h6`、`ul`、`ol`（跳过 `contains-task-list`），含 parse5 自动闭合出来的 `<p>` |
+| 标题锚点 | 任意 `h1`–`h6`，wrapper + `class="heading-element"` + 文本派生 slug，作者 `id` 保留 |
+| 图片 `style` + 外层 `<a>` | 任意 `img`；有 `a` 祖先时只加 style 不加外层 |
+| `rel="nofollow"` | 任意外部 `a[href]` |
+| `<markdown-accessiblity-table>` | 任意 `table` |
+
+**⚠️ 明确留在桌上的（任务书不得让这些读起来像已覆盖）：**
+1. `real-world/mermaid` **不会翻绿**。它的原生 HTML 区在原型下已字节一致，但仍卡在
+   (a) mermaid 围栏渲染（D-MERMAID，M5）与 (b) 一个归一化器缺口：GitHub 把跨仓库的
+   绝对 `github.com/<other>/blob/….jpg` 改写成 `/raw/`，而 `undoGithubUrlRewrites`
+   只处理 oracle 文档自己仓库的。
+2. `real-world/sindresorhus-is` **不会翻绿**。残留两因：动图上的 `data-animated-image=""`
+   （GitHub 读图片字节判定，离线不可复现——需归一化规则或具名偏离），
+   以及合成图片锚点 `href` 上的 camo URL（`restoreCamo` 只改 `img[data-canonical-src]`，
+   不改外层 `<a>`）。
+3. `github-only/image-absolute-external` 与 `github-only/anchor-image` **不是**原生 HTML bug，
+   但共用图片机制：各自唯一的 diff 是合成锚点的 `rel="noopener noreferrer nofollow"`
+   vs readit 的 `rel="noopener noreferrer"`。`decorate.ts:107` 应在 `isExternal(src)` 时补
+   `nofollow`。**单修这条也不会让它们翻绿**——(2) 的 camo-href 缺口同样作用于它们。
+4. `gfm/footnotes` 是**同一类** bug（装饰挂在 token 类型上，够不着非 token 的标记）
+   但位置不同：那段标记由 `footnote.ts` 的渲染器字符串直接发出，从不是 `html_block`，
+   `applyRawShape` 够不着。最省的修法在 `footnote.ts` 自己。**本任务不做。**
+5. **原生标题的属性顺序**：朴素实现会得到 `<h2 dir="auto" class="heading-element">`，
+   而 GitHub 发的是 `class` 在 `dir` 前。**语料测试抓不到这个**——`normalize.ts` 的
+   `sortAttributes` 会把键排序。必须先设 `className` 再设 `dir`，并用一条**直接字符串断言**
+   的测试钉住，照耦合 #2 的先例。
+6. 带 `height` 的图片 style（`max-width: 100%; height: auto; max-height: 150px;`）在整个
+   夹具集里**只有一个实例**，对 46 个朴素 `max-width: 100%;`。「有 `height` 属性 → 扩展形式」
+   这条推断与三个 `width`-only 反例相容，但百分比高度、CSS 单位高度、`width`+`height`
+   同时出现三种情况**未验证**。
+
+**风险（调研已实测，不是推测）：**
+- `test/rules/clobber.test.ts:70` 的 `KNOWN LIMITATION`（跨 markdown 内容切开的原生表格会被重排）：
+  测试用恒等 transform 断言，所以**不会失败**，但行为会退化——实测
+  `['<table>\n','</table>\n']` 加表格外壳 transform → `['\n', '<markdown-accessiblity-table><table></table></markdown-accessiblity-table>\n']`，
+  表格和外壳双双落进错误的 chunk。**扩展那条钉子测试，不要让它悄悄漂移。**
+- **重复锚点 id**（原型实测确认）：`<h2>Dup</h2>\n\n## Dup\n` 产出两个都是
+  `id="user-content-dup"` / `href="#dup"` 的元素。这是正确性 bug 不是外观问题。
+  共享 slugger 后仍有偏差：分配顺序是「先 markdown 后 raw」而非文档顺序，冲突时
+  readit 把裸 slug 给 markdown 标题，GitHub 可能给 raw 的。语料里无文件触发。**用测试钉住这条偏离。**
+- `test/sanitize.test.ts:71` 会继续通过（它建的是只带 `applyAlerts`+`applyRawHtmlPolicy`
+  的裸 MarkdownIt），但它此后编码了一条与 oracle 相反的期望。加注释说明它测的是隔离下的卫生化器。
+- `test/rules/decorate.test.ts`（181 行）是改 `decorate.ts` 时风险最高的单测文件。
+- **未暴露**：对抗性计时门（最大原生 HTML 文档实测约 1 ms，预算 1000 ms）、
+  `sourceline.ts`（对 `html_block` 的 `attrSet` 是 no-op，markdown-it 的 html_block
+  渲染器只发 `token.content` 忽略 attrs）、emoji（`readit_raw` 永不是 html_block/html_inline）。
+
+**契约：**
+- **C3(a) 在此有一个合法例外，必须在代码注释里写明。** 本规则把带 class 的 HTML 写进
+  `html_block`/`html_inline` 的 `token.content`——这在平时是被禁止的，但**卫生化器已经跑完**，
+  永远看不到它。不写明的话，下一个读代码的人会来"修"掉它。
+- C3(b) 不涉及：不覆盖任何渲染器，tagfilter 的 `html_block`/`html_inline` 链
+  （`tagfilter.ts:43-53`）不受影响，九个被过滤标签也不出现在装饰里。
+- C3(c) 成立：不读任何选项；slugger 是挂在**另一个** env 键上的 scratch state
+  （`env.readitExplain` 已是先例，见 `math-inline.ts:352`）。C3(c) 管的是 `env.readit` 下的**选项**。
+
+**两种 `allowDangerousHtml` 模式都必须正确**（原型实测两模式装饰一致）。
+一处**未实测的判断**，任务书须标明：`true` 时作者手写的 `<img style=…>` 能活过 clobber，
+会被装饰器覆盖。GitHub 的过滤器**据信**跳过已带 style 的图片。`false` 时该情形不可达
+（卫生化剥掉 style），**因此没有 oracle**。建议照 GitHub 推测实现（跳过），并标为未实测。
+
+**提交拆分：** `decorate.ts` 的两处一行改动（`GITHUB_HOSTS` 加
+`help.github.com`/`docs.github.com`；合成锚点补 `nofollow`）**单独一个提交**，
+这样语料的变动可以归因。`applyRawShape` 必须 `import { isExternal } from './decorate.js'`
+而不是复制谓词——复制会造出两处要改的漂移，而这个豁免集已经吃过一次这个亏。
+
+**验收：** 语料从当前基线 +3（`github-only/image-raw-html`、`github-only/user-content-id`、
+`real-world/tauri` 翻绿），`GITHUB_HOSTS` 一行再 +1（`real-world/gitignore`）。
+规格套件 649/652 与 658/672 **必须一字不动**。任何其他测试的状态变化都是回归，必须上报。
