@@ -15,10 +15,9 @@ import { applyRawShape } from '../src/rules/rawshape.js'
 import { applyTagfilter } from '../src/rules/tagfilter.js'
 import { applyRawHtmlPolicy } from '../src/sanitize.js'
 import { DEFAULT_OPTIONS } from '../src/types.js'
-import { normalizeSpecHtml, type SpecExample, type SuiteId } from './spec/harness.js'
+import { judgeSpecExample, type SpecExample, type SuiteId } from './spec/harness.js'
 import commonmarkExamples from './spec/commonmark-0.31.2.json' with { type: 'json' }
 import gfmExamples from './spec/gfm-0.29.json' with { type: 'json' }
-import knownFailures from './spec/known-failures.json' with { type: 'json' }
 
 const SRC = readFileSync(join(import.meta.dirname, 'integration/kitchen-sink.md'), 'utf8')
 
@@ -230,29 +229,27 @@ describe('rule registry', () => {
    * output assertions.
    */
   it('SHAPE-slot rules are invisible to the spec suite: 7 of 13 leave it fully green', () => {
-    const BASE_EXTENSIONS = new Set(['', 'disabled'])
     const suites: [SuiteId, SpecExample[]][] = [
       ['commonmark-0.31.2', commonmarkExamples as SpecExample[]],
       ['gfm-0.29', gfmExamples as SpecExample[]],
     ]
 
+    // The per-example verdict is `runSpecSuite`'s own, because it is literally the same function:
+    // `judgeSpecExample` in spec/harness.ts. This block used to re-implement it — the extension
+    // lookup, the engine construction, the normalisation, and the whitelist rule that a listed
+    // example is "green" while it keeps failing — which meant the figure this test reports could
+    // drift away from the suite it claims to be measuring without either side noticing.
+    //
+    // The try/catch stays here rather than moving into the harness: `renderForSpec` throws by
+    // design on an extension name nobody recognises (Task 32a), and `runSpecSuite` must see that
+    // throw. For THIS test a render that explodes and a render that is wrong are the same answer,
+    // so it converts both to "not green" at its own call site.
     const green = (suiteId: SuiteId, e: SpecExample, injected: Rule | null): boolean => {
-      const rule = SEMANTIC_RULE_BY_EXTENSION[e.extension]
-      if (rule === undefined && !BASE_EXTENSIONS.has(e.extension)) return false
-      const rules = rule ? [rule] : []
-      const md = createSpecEngine(
-        { ...DEFAULT_OPTIONS, allowDangerousHtml: true },
-        injected ? [...rules, injected] : rules,
-      )
-      let got: string
       try {
-        got = normalizeSpecHtml(md.render(e.markdown, {}))
+        return judgeSpecExample(suiteId, e, injected ? [injected] : []).green
       } catch {
         return false
       }
-      const matches = got === normalizeSpecHtml(e.html)
-      const whitelist: Record<string, string> = knownFailures[suiteId]
-      return whitelist[String(e.example)] !== undefined ? !matches : matches
     }
 
     // The suite really is green to begin with; otherwise "still green" is empty.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createSpecEngine, SEMANTIC_RULE_BY_EXTENSION } from '../../src/engine.js'
+import { createSpecEngine, SEMANTIC_RULE_BY_EXTENSION, type Rule } from '../../src/engine.js'
 import { DEFAULT_OPTIONS } from '../../src/types.js'
 import knownFailures from './known-failures.json' with { type: 'json' }
 
@@ -48,7 +48,7 @@ const BASE_EXTENSIONS = new Set(['', 'disabled'])
  * 里加一个新扩展 info string，这里应该让人立刻看见"没人认识这个扩展名"，而不是
  * 让它安静地跑基线引擎、变成一条难查的 HTML 不匹配（Task 32a 复审 Minor 项）。
  */
-export function renderForSpec(markdown: string, extension: string): string {
+export function renderForSpec(markdown: string, extension: string, extraRules: readonly Rule[] = []): string {
   const rule = SEMANTIC_RULE_BY_EXTENSION[extension]
   if (rule === undefined && !BASE_EXTENSIONS.has(extension)) {
     throw new Error(
@@ -57,8 +57,47 @@ export function renderForSpec(markdown: string, extension: string): string {
         `in this file if it should render with zero SEMANTIC rules, like "disabled").`,
     )
   }
-  const md = createSpecEngine({ ...DEFAULT_OPTIONS, allowDangerousHtml: true }, rule ? [rule] : [])
+  const md = createSpecEngine(
+    { ...DEFAULT_OPTIONS, allowDangerousHtml: true },
+    rule ? [rule, ...extraRules] : [...extraRules],
+  )
   return md.render(markdown, {})
+}
+
+/**
+ * 一条规格例子的裁决：渲染结果、期望、是否相等、白名单理由，以及**套件意义上的"绿"**。
+ *
+ * 「绿」不是「通过」：不在白名单里的例子，绿 = 相等；在白名单里的例子，绿 = **仍然不等**
+ * （一旦开始相等就是欠债还清，必须删条目——见 `runSpecSuite` 的反腐烂方向）。
+ *
+ * 抽出来是因为这套裁决有两个调用方，而此前第二个是把它抄了一遍的：`runSpecSuite` 逐例断言，
+ * `integration.test.ts` 的规则注入测试则要在**多加载一条 SHAPE 规则**的前提下问同一个问题
+ * （「1324 条例子里有几条还是全绿」）。抄一遍的风险不是重复本身，是两份裁决会各自漂移——
+ * 注入测试量出来的「绿」若和套件的「绿」定义不同，它测出来的数字就不再是它声称的那个东西。
+ *
+ * 这里**不吞异常**：`renderForSpec` 对不认识的扩展名会抛错，那是 Task 32a 特意加的信号，
+ * 套件必须原样看见它。注入测试自己在外面 try/catch 成「不绿」，因为对它而言"渲染炸了"
+ * 和"渲染错了"是同一类答案。
+ */
+export interface SpecVerdict {
+  got: string
+  want: string
+  matches: boolean
+  /** 白名单理由，未列入则为 undefined。 */
+  reason: string | undefined
+  green: boolean
+}
+
+export function judgeSpecExample(
+  suiteId: SuiteId,
+  example: SpecExample,
+  extraRules: readonly Rule[] = [],
+): SpecVerdict {
+  const got = normalizeSpecHtml(renderForSpec(example.markdown, example.extension, extraRules))
+  const want = normalizeSpecHtml(example.html)
+  const matches = got === want
+  const reason = (knownFailures[suiteId] as Record<string, string | undefined>)[String(example.example)]
+  return { got, want, matches, reason, green: reason === undefined ? matches : !matches }
 }
 
 /**
@@ -68,13 +107,10 @@ export function renderForSpec(markdown: string, extension: string): string {
  * 同时满足两边」（规格冻结导致的版本漂移、markdown-it 上游渲染器行为、cmark-gfm 自己都跳过
  * 的例子），这是把一条规格例子放进白名单的**唯一**可接受理由。`TEMPORARY` 则是没还的债。
  *
- * 在此之前这条规则只以散文形式存在（见下面 BASE_EXTENSIONS 的注释），`runSpecSuite` 把理由
+ * 在此之前这条规则只以散文形式存在（见上面 BASE_EXTENSIONS 的注释），`runSpecSuite` 把理由
  * 字符串当成不透明的一团，任何人都可以加一条 `TEMPORARY` 而套件照绿。
- */
-export const PERMANENT_PREFIX = 'PERMANENT'
-
-/**
- * 这道守卫的**已知上限**，写在这里而不是让它看起来是完备的：
+ *
+ * ## 这道守卫的**已知上限**，写在这里而不是让它看起来是完备的
  *
  * 它能挡住的是「新增一条没标 PERMANENT 的条目」和「只写裸前缀、不给理由」
  * （后者由 harness.test.ts 的 >10 字符断言负责）。它挡不住**原地改标签**：
@@ -85,11 +121,12 @@ export const PERMANENT_PREFIX = 'PERMANENT'
  * 可能同时满足两边」，是一个语义判断，字符串检查做不到，除非把理由本身也钉死
  * （那会让每一次措辞修订都变成一次假报警）。所以真正拦住重贴标签的是 review：
  * 改动 known-failures.json 的 diff 里，一条 TEMPORARY 变 PERMANENT 是一行醒目
- * 的改动，而下面那条断言的失败信息明确点名这种做法是被禁止的。
+ * 的改动，而 `runSpecSuite` 那条断言的失败信息明确点名这种做法是被禁止的。
  *
  * 记录在案的事实是：任务 10-13 把原有 14 条 TEMPORARY 全部**修好**清零，
  * 一条都没有重新归类，这才是这道守卫要保护的记录。
  */
+export const PERMANENT_PREFIX = 'PERMANENT'
 
 /** 白名单里理由未标 PERMANENT 的编号（升序，数值序）。 */
 export function findNonPermanentReasons(whitelist: Record<string, string>): string[] {
@@ -142,16 +179,16 @@ export function runSpecSuite(
 
     for (const e of examples) {
       it(`${suiteId} · ${e.section} · example ${e.example}`, () => {
-        const got = normalizeSpecHtml(renderForSpec(e.markdown, e.extension))
-        const want = normalizeSpecHtml(e.html)
-        const reason = whitelist[String(e.example)]
-        if (reason === undefined) {
-          expect(got).toBe(want)
+        // 裁决走 judgeSpecExample（注入测试用的是同一个函数），但断言仍然拿 got/want 本身来断，
+        // 不是断一个 boolean——失败时要能看见逐字符的 diff。
+        const verdict = judgeSpecExample(suiteId, e)
+        if (verdict.reason === undefined) {
+          expect(verdict.got).toBe(verdict.want)
         } else {
           expect(
-            got === want,
+            verdict.matches,
             `example ${e.example} 现在通过了。请把它从 test/spec/known-failures.json 的 ` +
-              `"${suiteId}" 里删掉。原白名单理由：${reason}`,
+              `"${suiteId}" 里删掉。原白名单理由：${verdict.reason}`,
           ).toBe(false)
         }
       })
