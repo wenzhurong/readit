@@ -30,14 +30,34 @@ function isLocal(host: string | undefined): boolean {
 }
 
 function hostOf(args: unknown[]): string {
-  const first = args[0]
+  // `net.Socket.prototype.connect` is reached with two different argument shapes, and the
+  // second one used to escape entirely:
+  //
+  //   (options, cb) / (port, host, cb)  — the raw user arguments. This is what TLS (and so
+  //                                       `https`) passes straight through.
+  //   ([options, cb])                   — Node's OWN pre-normalized array, produced by
+  //                                       `normalizeArgs` and passed as a single argument.
+  //                                       This is what `net.connect()` and the `http` Agent
+  //                                       use (verified on Node 22).
+  //
+  // An array is `typeof 'object'`, so without this unwrap the normalized shape was inspected
+  // as if the array itself were the options bag: no `.hostname`, no `.host`, so it fell
+  // through to the `'localhost'` default and was waved past as loopback. That left plain
+  // `http` — and every `net.connect()` call — unguarded whenever the target was an IP
+  // literal, the one case where `dns.lookup` is skipped and cannot cover for it.
+  // Pinned by test/offline-gate.test.ts's TEST-NET-1 probes.
+  const argv = Array.isArray(args[0]) ? (args[0] as unknown[]) : args
+  const first = argv[0]
   if (typeof first === 'object' && first !== null) {
+    // IPC/unix-socket connects carry a string `path` and no host at all; they never touch the
+    // network. (For a TCP connect Node explicitly sets `path: null` here, so this cannot be
+    // mistaken for an HTTP request's URL path.)
     const o = first as { host?: string; hostname?: string; path?: string; port?: number }
     if (typeof o.path === 'string') return ''
     return o.hostname ?? o.host ?? 'localhost'
   }
   if (typeof first === 'string') return ''
-  const second = args[1]
+  const second = argv[1]
   return typeof second === 'string' ? second : 'localhost'
 }
 
