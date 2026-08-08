@@ -34,7 +34,15 @@ export type Rule = (md: MarkdownIt) => void
  * 这个数组必须与 `SEMANTIC_RULE_BY_EXTENSION` 的取值**集合相等**，由
  * test/integration.test.ts 的「rule registry」棘轮钉住：规格套件是逐例按
  * 扩展名查那张表来挑规则的，所以「进了本数组却没进那张表」的规则对全部
- * 1324 条规格用例完全不可见（实测 13 条 SHAPE 规则里有 9 条能这样蒙混过关）。
+ * 1324 条规格用例完全不可见。
+ *
+ * 「那就靠输出断言兜底」是行不通的，这一点是量出来的而不是猜的：把 13 条候选
+ * （下面 `SHAPE_RULES` 的 12 条，加上数组外注册的 `applyRawShape`）逐条**真的**
+ * 装进规格引擎、再按 `runSpecSuite` 的判定跑完 652 + 672 条用例，有 7 条整套仍
+ * 然全绿（applyFrontmatter、applyFootnote、applyMathInline、applyMathBlock、
+ * applyEmoji、applyAlerts、applyTaskList）。这个 7 和这份名单不是手工维护的
+ * 数字：test/integration.test.ts 的「rule registry」里有一条用例现场重算它，
+ * 名单一变就红。
  *
  * `applyTagfilter` 在本数组里的槽位是**承重的**（规格套件按扩展名查
  * `SEMANTIC_RULE_BY_EXTENSION`，GFM 例 652 要它），但作为过滤器它本该是
@@ -191,9 +199,11 @@ export function createEngine(opts: RenderOptions): MarkdownIt {
   // 第二次注册 applyTagfilter，**故意**的：SEMANTIC 槽让它成为
   // html_block/html_inline 渲染器链的最内层，这一行让它同时成为最外层，于是
   // 任何未来在 SHAPE 槽覆写这两条渲染器的规则，其 `prev(...) + X` 里的 X 也会
-  // 被过滤。之所以能这么做而不是二选一，是因为 filterDisallowedTags 幂等
-  // （tagfilter.ts 的注释 + tagfilter.test.ts 的穷举用例），双重过滤零字节差异
-  // （实测 166 份语料 × 两种模式 + 14 个标签 × 7 种形状 × 两种模式，0 差异）。
+  // 被过滤。之所以能这么做而不是二选一，是因为 filterDisallowedTags 幂等——
+  // tagfilter.ts 的注释里有对 TAGFILTER_RE 的证明，tagfilter.test.ts 另有一条
+  // 穷举用例守着那条正则。第二次注册零字节差异这件事也是量出来的：
+  // tagfilter.test.ts 会构造一个**真的只注册一次**的引擎来对比（9 个标签 ×
+  // 7 种文档形状 × 两种模式 = 126 份文档，0 字节差异）。
   // applyRawShape 不参与这条链——它是 core rule，改的是 token.content，渲染器
   // 无论注册在哪儿都只看最终内容。
   applyTagfilter(md)

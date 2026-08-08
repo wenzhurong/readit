@@ -52,21 +52,43 @@ export function filterDisallowedTags(html: string): string {
  * rule through `SEMANTIC_RULE_BY_EXTENSION` (info string `tagfilter`, GFM
  * example 652), and `SEMANTIC_RULES` is pinned equal to that map's values by
  * the slot ratchet in test/integration.test.ts. Moving out of the array would
- * break the ratchet that guards all thirteen SHAPE rules.
+ * break the ratchet that guards all 12 SHAPE rules.
  *
  * Stay-vs-move was a false dichotomy. `createEngine` keeps the array
  * membership AND calls `applyTagfilter` again as its last step, so this rule is
  * the innermost and the outermost link at once and the gap is CLOSED.
  *
- * That works because `filterDisallowedTags` is idempotent: after one pass the
- * nine tags are already `&lt;`-escaped, and the regex needs a literal `<`
- * before the tag name, so a second pass is the identity and can never produce
- * `&amp;lt;`. Measured 2026-08-08: 200 000 random strings over an alphabet of
- * `<`, `</`, `>`, `/`, space, `&lt;`, `&amp;`, quote, newline and the nine tag
- * names, plus every string up to length 5 over an 8-symbol hostile alphabet
- * (37 448 cases) — zero counterexamples; the exhaustive half is a test. Double
- * registration is byte-free on the whole corpus (166 documents × both
- * `allowDangerousHtml` modes) and on 14 tags × 7 chunk shapes × both modes.
+ * That works because `filterDisallowedTags` is idempotent. This does not rest
+ * on a sample; it is a three-step proof about `TAGFILTER_RE` above, and the
+ * only thing it needs from that regex is that the replacement is `'&lt;$1'`,
+ * that `$1` is `/?tagname`, and that the lookahead class is `[\s/>]`:
+ *
+ *  1. A pass never CREATES a `<`. `&lt;` contains none and `$1` contains none,
+ *     and unmatched text is copied verbatim. So the output is exactly the
+ *     input with some `<` characters expanded to `&lt;`, and every `<` still in
+ *     the output is one the pass did not match.
+ *  2. A pass never turns one of those survivors into a match. A match needs
+ *     `<` + `/?tagname` + one character from `[\s/>]`. The `/?tagname` span
+ *     cannot overlap an inserted `&lt;`: any overlap drags in that unit's `&`
+ *     or its `;`, and neither is `/` nor a letter of any of the nine names (a
+ *     span lying wholly inside the four characters `&`,`l`,`t`,`;` is no tag
+ *     name either). So the span is untouched input. The character after it is
+ *     then either untouched input or the `&` that begins an inserted `&lt;` —
+ *     and `&` is not in `[\s/>]`. Either way the lookahead reads what it read
+ *     on the first pass, so a survivor was already unmatchable.
+ *  3. No `<` is skipped over by `lastIndex`: a match consumes `<` and
+ *     `/?tagname`, and `/?tagname` contains no `<`.
+ *
+ * Fixpoint after one pass, for every input; `&amp;lt;` is unreachable. The
+ * exhaustive case in test/rules/tagfilter.test.ts (every string up to length 4
+ * over an 8-symbol hostile alphabet, 4680 cases) is kept as a regression guard
+ * on the regex, not as the support for the claim.
+ *
+ * Double registration is therefore byte-free, and the test file measures that
+ * against a genuinely single-registered engine rather than asserting it — see
+ * the "outermost in createEngine" suite there for how one is built and for the
+ * committed sweep (9 tags × 7 document shapes × both `allowDangerousHtml`
+ * modes = 126 documents, 0 byte differences).
  *
  * `rules/rawshape.ts` is unaffected either way: it is a CORE rule rewriting
  * `token.content`, not a renderer override, so it is not part of this chain at
