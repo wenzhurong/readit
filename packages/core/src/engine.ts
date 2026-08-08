@@ -30,12 +30,25 @@ export type Rule = (md: MarkdownIt) => void
  * 例：GFM 扩展自动链接、tagfilter、表格 align 属性、<s> -> <del>。
  *
  * 顺序在这四条之间不重要——彼此互不依赖，没有测出任何顺序耦合。
+ *
+ * 这个数组必须与 `SEMANTIC_RULE_BY_EXTENSION` 的取值**集合相等**，由
+ * test/integration.test.ts 的「rule registry」棘轮钉住：规格套件是逐例按
+ * 扩展名查那张表来挑规则的，所以「进了本数组却没进那张表」的规则对全部
+ * 1324 条规格用例完全不可见（实测 13 条 SHAPE 规则里有 9 条能这样蒙混过关）。
+ *
+ * `applyTagfilter` 的槽位有一处**已知且刻意保留**的代价：它作为过滤器本该是
+ * html_block/html_inline 渲染器链的**最外层**，而本数组最先加载，它只能是
+ * 最内层。这条要求因此在 SEMANTIC 槽里结构性不可满足；移出数组会打破上面
+ * 那条棘轮，而它要堵的是一个当前不可达的隐患，所以选择保留槽位、把要求
+ * 说清楚。机制、后果与「未来的 SHAPE 规则必须自己怎么做」写在
+ * rules/tagfilter.ts 的注释里，缺口本身由 tagfilter.test.ts 的
+ * 「KNOWN GAP」用例钉住。
  */
 export const SEMANTIC_RULES: Rule[] = [
   applyStrikethrough,
   applyTableAlign,
   applyAutolink,
-  applyTagfilter,
+  applyTagfilter, // ← 槽位承重（规格套件要它），代价见上方注释
 ]
 
 /**

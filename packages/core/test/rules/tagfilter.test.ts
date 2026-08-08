@@ -88,4 +88,31 @@ describe('gfm tagfilter', () => {
     expect(inline).toContain('[[PREV:')
     expect(inline).toContain('&lt;script>')
   })
+
+  /**
+   * KNOWN GAP, the mirror image of the test above and the reason this rule's
+   * doc comment no longer claims it must be `.use()`d last.
+   *
+   * Above, the stub is registered BEFORE `applyTagfilter`, so tagfilter is the
+   * outer link and filters the stub's output. Here the stub is registered
+   * AFTER — which is what `createEngine` does to every rule, because
+   * `applyTagfilter` sits in `SEMANTIC_RULES` and that array runs first. The
+   * stub chains correctly per C3(b) (it calls `prev`), yet whatever it appends
+   * lands outside the filter and is NOT neutralised.
+   *
+   * Unreachable today: this rule is the only override of these two renderer
+   * rules in the whole engine. Pinned as an executable statement of what a
+   * future SHAPE-slot override has to handle itself — if this test ever starts
+   * failing because the appended `<script>` came back escaped, the ordering
+   * changed and the doc comment above needs rewriting with it.
+   */
+  it('KNOWN GAP: a later chaining override appends outside the filter', () => {
+    const md = new MarkdownIt({ html: true, linkify: false })
+    applyTagfilter(md)
+    const prev = md.renderer.rules.html_block
+    md.renderer.rules.html_block = (...args) =>
+      (prev?.(...args) ?? '') + '<script>alert(1)</script>\n'
+
+    expect(md.render('<div>x</div>\n')).toBe('<div>x</div>\n<script>alert(1)</script>\n')
+  })
 })
