@@ -6,7 +6,6 @@
   },
   "gfm-0.29": {
     "187": "PERMANENT · 空引用块的内部换行，同 commonmark-0.31.2 的 218。markdown-it 15 上游渲染器行为。",
-    "199": "TEMPORARY · 表格对齐：期望 align=\"center\"，markdown-it 发 style=\"text-align:center\"。由 SPEC §6 规则 3 修复，该规则必须放进 SEMANTIC_RULES（<markdown-accessiblity-table> 外壳放 SHAPE_RULES）。规则落地后本条必须删除。",
     "217": "PERMANENT · 空引用块 '>' 的内部换行。markdown-it 15 上游渲染器行为。",
     "218": "PERMANENT · 空引用块 '>\\n>  \\n> ' 的内部换行。markdown-it 15 上游渲染器行为。",
     "279": "PERMANENT · 任务列表。cmark-gfm 自己把这条标成 'example disabled'（其官方 runner 跳过）。且 GFM 规格期望 <input disabled=\"\" type=\"checkbox\">，readit 按 SPEC §6 规则 5 发 GitHub 的属性序 type,id,disabled,class,aria-label,checked —— 两者永远不等。",
@@ -19,19 +18,6 @@
     "473": "PERMANENT · emphasis 0.29 vs 0.31.2 漂移：'****foo****' 期望单层 <strong>，0.31.2 出双层。见 SPEC §15 第 3 条。",
     "474": "PERMANENT · emphasis 0.29 vs 0.31.2 漂移：'____foo____'。见 SPEC §15 第 3 条。",
     "475": "PERMANENT · emphasis 0.29 vs 0.31.2 漂移：'******foo******'。见 SPEC §15 第 3 条。",
-    "477": "PERMANENT · emphasis 0.29 vs 0.31.2 漂移：'_____foo_____'。见 SPEC §15 第 3 条。",
-    "491": "TEMPORARY · 删除线：期望 <del>，markdown-it 发 <s>。由 SPEC §6 规则 4 修复，规则须放进 SEMANTIC_RULES。落地后本条必须删除。",
-    "621": "TEMPORARY · GFM 扩展自动链接。linkify-it 6 把 fuzzyLink 默认关了且引擎固定 linkify:false，须由 SPEC §6 规则 1（移植 micromark-extension-gfm-autolink-literal）修复。落地后 621-631 十一条必须一起删除。",
-    "622": "TEMPORARY · GFM 扩展自动链接，同 621。由 SPEC §6 规则 1 修复后删除。",
-    "623": "TEMPORARY · GFM 扩展自动链接，同 621。由 SPEC §6 规则 1 修复后删除。",
-    "624": "TEMPORARY · GFM 扩展自动链接，同 621。由 SPEC §6 规则 1 修复后删除。",
-    "625": "TEMPORARY · GFM 扩展自动链接，同 621。由 SPEC §6 规则 1 修复后删除。",
-    "626": "TEMPORARY · GFM 扩展自动链接，同 621。由 SPEC §6 规则 1 修复后删除。",
-    "627": "TEMPORARY · GFM 扩展自动链接，同 621。由 SPEC §6 规则 1 修复后删除。",
-    "628": "TEMPORARY · GFM 扩展自动链接，同 621。由 SPEC §6 规则 1 修复后删除。",
-    "629": "TEMPORARY · GFM 扩展自动链接，同 621。由 SPEC §6 规则 1 修复后删除。",
-    "630": "TEMPORARY · GFM 扩展自动链接，同 621。由 SPEC §6 规则 1 修复后删除。",
-    "631": "TEMPORARY · GFM 扩展自动链接，同 621。由 SPEC §6 规则 1 修复后删除。",
-    "652": "TEMPORARY · tagfilter：9 个标签的前导 < 须转义为 &lt;。由 SPEC §6 规则 2 修复，规则须放进 SEMANTIC_RULES。落地后本条必须删除。"
+    "477": "PERMANENT · emphasis 0.29 vs 0.31.2 漂移：'_____foo_____'。见 SPEC §15 第 3 条。"
   }
 }

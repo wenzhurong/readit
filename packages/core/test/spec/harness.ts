@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createSpecEngine } from '../../src/engine.js'
+import { createSpecEngine, SEMANTIC_RULE_BY_EXTENSION } from '../../src/engine.js'
 import { DEFAULT_OPTIONS } from '../../src/types.js'
 import knownFailures from './known-failures.json' with { type: 'json' }
 
@@ -8,6 +8,8 @@ export interface SpecExample {
   html: string
   example: number
   section: string
+  /** cmark-gfm 扩展名，空串代表基线（零扩展）例子。见 scripts/fetch-specs.ts。 */
+  extension: string
 }
 
 export type SuiteId = 'commonmark-0.31.2' | 'gfm-0.29'
@@ -25,9 +27,17 @@ export function normalizeSpecHtml(html: string): string {
   return html.replace(VOID_SELF_CLOSING, '<$1$2>')
 }
 
-/** L1 只测解析语义，所以走 createSpecEngine，且必须开 allowDangerousHtml（规格假定原始 HTML 透传）。 */
-export function renderForSpec(markdown: string): string {
-  const md = createSpecEngine({ ...DEFAULT_OPTIONS, allowDangerousHtml: true })
+/**
+ * L1 只测解析语义，所以走 createSpecEngine，且必须开 allowDangerousHtml（规格假定原始 HTML 透传）。
+ *
+ * `extension` 决定加载哪条 SEMANTIC 规则（见 engine.ts 的 `SEMANTIC_RULE_BY_EXTENSION`
+ * 与它上面的文档注释）：空串或不在映射表里的值（如 `disabled`）一律用零扩展的
+ * 基线引擎——这是 Task 32a 修的结构性缺口，此前这里无条件加载全部四条，
+ * 污染了从未打算见到 autolink/tagfilter 的基线例子。
+ */
+export function renderForSpec(markdown: string, extension: string): string {
+  const rule = SEMANTIC_RULE_BY_EXTENSION[extension]
+  const md = createSpecEngine({ ...DEFAULT_OPTIONS, allowDangerousHtml: true }, rule ? [rule] : [])
   return md.render(markdown, {})
 }
 
@@ -58,7 +68,7 @@ export function runSpecSuite(
 
     for (const e of examples) {
       it(`${suiteId} · ${e.section} · example ${e.example}`, () => {
-        const got = normalizeSpecHtml(renderForSpec(e.markdown))
+        const got = normalizeSpecHtml(renderForSpec(e.markdown, e.extension))
         const want = normalizeSpecHtml(e.html)
         const reason = whitelist[String(e.example)]
         if (reason === undefined) {

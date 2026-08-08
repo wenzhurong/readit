@@ -2,6 +2,23 @@ import MarkdownItConstructor from 'markdown-it'
 import type { MarkdownIt } from 'markdown-it'
 import type { RenderOptions } from './types.js'
 
+import { applyStrikethrough } from './rules/strikethrough.js'
+import { applyTableAlign, applyTableWrapper } from './rules/table.js'
+import { applyAutolink } from './rules/autolink.js'
+import { applyTagfilter } from './rules/tagfilter.js'
+import { applyFrontmatter } from './rules/frontmatter.js'
+import { applyFootnote } from './rules/footnote.js'
+import { applyMathInline } from './rules/math-inline.js'
+import { applyEmoji } from './rules/emoji.js'
+import { applyAlerts } from './rules/alerts.js'
+import { applyTaskList } from './rules/tasklist.js'
+import { applyHeadingAnchors } from './rules/heading.js'
+import { applyDirAuto } from './rules/dirauto.js'
+import { applyDecorate } from './rules/decorate.js'
+import { applyCodeBlock } from './rules/codeblock.js'
+import { applySourceLine } from './rules/sourceline.js'
+import { applyRawHtmlPolicy } from './sanitize.js'
+
 /** 一条渲染规则。文件位于 src/rules/<name>.ts，形如 export function applyXxx(md: MarkdownIt): void */
 export type Rule = (md: MarkdownIt) => void
 
@@ -9,20 +26,84 @@ export type Rule = (md: MarkdownIt) => void
  * 语义规则：改变 CommonMark/GFM **解析或语义**结果的规则。
  * cmark-gfm 的 spec.txt 对这些有明确期望，所以 L1 规格套件必须带上它们。
  * 例：GFM 扩展自动链接、tagfilter、表格 align 属性、<s> -> <del>。
+ *
+ * 顺序在这四条之间不重要——彼此互不依赖，没有测出任何顺序耦合。
  */
-export const SEMANTIC_RULES: Rule[] = []
+export const SEMANTIC_RULES: Rule[] = [
+  applyStrikethrough,
+  applyTableAlign,
+  applyAutolink,
+  applyTagfilter,
+]
 
 /**
  * 外形规则：只往输出上贴 GitHub 特有的外壳/属性，不改变解析语义。
  * 例：dir="auto"、标题锚点 wrapper、<markdown-accessiblity-table>、代码块 wrapper、data-line。
  * L1 规格套件**不**加载它们 —— 加载了会让 672 条 GFM 里的绝大多数无条件失败，
  * 「672/672 减白名单」那条验收线就不再可达。它们由 L2 黄金文件套件负责。
+ *
+ * `applyCodeBlock` 与 `applyRawHtmlPolicy` 需要 `opts`（highlighter / allowDangerousHtml），
+ * 不匹配 `Rule = (md) => void` 的签名，因此不放进这个数组——它们在 `createEngine` 里单独调用。
+ *
+ * 顺序里三处真实耦合（其余顺序只为可读性，互换不影响正确性，已用集成测试验证）：
+ *  1. applyDirAuto 必须在 applyTaskList 之后：dirauto.ts 靠 `contains-task-list`
+ *     这个 class 跳过任务列表的 <ul>，而这个 class 是 tasklist 的核心规则通过
+ *     `state.core.ruler.push` 设置的——两者都用 push，注册顺序 == 执行顺序。
+ *  2. applyHeadingAnchors 必须在 applyDirAuto 之前：markdown-it 按 token.attrs
+ *     数组顺序序列化属性，GitHub 发的是 `class` 在 `dir` 之前
+ *     （`<h1 class="heading-element" dir="auto">`），而两者都在 heading_open
+ *     token 上调用 attrSet，同样都用 push。
+ *  3. applySourceLine 放最后：它给带 map 的块级 token 补 `data-line`，且同样用
+ *     attrSet。集成测试证实了这一点对 `<p dir="auto" data-line="...">` 成立
+ *     ——如果 dirAuto 在它之后跑，data-line 就不会是最后一个属性。
+ *     但 alerts.ts 的 alert_open 和 codeblock.ts 的 fence/code_block 渲染器
+ *     是手工拼字符串读 `attrGet('data-line')`，与数组位置无关，所以「必须最后」
+ *     这条理由对它们不成立——sourceline.ts 自己的注释已经把这个边界说清楚了，
+ *     这里不重复验证，只是不能拿它们来证伪「最后」这个默认策略。
  */
-export const SHAPE_RULES: Rule[] = []
+export const SHAPE_RULES: Rule[] = [
+  applyFrontmatter,
+  applyFootnote,
+  applyMathInline,
+  applyEmoji,
+  applyAlerts,
+  applyTableWrapper,
+  applyTaskList,
+  applyHeadingAnchors,
+  applyDirAuto, // ← 必须在 applyTaskList 与 applyHeadingAnchors 之后（见上方注释 #1 #2）
+  applyDecorate,
+  applySourceLine, // ← 必须最后（见上方注释 #3）
+]
 
-function baseEngine(opts: RenderOptions): MarkdownIt {
+/**
+ * readit 自己生成的、含 class 的原样 HTML 统一走这个 token 类型。
+ * 见 C3(a)：用 html_inline / html_block 的话，class 会被 applyRawHtmlPolicy 的
+ * walker 当成用户写的 class 剥掉——emoji 规则在起草集成时真的踩到过这个 bug。
+ *
+ * 只在 createEngine 里注册一次。createSpecEngine 不需要它：SEMANTIC_RULES 四条
+ * 规则没有一条会发 readit_raw token。各规则文件里仍保留的 `??=` 防御性注册
+ * 是幂等的，可以留着（standalone 单测直接 new MarkdownIt().use(applyXxx) 时
+ * 还要靠它们）。
+ */
+function registerReaditRaw(md: MarkdownIt): void {
+  md.renderer.rules.readit_raw ??= (tokens, idx) => tokens[idx]!.content
+}
+
+/**
+ * 两条引擎共用的基础实例。
+ *
+ * `html: true`是硬编码，不跟着 `opts.allowDangerousHtml` 走——`sanitize.ts` 的
+ * `applyRawHtmlPolicy` 自己的文档写得很清楚：「markdown-it must always run
+ * with html: true; the safety comes from here, not from the parser.」如果这里
+ * 按 `opts.allowDangerousHtml` 置 `html`，那么默认选项（`allowDangerousHtml:
+ * false`）下 markdown-it 根本不会把原始 HTML 切成 html_block/html_inline
+ * token，`applySanitize` 的 walker 就找不到任何目标可清洗，原始 HTML 反而会被
+ * markdown-it 自身的文本转义直接吞掉——集成测试跑通之前这里原来就是
+ * `html: opts.allowDangerousHtml`，是本任务发现并修的第一处装配 bug。
+ */
+function baseEngine(): MarkdownIt {
   return new MarkdownItConstructor({
-    html: opts.allowDangerousHtml,
+    html: true,
     xhtmlOut: false,
     breaks: false,
     langPrefix: 'language-',
@@ -35,15 +116,59 @@ function baseEngine(opts: RenderOptions): MarkdownIt {
 
 /** 完整引擎：语义规则 + 外形规则。render() 走这条。 */
 export function createEngine(opts: RenderOptions): MarkdownIt {
-  const md = baseEngine(opts)
+  const md = baseEngine()
+  registerReaditRaw(md)
   for (const apply of SEMANTIC_RULES) apply(md)
   for (const apply of SHAPE_RULES) apply(md)
+  applyCodeBlock(md, opts.highlighter)
+  applyRawHtmlPolicy(md, opts.allowDangerousHtml)
   return md
 }
 
-/** 规格一致性引擎：只加载语义规则。仅供 test/spec/ 下的 L1 套件使用。 */
-export function createSpecEngine(opts: RenderOptions): MarkdownIt {
-  const md = baseEngine(opts)
-  for (const apply of SEMANTIC_RULES) apply(md)
+/**
+ * 规格一致性引擎：只加载语义规则。仅供 test/spec/ 下的 L1 套件使用。
+ *
+ * 不调用 `applyRawHtmlPolicy`：L1 套件（见 test/spec/harness.ts 的
+ * `renderForSpec`）总是以 `allowDangerousHtml: true` 调用本函数，且规格假定
+ * 原始 HTML 透传——markdown-it 在 `html: true` 且没有渲染器覆写的情况下，
+ * 对 html_block/html_inline 的默认行为本来就是原样输出 token.content，
+ * 完全等价于「透传」，不需要再套一层策略。
+ *
+ * `rules` 默认等于 `SEMANTIC_RULES`（保持原有「规格引擎 = 全部语义规则」的行为，
+ * 集成测试 `createSpecEngine loads only the semantic slot` 依赖这个默认值）。
+ * test/spec/harness.ts 会显式传一个只含单条规则（或空）的子集——见下方
+ * `SEMANTIC_RULE_BY_EXTENSION` 的文档注释，这是 Task 32a 修复 L1 套件结构性
+ * 缺口所需要的挂钩。
+ */
+export function createSpecEngine(
+  opts: RenderOptions,
+  rules: readonly Rule[] = SEMANTIC_RULES,
+): MarkdownIt {
+  void opts
+  const md = baseEngine()
+  for (const apply of rules) apply(md)
   return md
+}
+
+/**
+ * SEMANTIC_RULES 里每条规则对应的 cmark-gfm 扩展名，取自 spec.txt 围栏行的
+ * info string（如 `` ```````... example autolink ``，见 scripts/fetch-specs.ts
+ * 的 `parseGfmSpec`）。
+ *
+ * 存在原因（Task 32a 的结构性发现）：cmark-gfm 自己的 spec 是**逐例**按 info
+ * string 挑扩展生成期望输出的——672 个 GFM 例子里 648 个 info 为空，是用**不带
+ * 任何扩展**的基线解析器（含 CommonMark 本身，652 例，同样零扩展）生成的。
+ * `createSpecEngine` 若无条件加载全部 SEMANTIC_RULES，`applyAutolink` /
+ * `applyTagfilter` 会污染那 648 个空 info 例子——包括 GFM 自己的「Autolinks」
+ * （非扩展小节）与两套规格的「HTML blocks」小节——CommonMark 套件因为零扩展，
+ * 污染面是全部 652 例。
+ *
+ * `disabled`（cmark-gfm 自己的 runner 也跳过的 2 个任务列表例子）与空串一样，
+ * 都不映射到任何规则——两者都应该用零扩展的基线引擎渲染。
+ */
+export const SEMANTIC_RULE_BY_EXTENSION: Readonly<Record<string, Rule>> = {
+  table: applyTableAlign,
+  autolink: applyAutolink,
+  strikethrough: applyStrikethrough,
+  tagfilter: applyTagfilter,
 }

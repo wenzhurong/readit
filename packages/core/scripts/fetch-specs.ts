@@ -12,6 +12,13 @@ export interface SpecExample {
   html: string
   example: number
   section: string
+  /**
+   * GFM 扩展名，取自围栏行 info string（如 `` ```````... example autolink ``）。
+   * 空串表示这条例子在 cmark-gfm 自己的 runner 里是用**不带任何扩展**的基线解析器
+   * 生成的（672 例里的 648 例）。CommonMark 规格本身没有扩展概念，恒为空串。
+   * L1 套件的 harness 靠这个字段逐例决定该加载哪条 SEMANTIC 规则——见 test/spec/harness.ts。
+   */
+  extension: string
 }
 
 const CM_URL = 'https://spec.commonmark.org/0.31.2/spec.json'
@@ -52,6 +59,7 @@ export function parseCommonMarkSpec(json: string): SpecExample[] {
     html: e.html,
     example: e.example,
     section: e.section,
+    extension: '',
   }))
 }
 
@@ -74,6 +82,11 @@ export async function fetchCommonMark(outPath: string): Promise<number> {
  *    实测：672 例中有 24 例带非空 info（table 8 / autolink 11 / disabled 2 /
  *    strikethrough 2 / tagfilter 1），那 24 例正好是全部 GFM 扩展例子。
  *    markdown-it 自己的 harness 用那个等号过滤，会静默丢光它们。
+ *    ⚠️ Task 32a 发现：只是"不过滤"不够——info string 本身若不存进产出对象，
+ *    下游仍然无从得知哪些例子该套哪个扩展，648 个空 info 例子会被无条件规则污染
+ *    （applyAutolink/applyTagfilter 让 GFM 自己的非扩展 Autolinks/HTML blocks 小节
+ *    也失败）。所以这里把 info string trim 后存进 `extension` 字段，供
+ *    test/spec/harness.ts 逐例只加载该例声明的 SEMANTIC 规则。
  * 3. markdown 与 html 两侧都要把 U+2192 (→) 换回 Tab。
  */
 export function parseGfmSpec(text: string): SpecExample[] {
@@ -83,12 +96,19 @@ export function parseGfmSpec(text: string): SpecExample[] {
   const body = text.slice(0, endAt)
 
   const exampleRe = /^`{32} example(.*)\n([\s\S]*?)^\.\n([\s\S]*?)^`{32}$/gm
-  const raw: Array<{ markdown: string; html: string; start: number; end: number }> = []
+  const raw: Array<{
+    markdown: string
+    html: string
+    extension: string
+    start: number
+    end: number
+  }> = []
   let m: RegExpExecArray | null
   while ((m = exampleRe.exec(body)) !== null) {
     raw.push({
       markdown: m[2]!.replace(/→/g, '\t'),
       html: m[3]!.replace(/→/g, '\t'),
+      extension: m[1]!.trim(),
       start: m.index,
       end: m.index + m[0]!.length,
     })
@@ -106,7 +126,7 @@ export function parseGfmSpec(text: string): SpecExample[] {
       if (h.at < e.start) section = h.name
       else break
     }
-    return { markdown: e.markdown, html: e.html, example: i + 1, section }
+    return { markdown: e.markdown, html: e.html, example: i + 1, section, extension: e.extension }
   })
 }
 
