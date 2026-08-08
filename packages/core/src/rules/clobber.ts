@@ -81,6 +81,10 @@ export type RawHtmlTransform = (tree: Root, kinds: readonly ChunkKind[], env: En
  *
  * `render()` must be total over arbitrary untrusted Markdown, so this is a
  * degradation and never a throw. Both degradations are pinned by tests.
+ *
+ * CONTRACT: the returned array MUST have exactly `chunks.length` entries, one
+ * per input chunk in the same order. `transformRawHtmlChunks` enforces this and
+ * throws otherwise — see the note there for why a quiet fallback is worse.
  */
 export type RawHtmlFallback = (
   chunks: readonly string[],
@@ -101,8 +105,26 @@ export function transformRawHtmlChunks(
   if (chunks.length === 0) return []
   const tree = fromHtml(chunks.join(SENTINEL), { fragment: true })
   const parts = toHtml(transform(tree, kinds, env)).split(SENTINEL)
-  if (parts.length !== chunks.length) return fallback(chunks, kinds, env)
-  return parts
+  if (parts.length === chunks.length) return parts
+
+  const out = fallback(chunks, kinds, env)
+  // The `RawHtmlFallback` contract, enforced rather than assumed. Both
+  // in-repo fallbacks return exactly `chunks.length` by construction
+  // (`[...chunks]` and `chunks.map(...)`), but the parameter is
+  // caller-supplied and nothing else checks it. A short return would leave
+  // `applyRawHtmlTransform` with no replacement for the trailing tokens, and
+  // the only quiet options there are both bad: keep the token's raw author
+  // HTML (the sanitizer's whole purpose defeated, silently) or blank it
+  // (content deleted, silently). This is a bug in readit's own code, not
+  // something document input can provoke — every fallback reaching here is
+  // one of this repo's — so failing loudly does not cost `render()` its
+  // totality over untrusted Markdown.
+  if (out.length !== chunks.length) {
+    throw new Error(
+      `readit: RawHtmlFallback returned ${out.length} chunks for ${chunks.length} inputs`,
+    )
+  }
+  return out
 }
 
 /** Walks the token stream in document order and rewrites every raw HTML chunk. */
@@ -136,7 +158,13 @@ export function applyRawHtmlTransform(
       state.env,
       fallback,
     )
-    for (const [i, token] of targets.entries()) token.content = out[i] ?? token.content
+    // `out[i]` is never `undefined`: `transformRawHtmlChunks` returns either
+    // exactly `chunks.length` split parts or a fallback it has length-checked.
+    // `noUncheckedIndexedAccess` cannot see that, and the `?? token.content`
+    // this used to carry was fail-OPEN — a short return would have silently
+    // reverted those tokens to raw author HTML. The check now lives at the
+    // contract boundary, so there is nothing left to fall back to here.
+    for (const [i, token] of targets.entries()) token.content = out[i] as string
     return true
   })
 }

@@ -4,6 +4,7 @@ import GithubSlugger from 'github-slugger'
 import type { Root } from 'hast'
 import {
   applyClobber,
+  applyRawHtmlTransform,
   prefixUserContent,
   transformRawHtmlChunks,
   type ChunkKind,
@@ -145,6 +146,53 @@ describe('clobber', () => {
       '',
     ])
     expect(seen).toEqual([{ kinds, env }])
+  })
+
+  /**
+   * The `RawHtmlFallback` length contract, enforced rather than assumed.
+   *
+   * `applyRawHtmlTransform` assigns `out[i]` to `targets[i].content`. When that
+   * read was written `out[i] ?? token.content` it was fail-OPEN: a fallback
+   * returning fewer entries than there were chunks left the trailing tokens
+   * holding their RAW AUTHOR HTML, which for the sanitizer is precisely the
+   * bytes that must never be emitted — and it did so with no diagnostic at all.
+   * Blanking them instead would be equally quiet, just lossy in the other
+   * direction. Neither of the two in-repo fallbacks can return a short array
+   * (`[...chunks]` and `chunks.map(...)` are length-preserving by
+   * construction), but the parameter is caller-supplied and nothing checked it,
+   * so the guard lives at the contract boundary where the fallback is called.
+   *
+   * This is unreachable from document input — every fallback that gets here is
+   * one of this repo's own — so it does not cost `render()` its totality.
+   */
+  it('throws on a fallback that returns fewer entries than there were chunks', () => {
+    const short: RawHtmlFallback = (chunks) => chunks.slice(1)
+    expect(() =>
+      transformRawHtmlChunks(['<i>', '</i>'], dropEverything, [], {}, short),
+    ).toThrow(/RawHtmlFallback returned 1 chunks for 2 inputs/)
+  })
+
+  it('throws on a fallback that returns more entries than there were chunks', () => {
+    const long: RawHtmlFallback = (chunks) => [...chunks, 'extra']
+    expect(() => transformRawHtmlChunks(['<i>', '</i>'], dropEverything, [], {}, long)).toThrow(
+      /RawHtmlFallback returned 3 chunks for 2 inputs/,
+    )
+  })
+
+  /**
+   * The same contract at the site that actually consumed the short array. With
+   * `out[i] ?? token.content`, the unmatched second token kept its author
+   * bytes: this document used to render `<p>a [sanitized]x</i> b</p>` — the
+   * fallback's own output for chunk 0 and the RAW `</i>` for chunk 1, from a
+   * transform whose entire job was to not do that.
+   */
+  it('never reverts a token to its raw author HTML when a fallback returns short', () => {
+    const m = new MarkdownIt({ html: true })
+    const short: RawHtmlFallback = (chunks) => chunks.slice(0, 1).map(() => '[sanitized]')
+    applyRawHtmlTransform(m, 'readit_test_short_fallback', dropEverything, short)
+    expect(() => m.render('a <i>x</i> b\n')).toThrow(
+      /RawHtmlFallback returned 1 chunks for 2 inputs/,
+    )
   })
 
   // The same transform over a non-table split pair keeps both tags where the

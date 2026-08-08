@@ -76,16 +76,29 @@ export function filterDisallowedTags(html: string): string {
  *
  * What a future rule must NOT do is assume this rule wraps it.
  */
-export function applyTagfilter(md: MarkdownIt): void {
-  const prevBlock: RendererRule | undefined = md.renderer.rules.html_block
-  md.renderer.rules.html_block = (tokens, idx, opts, env, self) => {
-    const out = prevBlock ? prevBlock(tokens, idx, opts, env, self) : (tokens[idx]?.content ?? '')
-    return filterDisallowedTags(out)
-  }
+/**
+ * Wrap one renderer rule in `filterDisallowedTags`, chaining the rule that is
+ * already there.
+ *
+ * There is deliberately no "no previous rule" arm. `noUncheckedIndexedAccess`
+ * types `rules[name]` as possibly `undefined`, but markdown-it seeds
+ * `Renderer.rules` from its own `default_rules`, and `html_block` /
+ * `html_inline` are two of the nine entries in it — verified on 15.0.0 for a
+ * bare `new MarkdownIt()` as well as for the configured instance `engine.ts`
+ * builds. A render-time fallback reading `tokens[idx].content` was therefore
+ * dead code that could never be exercised or tested. It is replaced by a loud
+ * assertion at REGISTRATION time: if a future markdown-it stops seeding these,
+ * the engine fails to build instead of silently rendering through an untested
+ * path. This cannot be reached from document input, so `render()` stays total.
+ */
+function chainFilter(md: MarkdownIt, name: 'html_block' | 'html_inline'): void {
+  const prev: RendererRule | undefined = md.renderer.rules[name]
+  if (!prev) throw new Error(`readit: markdown-it does not define renderer.rules.${name}`)
+  md.renderer.rules[name] = (tokens, idx, opts, env, self) =>
+    filterDisallowedTags(prev(tokens, idx, opts, env, self))
+}
 
-  const prevInline: RendererRule | undefined = md.renderer.rules.html_inline
-  md.renderer.rules.html_inline = (tokens, idx, opts, env, self) => {
-    const out = prevInline ? prevInline(tokens, idx, opts, env, self) : (tokens[idx]?.content ?? '')
-    return filterDisallowedTags(out)
-  }
+export function applyTagfilter(md: MarkdownIt): void {
+  chainFilter(md, 'html_block')
+  chainFilter(md, 'html_inline')
 }
