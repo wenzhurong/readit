@@ -8,6 +8,7 @@
     "test": "vitest run",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "oracle:refresh": "tsx packages/core/scripts/oracle-refresh.ts",
+    "oracle:manifest": "tsx packages/core/scripts/build-oracle-manifest.ts",
     "gen:svg-stylesheet": "vite-node tools/gen-svg-stylesheet.ts",
     "refresh:math-golden": "vite-node tools/refresh-math-golden.ts"
   },

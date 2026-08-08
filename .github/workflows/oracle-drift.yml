@@ -1,0 +1,81 @@
+name: oracle-drift
+
+# SPEC 13.4: nightly, allowed to fail loudly. A non-empty diff under
+# packages/core/test/fixtures/ means GitHub changed its renderer. That is
+# upstream-drift intelligence, not maintenance tax, so it opens a PR instead
+# of silently going stale.
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: oracle-drift
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.20.0'
+          cache: npm
+
+      - run: npm ci
+
+      # PAT is mandatory (SPEC 13.4). GITHUB_TOKEN gives 1000 req/hour/repo, which is
+      # enough for this 60-file corpus, but the secret must be a fine-grained PAT with
+      # public read access — ORACLE_PAT — set by a repo admin; GITHUB_TOKEN is only the
+      # fallback so this workflow does not silently no-op on a repo without the PAT set.
+      - name: Refresh fixtures from the oracle
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORACLE_PAT || secrets.GITHUB_TOKEN }}
+        run: npm run oracle:refresh
+
+      - name: Detect drift
+        id: drift
+        run: |
+          if git diff --exit-code -- packages/core/test/fixtures/; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat -- packages/core/test/fixtures/ > drift.txt
+          fi
+
+      # The refreshed fixtures are the new truth. If they no longer match our renderer, the
+      # PR body carries the failing test output so a human can triage without re-running
+      # anything. `continue-on-error` because a red corpus suite here is the expected,
+      # informative outcome (drift found), not a workflow failure.
+      - name: Re-run the corpus suite against the refreshed fixtures
+        if: steps.drift.outputs.changed == 'true'
+        continue-on-error: true
+        run: npx vitest run packages/core/test/corpus.test.ts 2>&1 | tee corpus-after-refresh.txt
+
+      - name: Open a drift PR
+        if: steps.drift.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: oracle-drift/auto
+          base: main
+          commit-message: 'test(fixtures): refresh oracle fixtures (GitHub renderer drift)'
+          title: 'Oracle drift: GitHub renderer output changed'
+          body-path: drift.txt
+          labels: oracle-drift
+          add-paths: |
+            packages/core/test/fixtures/
+
+      - name: Upload triage artefacts
+        if: steps.drift.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-drift-triage
+          path: |
+            drift.txt
+            corpus-after-refresh.txt
