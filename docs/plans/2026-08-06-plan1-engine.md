@@ -9733,11 +9733,11 @@ cd packages/core && npx vitest run
 
 | # | 验收线 | 目标 | 实测 |
 |---|--------|------|------|
-| 1 | GFM 0.29 规格 | 672/672 减白名单，且 TEMPORARY 条目**已清空**（Task 10–13 应该把 autolink 11 条、tagfilter 1 条、table 1 条、strikethrough 1 条全部修好） | |
-| 2 | CommonMark 0.31.2 规格 | 652/652 减白名单（仅 3 条 PERMANENT） | |
-| 3 | 语料归一化 diff | 58 个语料 100% 通过 | |
-| 4 | 美元护栏 | `github` 模式 154/159 + 5 条具名偏离；`strict` 模式 147/159 | |
-| 5 | 数学确定性 | 重复 + 顺序置换 + 跨进程三类全绿；10 条 README 构造全部**同步**渲染成功 | |
+| 1 | GFM 0.29 规格 | 672/672 减白名单，且 TEMPORARY 条目**已清空**（Task 10–13 应该把 autolink 11 条、tagfilter 1 条、table 1 条、strikethrough 1 条全部修好） | **MET。** `npx vitest run test/spec/gfm.test.ts` → 674 tests passed（672 examples + 2 元测试）。`known-failures.json` 的 `gfm-0.29` 段 14 条，全部 PERMANENT，`TEMPORARY` 计数 = 0（`grep -c TEMPORARY` → 0）。658/672 字节级精确匹配 + 14 条白名单（对照棘轮反向断言：白名单条目若转为匹配会使测试反过来失败，防腐烂）。14 条 PERMANENT 每条都附具体理由（9 条 emphasis 0.29/0.31.2 版本漂移、3 条空引用块内部换行的上游渲染器行为、2 条 cmark-gfm 自己标记 `disabled` 的任务列表例子）。Task 10–13 原先要修的 14 条 TEMPORARY（autolink 11 + tagfilter 1 + table 1 + strikethrough 1）已确认全部修好、清出白名单，不是被重新分类成 PERMANENT 蒙混过去。 |
+| 2 | CommonMark 0.31.2 规格 | 652/652 减白名单（仅 3 条 PERMANENT） | **MET。** `npx vitest run test/spec/spec.test.ts` → 654 tests passed（652 examples + 2 元测试）。`known-failures.json` 的 `commonmark-0.31.2` 段恰好 3 条，全部 PERMANENT（同一空引用块内部换行问题，markdown-it 15 上游渲染器行为，§13.1 归一化器第 9 步折叠），649/652 精确匹配。 |
+| 3 | 语料归一化 diff | 58 个语料 100% 通过 | **NOT MET。** 实测 **45/60**（目标文本写的"58"是本表起草时的估计值；语料在 Task 24 定稿后实际收敛到 60 个文件，落在 SPEC 13.3 规定的 45–60 目标带内——见 `corpus.test.ts` 的 band 断言）。`npx vitest run test/corpus.test.ts` → 64 tests passed（60 语料 + 4 元测试）全绿，**但这是棘轮通过，不是 diff 通过**：15 个文件被记录在 `known-mismatches.json` 里，测试断言的是"这些文件继续且仍然不匹配"（反向棘轮），不是"文件匹配"。用独立脚本绕过棘轮直接跑 `compareToFixture`，得到 **45/60 真字节级匹配、15/60 真不匹配**，不匹配文件名单与 `known-mismatches.json` 的 15 个键逐一对应，无陈旧条目（无"在白名单里但其实已经匹配"的情况）。详见下方"验收线 2 缺口核算"。 |
+| 4 | 美元护栏 | `github` 模式 154/159 + 5 条具名偏离；`strict` 模式 147/159 | **MET。** `npx vitest run test/inline-math/corpus.test.ts --reporter=verbose` → 166 tests passed。`github` 模式：154/159 一致 + 5 条具名偏离（M025/M047/M082/M083/M096，每条都是"断言与 GitHub 不同"的独立 `it`，不是跳过），与目标完全一致。`strict` 模式：147/159（154 减去 7 条 STRICT_ONLY_LOSSES：PRE00/M036/M048/M049/M077/M079/M088），与目标完全一致。 |
+| 5 | 数学确定性 | 重复 + 顺序置换 + 跨进程三类全绿；10 条 README 构造全部**同步**渲染成功 | **MET。** `npx vitest run packages/math/test/determinism.test.ts --reporter=verbose` → 5/5 passed：(a) 重复渲染字节相同、(b) 顺序置换（identity/reverse/+1/+2/+3 五种排列）逐一相同、(b2) `\newcommand` 宏不跨 `convert()` 泄漏、(c) 两个独立 node 子进程的 SHA-256 一致、(d) golden constructs 在置换下也稳定。`npx vitest run packages/math/test/golden-readme-constructs.test.ts` → 11/11 passed：10 条 README 构造全部同步渲染成功并匹配各自 golden 文件，外加 1 条"无懒加载字体块"整体检查。 |
 
 ⚠️ 第 1 行的 TEMPORARY 清空是硬要求。如果跑完发现 TEMPORARY 里还有剩余，说明 Task 10–13 有没做完的部分，**不要把它改成 PERMANENT 蒙混过去**——PERMANENT 的定义是「任何 JS 解析器都不可能匹配」，autolink 和 tagfilter 都不属于这一类。
 
