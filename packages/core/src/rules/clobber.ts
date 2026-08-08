@@ -21,16 +21,24 @@ export const CLOBBER_PREFIX = 'user-content-'
  *
  * So the whole run is joined with a text sentinel, parsed once, transformed,
  * serialised and split back. The sentinel is plain text, so it survives the
- * round trip everywhere text is allowed. Two measured places where it does not,
- * both pinned by tests rather than silently mis-handled:
+ * round trip everywhere text is allowed. Three measured places where it does
+ * not, all pinned by tests rather than silently mis-handled:
  *
  *  - inside a `<table>`, where the HTML parser foster-parents it out, so the
  *    run still splits into the right number of parts but the tags move;
- *  - inside a `<template>`, whose children hast parks under `.content` rather
- *    than `.children`. A transform that DELETES the element deletes that
- *    fragment with it — `hast-util-sanitize` does, `template` is absent from
- *    `defaultSchema.tagNames` — and the separator goes too, so the run splits
- *    into FEWER parts than there were chunks. See `RawHtmlFallback`.
+ *  - inside an element the TRANSFORM deletes together with its content, which
+ *    deletes the separator too, so the run splits into FEWER parts than there
+ *    were chunks. Which elements those are is the transform's business, not
+ *    this module's — for `sanitizeTree` it is `defaultSchema.strip` plus
+ *    `<template>`, enumerated and pinned in `sanitize.ts`. See
+ *    `RawHtmlFallback`;
+ *  - inside a `<col>`, where the PARSER drops the separator before any
+ *    transform runs: parse5's fragment parser switches to "in column group"
+ *    insertion mode, which discards character tokens. Unlike the case above
+ *    this is nothing the transform did, so it reaches EVERY caller —
+ *    `applyClobber` and `applyRawShape` as much as `applySanitize`. It is the
+ *    only tag that does this out of 134 swept in seven chunk shapes
+ *    (test/sanitize.test.ts).
  *
  * The sentinel uses U+E000 (private use area) so it can never collide with real
  * document text, and unlike ASCII whitespace or NUL it survives the HTML
@@ -63,7 +71,7 @@ export type RawHtmlTransform = (tree: Root, kinds: readonly ChunkKind[], env: En
 
 /**
  * What to emit when the transformed tree no longer splits back into one part
- * per input chunk (the `<template>` case above). Same arguments as the
+ * per input chunk (the second and third cases above). Same arguments as the
  * transform, minus the tree that is now known to be unusable.
  *
  * This is per-caller and NOT a default the whole module can pick, because the
@@ -75,6 +83,12 @@ export type RawHtmlTransform = (tree: Root, kinds: readonly ChunkKind[], env: En
  *    runs under `allowDangerousHtml: true`, where author HTML passes through by
  *    design. Re-emitting the input is therefore exactly as safe as the stage
  *    that produced it; the only loss is the decoration/prefixing.
+ *
+ *    That loss is DOCUMENT-WIDE, because every raw chunk shares one run: a
+ *    single stray `<col>` costs the whole document its `user-content-` prefixes
+ *    (`applyClobber`) or its raw-HTML decorations (`applyRawShape`). Pinned by
+ *    test/rules/clobber.test.ts. Per-chunk degradation was considered and
+ *    rejected for these two — see the note on `keepChunksUnchanged` below.
  *  - `applySanitize` must NOT. Handing author HTML back unchanged from the
  *    sanitizer would convert a crash into an XSS hole, which is strictly worse
  *    than the crash. It supplies its own fallback — see `sanitize.ts`.
@@ -92,7 +106,38 @@ export type RawHtmlFallback = (
   env: Env,
 ) => string[]
 
-/** The default fallback: re-emit the run exactly as it came in. */
+/**
+ * The default fallback: re-emit the run exactly as it came in.
+ *
+ * ## Why `applyClobber`/`applyRawShape` keep this instead of degrading
+ * ## per-chunk the way the sanitizer does
+ *
+ * The sanitizer had no choice: re-emitting author HTML from a sanitizer is an
+ * XSS hole, so it pays the structural cost. Neither of these two callers has
+ * that forcing function, and the cost is real. Measured 2026-08-08 on
+ * `<col>\n\n<div id="a">\n\nwrapped **md**\n\n</div>\n`:
+ *
+ *     keepChunksUnchanged  <col>\n<div id="a">\n<p>wrapped <strong>md</strong></p>\n</div>\n
+ *     per-chunk prefixing  <col>\n<div id="user-content-a">\n</div><p>wrapped <strong>md</strong></p>\n\n
+ *
+ * A chunk is an unbalanced fragment, so `prefixUserContent('<div id="a">\n')`
+ * re-serialises as `<div id="user-content-a">\n</div>` and the matching
+ * `</div>\n` chunk becomes `'\n'`. The wrapper closes before the content it
+ * wrapped and the author's markup is silently restructured — in
+ * `allowDangerousHtml: true`, whose entire contract is that the author's HTML
+ * passes through as written. Trading a lost `user-content-` prefix for a
+ * relocated `</div>` is a bad trade, and the prefix is not a safety boundary
+ * in this mode anyway: `<img src=x onerror="alert(1)">` already renders
+ * verbatim there (measured), so an unprefixed `id` cannot make it worse.
+ *
+ * `applyRawShape` follows for the same reason plus one more: it runs in BOTH
+ * modes, and in the default one its input has already been sanitized, so the
+ * only thing per-chunk degradation could buy is decorations on a tree that has
+ * already lost the structure they attach to.
+ *
+ * What this does cost, and what the tests pin, is blast radius: the loss is
+ * document-wide, not local to the offending element.
+ */
 export const keepChunksUnchanged: RawHtmlFallback = (chunks) => [...chunks]
 
 export function transformRawHtmlChunks(

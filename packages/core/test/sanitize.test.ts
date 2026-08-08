@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import MarkdownIt from 'markdown-it'
+import { defaultSchema } from 'hast-util-sanitize'
 import { applyAlerts } from '../src/rules/alerts.js'
 import { applyHeadingAnchors, OCTICON_LINK } from '../src/rules/heading.js'
 import { applyCodeBlock } from '../src/rules/codeblock.js'
 import { applyEmoji } from '../src/rules/emoji.js'
-import { applyRawHtmlPolicy, sanitizeUserHtml } from '../src/sanitize.js'
+import {
+  applyRawHtmlPolicy,
+  sanitizeTree,
+  sanitizeUserHtml,
+  STRIPPED_WITH_CONTENT,
+} from '../src/sanitize.js'
+import { transformRawHtmlChunks } from '../src/rules/clobber.js'
 import { render } from '../src/index.js'
 
 function md(allowDangerousHtml: boolean) {
@@ -139,20 +146,33 @@ describe('sanitize', () => {
 })
 
 /**
- * `<template>` is the ONE element in HTML5 whose children hast parks under
- * `.content` instead of `.children`, and the ONE element (of 18 swept in both
- * block and inline position) that makes `transformRawHtmlChunks`'s split fail.
- * `defaultSchema.tagNames` has no `template`, so `hast-util-sanitize` deletes
- * the element together with its content fragment — and the run separator that
- * was sitting inside it goes too. The serialised tree then has fewer parts
- * than there were chunks.
+ * ## The complete trigger set, measured rather than asserted
  *
- * Until this suite existed that mismatch **threw**, so `render()` was a
- * partial function on a standard HTML5 element in the DEFAULT (safe) mode —
- * the mode every host uses, and the only mode that runs a sanitizer at all.
- * `allowDangerousHtml: true` never threw, because nothing drops the element
- * there. A crash on ordinary web-component documentation is a denial of
- * service on the host, so the mismatch degrades instead.
+ * The degradation below used to be described — here and in two comments in
+ * src/ — as "the `<template>` case". It is not. Two independent mechanisms make
+ * the run split fail, and the sweep in this suite is what pins them:
+ *
+ *  1. The TRANSFORM deletes an element together with its content, taking the
+ *     run separator with it. For `sanitizeTree` that is
+ *     `STRIPPED_WITH_CONTENT` — `defaultSchema.strip` (`['script']` on
+ *     hast-util-sanitize 5.0.2) plus `template`, whose children hast parks
+ *     under `.content` so there is nothing to unwrap. Merely being absent from
+ *     `tagNames` is NOT enough: `sanitize` unwraps those and keeps the
+ *     separator.
+ *  2. The PARSER drops the separator before any transform runs. `<col>` alone
+ *     does this, by putting parse5's fragment parser into "in column group"
+ *     insertion mode, where character tokens are discarded. It therefore
+ *     reaches every caller, not just the sanitizer — see
+ *     test/rules/clobber.test.ts.
+ *
+ * `<script>` matters most, because it makes the original crash reachable
+ * through a wholly ordinary document: `a <script>q</script> b` chunks to
+ * `["<script>","</script>"]` with no `<template>` in sight, and at the commit
+ * before the degradation landed it THREW. `render()` was a partial function in
+ * the DEFAULT (safe) mode — the mode every host uses, and the only mode that
+ * runs a sanitizer at all. `allowDangerousHtml: true` never threw, because
+ * nothing drops the element there. A crash is a denial of service on the host,
+ * so the mismatch degrades instead.
  *
  * The sanitizer's degradation is NOT "hand the chunks back unchanged" — that
  * would emit unsanitized author HTML, turning a crash into an XSS hole. It is
@@ -161,7 +181,62 @@ describe('sanitize', () => {
  * cross-chunk structure the join exists to preserve, which is exactly what
  * failed.
  */
-describe('KNOWN LIMITATION: <template> breaks the raw-HTML run split', () => {
+describe('KNOWN LIMITATION: the raw-HTML run split, and everything that breaks it', () => {
+  /**
+   * The sweep, derived from the dependency instead of hardcoded: a bump that
+   * adds an element to `defaultSchema.strip` widens the expectation
+   * automatically, and anything that starts triggering for some OTHER reason
+   * fails here. `col` is the one hand-written entry, because it is a parse5
+   * fact rather than a schema fact.
+   *
+   * Two chunk shapes per tag, matching how markdown-it really hands raw HTML
+   * over: a balanced pair, and a pair carrying an attribute.
+   */
+  const SWEPT_TAGS = `a abbr address article aside audio b base bdi bdo blockquote body br
+    button canvas caption cite code col colgroup data datalist dd del details dfn dialog div
+    dl dt em embed fieldset figcaption figure footer form frame frameset h1 h2 h3 h4 h5 h6
+    head header hgroup hr html i iframe img input ins kbd label legend li link main map mark
+    marquee math menu meta meter nav noembed noframes noscript object ol optgroup option
+    output p param picture plaintext pre progress q rp rt ruby s samp script search section
+    select slot small source span strike strong style sub summary sup svg table tbody td
+    template textarea tfoot th thead time title tr track u ul var video wbr xmp`.split(/\s+/)
+
+  it('exactly STRIPPED_WITH_CONTENT plus <col> breaks the split, and nothing else', () => {
+    const expected = [...new Set([...STRIPPED_WITH_CONTENT, 'col'])].sort()
+    const triggers = new Set<string>()
+    for (const tag of SWEPT_TAGS) {
+      for (const chunks of [
+        [`<${tag}>`, `</${tag}>`],
+        [`<${tag} id="i">`, `</${tag}>`],
+      ]) {
+        // `keepChunksUnchanged` would hide the failure; a sentinel value cannot.
+        const out = transformRawHtmlChunks(chunks, sanitizeTree, [], {}, (cs) => cs.map(() => 'DEGRADED'))
+        if (out[0] === 'DEGRADED') triggers.add(tag)
+      }
+    }
+    expect([...triggers].sort()).toEqual(expected)
+    // Guards the derivation itself: if this ever fails, `strip` changed and the
+    // comments naming `script` need re-reading, not just this expectation.
+    expect(defaultSchema.strip).toEqual(['script'])
+  })
+
+  /**
+   * The other half of mechanism 1, and the reason the trigger set is not simply
+   * "everything the schema rejects": an element absent from `tagNames` is
+   * UNWRAPPED, so its children — and the separator among them — survive.
+   */
+  it('an element the schema merely rejects is unwrapped and does not degrade', () => {
+    expect(defaultSchema.tagNames).not.toContain('marquee')
+    const out = transformRawHtmlChunks(
+      ['<marquee>', '</marquee>'],
+      sanitizeTree,
+      [],
+      {},
+      (cs) => cs.map(() => 'DEGRADED'),
+    )
+    expect(out[0]).not.toBe('DEGRADED')
+  })
+
   /**
    * Exact bytes, measured 2026-08-08 after the degradation landed. They are
    * NOT what GitHub emits and NOT what the joined pass would have emitted —
@@ -193,15 +268,73 @@ describe('KNOWN LIMITATION: <template> breaks the raw-HTML run split', () => {
   })
 
   /**
-   * The load-bearing assertion of this whole fix. A `<template>` anywhere in
-   * the document forces the degraded path for the WHOLE run — every
+   * `<script>`, the trigger every previous comment omitted and the one that
+   * makes the original crash reachable from an ordinary document. No
+   * `<template>` anywhere: `defaultSchema.strip` deletes the element WITH its
+   * content, so the separator goes exactly as it does for `<template>`.
+   *
+   * The output shape is surprising and is pinned for that reason: the script
+   * BODY comes out as visible text. It is not the sanitizer failing to strip
+   * it — markdown-it never handed it over. `a <script>q</script> b` is two
+   * `html_inline` tokens with the ordinary Markdown text `q` between them, so
+   * `q` was never part of a raw chunk and no sanitizer stage ever sees it. This
+   * is true on the JOINED path too, and is a property of readit's token-level
+   * seam rather than of the degradation.
+   */
+  it('inline <script>: degrades without any <template>, surfacing the body as text', () => {
+    expect(() => render('a <script>q</script> b\n')).not.toThrow()
+    expect(render('a <script>q</script> b\n')).toBe('<p dir="auto" data-line="0">a q b</p>\n')
+  })
+
+  /**
+   * Block position does NOT degrade, and the asymmetry is worth pinning
+   * alongside the inline case so nobody "fixes" one to match the other.
+   * CommonMark HTML block type 1 swallows everything up to `</script>`, so the
+   * whole element arrives as ONE `html_block` chunk. One chunk in, one part
+   * out — the split cannot fail, and the sanitizer simply deletes the element,
+   * body included. The visible-body wart is specific to the inline case, where
+   * markdown-it hands over two tokens with Markdown text between them.
+   */
+  it('block <script>: one chunk, so no degradation and the body goes too', () => {
+    const html = render('<script>alert(1)</script>\n')
+    expect(html).not.toContain('<script')
+    expect(html).not.toContain('&lt;script')
+    expect(html).not.toContain('alert(1)')
+    expect(html).toBe('\n')
+  })
+
+  /**
+   * `<col>`, the third trigger and the only one that is not the sanitizer's
+   * doing: parse5 drops the separator at PARSE time. Pinned here for the safe
+   * mode; test/rules/clobber.test.ts pins what it costs the dangerous mode,
+   * where no sanitizer runs and the degradation is therefore visible as lost
+   * `user-content-` prefixing.
+   */
+  it('<col> degrades the safe path too, though no transform deleted anything', () => {
+    expect(() => render('a <col> b <span id="CL">x</span>\n')).not.toThrow()
+    expect(render('a <col> b <span id="CL">x</span>\n')).toBe(
+      '<p dir="auto" data-line="0">a  b <span id="user-content-CL"></span>x</p>\n',
+    )
+  })
+
+  /**
+   * The load-bearing assertion of this whole fix. ANY trigger anywhere in the
+   * document forces the degraded path for the WHOLE run — every
    * html_block/html_inline token in the document shares one run — so the
    * degraded path has to be at least as safe as the normal one for raw HTML
-   * that has nothing to do with `<template>`.
+   * that has nothing to do with the trigger.
+   *
+   * Run once per trigger, one per mechanism, rather than for `<template>`
+   * alone: the inline `<script>` case is the ordinary-document one, and `<col>`
+   * arrives by the parser rather than the sanitizer.
    */
-  it('the degraded path still sanitizes: no author HTML escapes', () => {
+  it.each([
+    ['template', '<template>t</template>'],
+    ['script', 'a <script>q</script> b'],
+    ['col', 'a <col> b'],
+  ])('the degraded path still sanitizes with a %s trigger: no author HTML escapes', (_t, trigger) => {
     const html = render(
-      '<template>t</template>\n\n' +
+      `${trigger}\n\n` +
         '<img src="x.png" onerror="alert(1)" class="c" style="color:red">\n\n' +
         '<a href="javascript:alert(2)">j</a>\n\n' +
         '<span onclick="alert(3)">s</span>\n',
@@ -212,6 +345,7 @@ describe('KNOWN LIMITATION: <template> breaks the raw-HTML run split', () => {
     expect(html).not.toContain('style="color:red"')
     expect(html).not.toContain('class="c"')
     expect(html).not.toContain('<template>')
+    expect(html).not.toContain('<script')
   })
 
   /**
@@ -225,16 +359,30 @@ describe('KNOWN LIMITATION: <template> breaks the raw-HTML run split', () => {
     expect(render('<template>t</template>\n\n<div id="dup">d</div>\n')).toBe(
       '<p dir="auto" data-line="0">t</p>\n<div id="user-content-dup">d</div>\n',
     )
+    // Same for the two triggers the old comments never mentioned.
+    expect(render('a <script>q</script> b\n\n<div id="dup">d</div>\n')).toBe(
+      '<p dir="auto" data-line="0">a q b</p>\n<div id="user-content-dup">d</div>\n',
+    )
+    expect(render('a <col> b\n\n<div id="dup">d</div>\n')).toBe(
+      '<p dir="auto" data-line="0">a  b</p>\n<div id="user-content-dup">d</div>\n',
+    )
   })
 
   /**
-   * `allowDangerousHtml: true` never took the degraded path — `applyClobber`
-   * keeps `<template>` and hast round-trips `.content`, so the split succeeds.
-   * Pinned so the fix above cannot quietly change the dangerous mode too.
+   * `allowDangerousHtml: true` does not take the degraded path for the two
+   * SANITIZER triggers — `applyClobber` keeps `<template>` and `<script>`, and
+   * hast round-trips `.content`, so the split succeeds. Pinned so the fix above
+   * cannot quietly change the dangerous mode too.
+   *
+   * `<col>` is the exception, because its trigger is the parser rather than the
+   * transform; test/rules/clobber.test.ts owns that case.
    */
-  it('allowDangerousHtml keeps <template> intact and never degraded', () => {
+  it('allowDangerousHtml keeps <template> and <script> intact and never degraded', () => {
     expect(render('<template><p>x</p></template>\n', { allowDangerousHtml: true })).toContain(
       '<template><p>x</p></template>',
+    )
+    expect(render('a <script>q</script> b\n', { allowDangerousHtml: true })).toBe(
+      '<p dir="auto" data-line="0">a &lt;script>q&lt;/script> b</p>\n',
     )
   })
 })

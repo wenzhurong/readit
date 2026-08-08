@@ -12,6 +12,7 @@ import {
   type RawHtmlTransform,
 } from '../../src/rules/clobber.js'
 import { decorateRawTree } from '../../src/rules/rawshape.js'
+import { render } from '../../src/index.js'
 
 /** Worst case for the split: a transform that returns nothing at all. */
 const dropEverything: RawHtmlTransform = (): Root => ({ type: 'root', children: [] })
@@ -193,6 +194,65 @@ describe('clobber', () => {
     expect(() => m.render('a <i>x</i> b\n')).toThrow(
       /RawHtmlFallback returned 1 chunks for 2 inputs/,
     )
+  })
+
+  /**
+   * ## `<col>` reaches `applyClobber`'s fallback, for real, from `render()`
+   *
+   * The previous fix round's report claimed of this caller: "Measured: this
+   * caller does not actually reach the branch." It does. `<col>` is the one tag
+   * (of 134 swept in seven chunk shapes) whose degradation is caused by the
+   * PARSER rather than by the transform — parse5's fragment parser enters "in
+   * column group" insertion mode and discards the run separator — so it
+   * triggers with no sanitizer involved at all, in the mode where none runs.
+   *
+   * The consequence is unpleasant and was unstated: a stray `<col>` silently
+   * disables the anti-clobbering pass for the WHOLE document, because every raw
+   * chunk shares one run.
+   *
+   * Accepted rather than fixed, on three grounds, all measured:
+   *
+   *  - it is not a safety boundary. `applyClobber` runs only under
+   *    `allowDangerousHtml: true`, where `<img src=x onerror="alert(1)">`
+   *    already renders verbatim — pinned below. An unprefixed `id` cannot make
+   *    that worse.
+   *  - the per-chunk alternative is worse. See the measurement in the
+   *    `keepChunksUnchanged` doc comment: prefixing chunk-by-chunk turns
+   *    `<div id="a">\n` into `<div id="user-content-a">\n</div>` and drops the
+   *    matching `</div>\n` entirely, so the wrapper closes before the content
+   *    it wrapped. Corrupting the author's structure to add readit's prefix is
+   *    a bad trade in the mode whose contract is faithful pass-through.
+   *  - it used to THROW, so this remains an improvement either way.
+   */
+  it('a stray <col> costs the whole document its user-content- prefixes in dangerous mode', () => {
+    expect(render('a <col> b <span id="CL">x</span>\n', { allowDangerousHtml: true })).toBe(
+      '<p dir="auto" data-line="0">a <col> b <span id="CL">x</span></p>\n',
+    )
+    // Block position, and the contrast that shows the blast radius is the
+    // document rather than the element: without the `<col>` the id is prefixed.
+    expect(render('<col>\n\n<div id="a">\n\n**md**\n\n</div>\n', { allowDangerousHtml: true })).toBe(
+      '<col>\n<div id="a">\n<p dir="auto" data-line="4"><strong>md</strong></p>\n</div>\n',
+    )
+    expect(render('<div id="a">\n\n**md**\n\n</div>\n', { allowDangerousHtml: true })).toBe(
+      '<div id="user-content-a">\n<p dir="auto" data-line="2"><strong>md</strong></p>\n</div>\n',
+    )
+  })
+
+  it('dangerous mode is not a safety boundary anyway: onerror already passes verbatim', () => {
+    expect(render('<img src=x onerror="alert(1)">\n', { allowDangerousHtml: true })).toContain(
+      'onerror="alert(1)"',
+    )
+  })
+
+  /**
+   * `keepChunksUnchanged` preserves the author's structure exactly; the
+   * per-chunk alternative does not. This is the measurement the decision above
+   * rests on, kept executable so "just degrade per-chunk like the sanitizer"
+   * cannot be applied here without seeing what it costs.
+   */
+  it('per-chunk prefixing would unbalance the wrappers keepChunksUnchanged preserves', () => {
+    expect(prefixUserContent('<div id="a">\n')).toBe('<div id="user-content-a">\n</div>')
+    expect(prefixUserContent('</div>\n')).toBe('\n')
   })
 
   // The same transform over a non-table split pair keeps both tags where the
