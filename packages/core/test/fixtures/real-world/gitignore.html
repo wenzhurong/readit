@@ -1,0 +1,113 @@
+<div id="file" class="md" data-path="packages/core/test/corpus/real-world/gitignore.md"><article class="markdown-body entry-content container-lg" itemprop="text"><div class="markdown-heading" dir="auto"><h1 class="heading-element" dir="auto">A collection of <code>.gitignore</code> templates</h1><a id="user-content-a-collection-of-gitignore-templates" class="anchor" aria-label="Permalink: A collection of .gitignore templates" href="#a-collection-of-gitignore-templates"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">This is GitHub’s collection of <a href="https://git-scm.com/docs/gitignore" rel="nofollow"><code>.gitignore</code></a> file templates.
+We use this list to populate the <code>.gitignore</code> template choosers available
+in the GitHub.com interface when creating new repositories and files.</p>
+<p dir="auto">For more information about how <code>.gitignore</code> files work, and how to use them,
+the following resources are a great place to start:</p>
+<ul dir="auto">
+<li>The <a href="https://git-scm.com/book/en/v2/Git-Basics-Recording-Changes-to-the-Repository#_ignoring" rel="nofollow">Ignoring Files chapter</a> of the <a href="https://git-scm.com/book" rel="nofollow">Pro Git</a> book.</li>
+<li>The <a href="https://help.github.com/articles/ignoring-files">Ignoring Files article</a> on the GitHub Help site.</li>
+<li>The <a href="https://git-scm.com/docs/gitignore" rel="nofollow">gitignore(5)</a> manual page.</li>
+</ul>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">Folder structure</h2><a id="user-content-folder-structure" class="anchor" aria-label="Permalink: Folder structure" href="#folder-structure"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">We support a collection of templates, organized in this way:</p>
+<ul dir="auto">
+<li>The root folder contains templates in common use, to help people get started
+with popular programming languages and technologies. These define a meaningful
+set of rules to help get started, and ensure you are not committing
+unimportant files into your repository.</li>
+<li><a href="./Global"><code>Global</code></a> contains templates for various editors, tools and
+operating systems that can be used in different situations. It is recommended
+that you either <a href="https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files#configuring-ignored-files-for-all-repositories-on-your-computer">add these to your global template</a>
+or merge these rules into your project-specific templates if you want to use
+them permanently.</li>
+<li><a href="./community"><code>community</code></a> contains specialized templates for other popular
+languages, tools, and projects that don't currently belong in the mainstream
+templates. These should be added to your project-specific templates when you
+decide to adopt the framework or tool.</li>
+</ul>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">What makes a good template?</h2><a id="user-content-what-makes-a-good-template" class="anchor" aria-label="Permalink: What makes a good template?" href="#what-makes-a-good-template"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">First and foremost, a template contribution must adhere to our
+<a href="CONTRIBUTING.md">Contributing Guidelines</a>.</p>
+<p dir="auto">A template should contain a set of rules to help Git repositories work with a
+specific programming language, framework, tool or environment.</p>
+<p dir="auto">If it's not possible to curate a small set of useful rules for this situation,
+then the template is not a good fit for this collection.</p>
+<p dir="auto">If a template is mostly a list of files installed by a particular version of
+some software (e.g. a PHP framework), it could live under the <code>community</code>
+directory. See <a href="#versioned-templates">versioned templates</a> for more details.</p>
+<p dir="auto">If you have a small set of rules, or want to support a technology that is not
+widely in use, and still believe this will be helpful to others, please read the
+section about <a href="#specialized-templates">specialized templates</a> for more details.</p>
+<p dir="auto">Include details when opening a pull request if the template is important and visible. We
+may not accept it immediately, but we can promote it to the root at a later date
+based on interest.</p>
+<p dir="auto">Please also understand that we can’t list every tool that ever existed.
+Our aim is to curate a collection of the <em>most common and helpful</em> templates,
+not to make sure we cover every project possible. If we choose not to
+include your language, tool, or project, it’s not because it’s not awesome.</p>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">Contributing guidelines</h2><a id="user-content-contributing-guidelines" class="anchor" aria-label="Permalink: Contributing guidelines" href="#contributing-guidelines"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">Please see our <a href="CONTRIBUTING.md">Contributing Guidelines</a>.</p>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">Versioned templates</h2><a id="user-content-versioned-templates" class="anchor" aria-label="Permalink: Versioned templates" href="#versioned-templates"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">Some templates can change greatly between versions, and if you wish to contribute
+to this repository we need to follow this specific flow:</p>
+<ul dir="auto">
+<li>the template at the root should be the current supported version</li>
+<li>the template at the root should not have a version in the filename (i.e.
+"evergreen")</li>
+<li>previous versions of templates should live under <code>community/</code></li>
+<li>previous versions of the template should embed the version in the filename,
+for readability</li>
+</ul>
+<p dir="auto">This helps ensure users get the latest version (because they'll use whatever is
+at the root) but helps maintainers support older versions still in the wild.</p>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">Specialized templates</h2><a id="user-content-specialized-templates" class="anchor" aria-label="Permalink: Specialized templates" href="#specialized-templates"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">If you have a template that you would like to contribute, but it isn't quite
+mainstream, please consider adding this to the <code>community</code> directory under a
+folder that best suits where it belongs.</p>
+<p dir="auto">The rules in your specialized template should be specific to the framework or
+tool, and any additional templates should be mentioned in a comment in the
+header of the template.</p>
+<p dir="auto">For example, this template might live at <code>community/DotNet/InforCRM.gitignore</code>:</p>
+<div class="highlight highlight-source-gitignore notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="# gitignore template for InforCRM (formerly SalesLogix)
+# website: https://www.infor.com/product-summary/cx/infor-crm/
+#
+# Recommended: VisualStudio.gitignore
+
+# Ignore model files that are auto-generated
+ModelIndex.xml
+ExportedFiles.xml
+
+# Ignore deployment files
+[Mm]odel/[Dd]eployment
+
+# Force include portal SupportFiles
+!Model/Portal/*/SupportFiles/[Bb]in/
+!Model/Portal/PortalTemplates/*/SupportFiles/[Bb]in"><pre><span class="pl-c"><span class="pl-c">#</span> gitignore template for InforCRM (formerly SalesLogix)</span>
+<span class="pl-c"><span class="pl-c">#</span> website: https://www.infor.com/product-summary/cx/infor-crm/</span>
+<span class="pl-c"><span class="pl-c">#</span></span>
+<span class="pl-c"><span class="pl-c">#</span> Recommended: VisualStudio.gitignore</span>
+
+<span class="pl-c"><span class="pl-c">#</span> Ignore model files that are auto-generated</span>
+<span class="pl-e">ModelIndex.xml</span>
+<span class="pl-e">ExportedFiles.xml</span>
+
+<span class="pl-c"><span class="pl-c">#</span> Ignore deployment files</span>
+[<span class="pl-c1">Mm</span>]<span class="pl-e">odel</span>/[<span class="pl-c1">Dd</span>]<span class="pl-e">eployment</span>
+
+<span class="pl-c"><span class="pl-c">#</span> Force include portal SupportFiles</span>
+<span class="pl-k">!</span><span class="pl-e">Model</span>/<span class="pl-e">Portal</span>/<span class="pl-k">*</span>/<span class="pl-e">SupportFiles</span>/[<span class="pl-c1">Bb</span>]<span class="pl-e">in</span>/
+<span class="pl-k">!</span><span class="pl-e">Model</span>/<span class="pl-e">Portal</span>/<span class="pl-e">PortalTemplates</span>/<span class="pl-k">*</span>/<span class="pl-e">SupportFiles</span>/[<span class="pl-c1">Bb</span>]<span class="pl-e">in</span></pre></div>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">Contributing workflow</h2><a id="user-content-contributing-workflow" class="anchor" aria-label="Permalink: Contributing workflow" href="#contributing-workflow"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">Here’s how we suggest you go about proposing a change to this project:</p>
+<ol dir="auto">
+<li><a href="https://help.github.com/articles/fork-a-repo/">Fork this project</a> to your account.</li>
+<li><a href="https://help.github.com/articles/creating-and-deleting-branches-within-your-repository">Create a branch</a> for the change you intend to make.</li>
+<li>Make your changes to your fork.</li>
+<li><a href="https://help.github.com/articles/using-pull-requests/">Send a pull request</a> from your fork’s branch to our <code>main</code> branch.</li>
+</ol>
+<p dir="auto">Using the web-based interface to make changes is fine too, and will help you
+by automatically forking the project and prompting to send a pull request too.</p>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">License</h2><a id="user-content-license" class="anchor" aria-label="Permalink: License" href="#license"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><a href="./LICENSE">CC0-1.0</a>.</p>
+</article></div>

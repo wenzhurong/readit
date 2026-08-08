@@ -1,0 +1,768 @@
+<div id="file" class="md" data-path="packages/core/test/corpus/real-world/mermaid.md"><article class="markdown-body entry-content container-lg" itemprop="text"><p align="center" dir="auto">
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/mermaid-js/mermaid/develop/docs/public/favicon.svg"><img src="https://raw.githubusercontent.com/mermaid-js/mermaid/develop/docs/public/favicon.svg" height="150" style="max-width: 100%; height: auto; max-height: 150px;"></a>
+</p>
+<div class="markdown-heading" dir="auto"><h1 align="center" class="heading-element" dir="auto">
+Mermaid
+</h1><a id="user-content-mermaid" class="anchor" aria-label="Permalink: 
+Mermaid
+" href="#mermaid"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p align="center" dir="auto">
+Generate diagrams from markdown-like text.
+</p><p dir="auto">
+</p><p align="center" dir="auto">
+  <a href="https://www.npmjs.com/package/mermaid" rel="nofollow"><img src="https://camo.githubusercontent.com/e5216c3eb9d9b08add36e036b00c9f0817682cf67e738680afb70711922bc93e/68747470733a2f2f696d672e736869656c64732e696f2f6e706d2f762f6d65726d6169643f636f6c6f723d666633363730266c6162656c3d" data-canonical-src="https://img.shields.io/npm/v/mermaid?color=ff3670&amp;label=" style="max-width: 100%;"></a>
+</p><p dir="auto">
+</p><p align="center" dir="auto">
+<a href="https://mermaid.ai/live/" rel="nofollow"><b>Live Editor!</b></a>
+</p>
+<p align="center" dir="auto">
+ <a href="https://mermaid.ai/open-source/" rel="nofollow">📖 Documentation</a> | <a href="https://mermaid.ai/open-source/intro/" rel="nofollow">🚀 Getting Started</a> | <a href="https://www.jsdelivr.com/package/npm/mermaid" rel="nofollow">🌐 CDN</a> | <a href="https://discord.gg/sKeNQX4Wtj" title="Discord invite" rel="nofollow">🙌 Join Us</a>
+</p>
+<p align="center" dir="auto">
+<a href="./README.zh-CN.md">简体中文</a>
+</p>
+<p align="center" dir="auto">
+Try Live Editor previews of future releases: <a href="https://develop.git.mermaid.live/" title="Try the mermaid version from the develop branch." rel="nofollow">Develop</a> | <a href="https://next.git.mermaid.live/" title="Try the mermaid version from the next branch." rel="nofollow">Next</a>
+</p>
+<br>
+<br>
+<p dir="auto"><a href="https://www.npmjs.com/package/mermaid" rel="nofollow"><img src="https://camo.githubusercontent.com/a7347cb2fce67a6b971a23d0b65c732136f4310e935e5fc5da54ba00db7bfbae/68747470733a2f2f696d672e736869656c64732e696f2f6e706d2f762f6d65726d616964" alt="NPM" data-canonical-src="https://img.shields.io/npm/v/mermaid" style="max-width: 100%;"></a>
+<a href="https://github.com/mermaid-js/mermaid/actions/workflows/build.yml"><img src="https://github.com/mermaid-js/mermaid/actions/workflows/build.yml/badge.svg" alt="Build CI Status" style="max-width: 100%;"></a>
+<a href="https://bundlephobia.com/package/mermaid" rel="nofollow"><img src="https://camo.githubusercontent.com/5b6431410b6691c8163e6708ba537f396041731d9bbd7ac14cb61a51b9a508dd/68747470733a2f2f696d672e736869656c64732e696f2f62756e646c6570686f6269612f6d696e7a69702f6d65726d616964" alt="npm minified gzipped bundle size" data-canonical-src="https://img.shields.io/bundlephobia/minzip/mermaid" style="max-width: 100%;"></a>
+<a href="https://app.codecov.io/github/mermaid-js/mermaid/tree/develop" rel="nofollow"><img src="https://camo.githubusercontent.com/ffed44d557df8c9bc919e87a9bb23c9b271df900320fdb9b17a171c577a5f87e/68747470733a2f2f636f6465636f762e696f2f6769746875622f6d65726d6169642d6a732f6d65726d6169642f6272616e63682f646576656c6f702f67726170682f62616467652e737667" alt="Coverage Status" data-canonical-src="https://codecov.io/github/mermaid-js/mermaid/branch/develop/graph/badge.svg" style="max-width: 100%;"></a>
+<a href="https://www.jsdelivr.com/package/npm/mermaid" rel="nofollow"><img src="https://camo.githubusercontent.com/417350974dbac36a090a167f48b1d9f6bf6352791324da1ab1886d9986747b4c/68747470733a2f2f696d672e736869656c64732e696f2f6a7364656c6976722f6e706d2f686d2f6d65726d616964" alt="CDN Status" data-canonical-src="https://img.shields.io/jsdelivr/npm/hm/mermaid" style="max-width: 100%;"></a>
+<a href="https://www.npmjs.com/package/mermaid" rel="nofollow"><img src="https://camo.githubusercontent.com/404c26403e4e87d82e298be3926a17b3b0aead1c17e4f09c406f7994cd3f594c/68747470733a2f2f696d672e736869656c64732e696f2f6e706d2f646d2f6d65726d616964" alt="NPM Downloads" data-canonical-src="https://img.shields.io/npm/dm/mermaid" style="max-width: 100%;"></a>
+<a href="https://discord.gg/sKeNQX4Wtj" rel="nofollow"><img src="https://camo.githubusercontent.com/54d5ca28d7eb77fff0587eb3abc1a43677d6a1aafc757ef389ea8beef9ca6b03/68747470733a2f2f696d672e736869656c64732e696f2f7374617469632f76313f6d6573736167653d6a6f696e2532306368617426636f6c6f723d396366266c6f676f3d646973636f7264266c6162656c3d646973636f7264" alt="Join our Discord!" data-canonical-src="https://img.shields.io/static/v1?message=join%20chat&amp;color=9cf&amp;logo=discord&amp;label=discord" style="max-width: 100%;"></a>
+<a href="https://twitter.com/mermaidjs_" rel="nofollow"><img src="https://camo.githubusercontent.com/55861ea963d203531213d25f0ec2829b503f724d045c07b67d55721608b6d591/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f536f6369616c2d6d65726d6169646a735f5f2d626c75653f7374796c653d736f6369616c266c6f676f3d58" alt="Twitter Follow" data-canonical-src="https://img.shields.io/badge/Social-mermaidjs__-blue?style=social&amp;logo=X" style="max-width: 100%;"></a>
+<a href="https://argos-ci.com?utm_source=mermaid&amp;utm_campaign=oss" rel="nofollow"><img src="https://camo.githubusercontent.com/69f82e4b5c538284ef7b924ecbd3f902bb7ed76f9d6bb4e10afdc56aaea1b565/68747470733a2f2f6172676f732d63692e636f6d2f62616467652e737667" alt="Covered by Argos Visual Testing" data-canonical-src="https://argos-ci.com/badge.svg" style="max-width: 100%;"></a>
+<a href="https://securityscorecards.dev/viewer/?uri=github.com/mermaid-js/mermaid" rel="nofollow"><img src="https://camo.githubusercontent.com/1a5701ed9d986d407308048d0ca98a0e01f3ab216406d0cdcb3bf31ae06b08b7/68747470733a2f2f6170692e736563757269747973636f726563617264732e6465762f70726f6a656374732f6769746875622e636f6d2f6d65726d6169642d6a732f6d65726d6169642f6261646765" alt="OpenSSF Scorecard" data-canonical-src="https://api.securityscorecards.dev/projects/github.com/mermaid-js/mermaid/badge" style="max-width: 100%;"></a></p>
+<p dir="auto"><a target="_blank" rel="noopener noreferrer" href="./img/header.png"><img src="./img/header.png" alt="" style="max-width: 100%;"></a></p>
+<p dir="auto">🏆 <strong>Mermaid was nominated and won the <a href="https://osawards.com/javascript/2019" rel="nofollow">JS Open Source Awards (2019)</a> in the category "The most exciting use of technology"!!!</strong></p>
+<p dir="auto"><strong>Thanks to all involved, people committing pull requests, people answering questions! 🙏</strong></p>
+<p dir="auto"><a href="https://mermaid.js.org/landing/" rel="nofollow"><img src="https://github.com/mermaid-js/mermaid/raw/master/docs/intro/img/book-banner-post-release.jpg" alt="Banner for &quot;The Official Guide to Mermaid.js&quot; book" style="max-width: 100%;"></a></p>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">Table of content</h2><a id="user-content-table-of-content" class="anchor" aria-label="Permalink: Table of content" href="#table-of-content"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<details>
+<summary>Expand contents</summary>
+<ul dir="auto">
+<li><a href="#about">About</a></li>
+<li><a href="#examples">Examples</a></li>
+<li><a href="#release">Release</a></li>
+<li><a href="#related-projects">Related projects</a></li>
+<li><a href="#contributors---">Contributors</a></li>
+<li><a href="#security-and-safe-diagrams">Security and safe diagrams</a></li>
+<li><a href="#reporting-vulnerabilities">Reporting vulnerabilities</a></li>
+<li><a href="#appreciation">Appreciation</a></li>
+</ul>
+</details>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">About</h2><a id="user-content-about" class="anchor" aria-label="Permalink: About" href="#about"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+
+<p dir="auto">Mermaid is a JavaScript-based diagramming and charting tool that uses Markdown-inspired text definitions and a renderer to create and modify complex diagrams. The main purpose of Mermaid is to help documentation catch up with development.</p>
+<blockquote>
+<p dir="auto">Doc-Rot is a Catch-22 that Mermaid helps to solve.</p>
+</blockquote>
+<p dir="auto">Diagramming and documentation costs precious developer time and gets outdated quickly.
+But not having diagrams or docs ruins productivity and hurts organizational learning.<br>
+Mermaid addresses this problem by enabling users to create easily modifiable diagrams. It can also be made part of production scripts (and other pieces of code).<br>
+<br></p>
+<p dir="auto">Mermaid allows even non-programmers to easily create detailed diagrams through the <a href="https://mermaid.live/" rel="nofollow">Mermaid Live Editor</a>.<br>
+For video tutorials, visit our <a href="https://mermaid.js.org/ecosystem/tutorials.html" rel="nofollow">Tutorials</a> page.
+Use Mermaid with your favorite applications, check out the list of <a href="https://mermaid.js.org/ecosystem/integrations-community.html" rel="nofollow">Integrations and Usages of Mermaid</a>.</p>
+<p dir="auto">You can also use Mermaid within <a href="https://github.blog/2022-02-14-include-diagrams-markdown-files-mermaid/" rel="nofollow">GitHub</a> as well many of your other favorite applications—check out the list of <a href="https://mermaid.js.org/ecosystem/integrations-community.html" rel="nofollow">Integrations and Usages of Mermaid</a>.</p>
+<p dir="auto">For a more detailed introduction to Mermaid and some of its more basic uses, look to the <a href="https://mermaid.js.org/intro/getting-started.html" rel="nofollow">Beginner's Guide</a>, <a href="https://mermaid.js.org/config/usage.html" rel="nofollow">Usage</a> and <a href="https://mermaid.js.org/ecosystem/tutorials.html" rel="nofollow">Tutorials</a>.</p>
+<p dir="auto">Our PR Visual Regression Testing is powered by <a href="https://argos-ci.com/?utm_source=mermaid&amp;utm_campaign=oss" rel="nofollow">Argos</a> with their generous Open Source plan. It makes the process of reviewing PRs with visual changes a breeze.</p>
+<p dir="auto"><a href="https://argos-ci.com?utm_source=mermaid&amp;utm_campaign=oss" rel="nofollow"><img src="https://camo.githubusercontent.com/c033472eb872888ee1e829029deeb3bd483d5243b485f78fa81c98fc53056b4a/68747470733a2f2f6172676f732d63692e636f6d2f62616467652d6c617267652e737667" alt="Covered by Argos Visual Testing" data-canonical-src="https://argos-ci.com/badge-large.svg" style="max-width: 100%;"></a></p>
+<p dir="auto">In our release process we rely heavily on visual regression tests using <a href="https://applitools.com/" rel="nofollow">applitools</a>. Applitools is a great service which has been easy to use and integrate with our tests.</p>
+<a href="https://applitools.com/" rel="nofollow">
+
+</a>
+
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">Features</h2><a id="user-content-features" class="anchor" aria-label="Permalink: Features" href="#features"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<ul dir="auto">
+<li><strong>20+ Diagram Types</strong> – Flowchart, Sequence, Class, State, ER, Gantt, Pie, Git Graph, Mindmap, Timeline, Sankey, and more</li>
+<li><strong>Markdown-Inspired Syntax</strong> – Write diagrams as text, no drag-and-drop required</li>
+<li><strong>No Design Tool Needed</strong> – Generate professional diagrams straight from code</li>
+<li><strong>Live Editor</strong> – Prototype instantly at <a href="https://mermaid.live" rel="nofollow">mermaid.live</a></li>
+<li><strong>Version-Control Friendly</strong> – Diagrams live as text, so diffs and reviews just work</li>
+<li><strong>Native GitHub Rendering</strong> – Mermaid code blocks render directly in Markdown on GitHub</li>
+<li><strong>Highly Customizable</strong> – Themes, colors, fonts, and layout directions</li>
+<li><strong>Security First</strong> – Built-in sanitization plus a sandboxed rendering mode</li>
+<li><strong>Lightweight</strong> – Small footprint, no heavy dependencies</li>
+<li><strong>Active Community</strong> – Frequent releases and thousands of contributors</li>
+<li><strong>Open Source</strong> – MIT licensed</li>
+</ul>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">Examples</h2><a id="user-content-examples" class="anchor" aria-label="Permalink: Examples" href="#examples"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto"><strong>The following are some examples of the diagrams, charts and graphs that can be made using Mermaid. Click here to jump into the <a href="https://mermaid.js.org/intro/syntax-reference.html" rel="nofollow">text syntax</a>.</strong></p>
+
+<div class="markdown-heading" dir="auto"><h3 class="heading-element" dir="auto">Flowchart [<a href="https://mermaid.js.org/syntax/flowchart.html" rel="nofollow">docs</a> - <a href="https://mermaid.live/edit#pako:eNpNkMtqwzAQRX9FzKqFJK7t1km8KDQP6KJQSLOLvZhIY1tgS0GWmgbb_165IaFaiXvOFTPqgGtBkEJR6zOv0Fj2scsU8-ft8I5G5Gw6fe339GN7tnrYaafE45WvRsLW3Ya4bKVWwzVe_xU-FfVsc9hR62rLwvw_2591z7Y3FuUwgYZMg1L4ObrRzMBW1FAGqb8KKtCLGWRq8Ko7CbS0FdJqA2mBdUsTQGf110VxSK1xdJM2EkuDzd2qNQrypQ7s5TQuXcrW-ie5VoUsx9yZ2seVtac2DYIRz0ppK3eccd0ErRTjD1XfyyRIomSBUUzJPMaXOBb8GC4XRfQcFmL-FEYIwzD8AggvcHE" rel="nofollow">live editor</a>]</h3><a id="user-content-flowchart-docs---live-editor" class="anchor" aria-label="Permalink: Flowchart [docs - live editor]" href="#flowchart-docs---live-editor"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="flowchart LR
+
+A[Hard] --&gt;|Text| B(Round)
+B --&gt; C{Decision}
+C --&gt;|One| D[Result 1]
+C --&gt;|Two| E[Result 2]"><pre class="notranslate"><code>flowchart LR
+
+A[Hard] --&gt;|Text| B(Round)
+B --&gt; C{Decision}
+C --&gt;|One| D[Result 1]
+C --&gt;|Two| E[Result 2]
+</code></pre></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="5c042da2-7142-4fd5-b959-be1c10ba5f0f" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/mermaid?docs_host=https%3A%2F%2Fdocs.github.com" data-type="mermaid" aria-label="mermaid rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;flowchart LR\n\nA[Hard] --&amp;gt;|Text| B(Round)\nB --&amp;gt; C{Decision}\nC --&amp;gt;|One| D[Result 1]\nC --&amp;gt;|Two| E[Result 2]\n&quot;}" data-plain="flowchart LR
+
+A[Hard] --&gt;|Text| B(Round)
+B --&gt; C{Decision}
+C --&gt;|One| D[Result 1]
+C --&gt;|Two| E[Result 2]
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="mermaid" aria-label="Raw mermaid code">flowchart LR
+
+A[Hard] --&gt;|Text| B(Round)
+B --&gt; C{Decision}
+C --&gt;|One| D[Result 1]
+C --&gt;|Two| E[Result 2]
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h3 class="heading-element" dir="auto">Sequence diagram [<a href="https://mermaid.js.org/syntax/sequenceDiagram.html" rel="nofollow">docs</a> - <a href="https://mermaid.live/edit#pako:eNo9kMluwjAQhl_F-AykQMuSA1WrbuLQQ3v1ZbAnsVXHkzrjVhHi3etQwKfRv4w-z0FqMihL2eF3wqDxyUEdoVHhwTuNk-12RzaU4g29JzHMY2HpV0BE0VO6V8ETtdkGz1Zb1F8qiPyG5LX84mrLAmpwoWNh-5a0pWCiAxUwGBXeiVHEU4oq8V_6AHYUwAu2lLLTjVQ4bc1rT2yleI0IfJG320faZ9ABbk-Jz3hZnFxBduR9L2oiM5Jj2WBswJn8-cMArSRbbFDJMo8GK0ielVThmKOpNcD4bBxTlGUFvsOxhMT02QctS44JL6HzAS-iJzCYOwfJfTscunYd542aQuXqQU_RZ9kyt11ZFIM9rR3btJ9qaorOGQuR7c9mWSznyzXMF7hcLeBusTB6P9usq_ntrDKrm9kc5PF4_AMJE56Z" rel="nofollow">live editor</a>]</h3><a id="user-content-sequence-diagram-docs---live-editor" class="anchor" aria-label="Permalink: Sequence diagram [docs - live editor]" href="#sequence-diagram-docs---live-editor"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="sequenceDiagram
+Alice-&gt;&gt;John: Hello John, how are you?
+loop HealthCheck
+    John-&gt;&gt;John: Fight against hypochondria
+end
+Note right of John: Rational thoughts!
+John--&gt;&gt;Alice: Great!
+John-&gt;&gt;Bob: How about you?
+Bob--&gt;&gt;John: Jolly good!"><pre class="notranslate"><code>sequenceDiagram
+Alice-&gt;&gt;John: Hello John, how are you?
+loop HealthCheck
+    John-&gt;&gt;John: Fight against hypochondria
+end
+Note right of John: Rational thoughts!
+John--&gt;&gt;Alice: Great!
+John-&gt;&gt;Bob: How about you?
+Bob--&gt;&gt;John: Jolly good!
+</code></pre></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="7a234113-6f87-49da-a87e-47fc7aec1053" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/mermaid?docs_host=https%3A%2F%2Fdocs.github.com" data-type="mermaid" aria-label="mermaid rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;sequenceDiagram\nAlice-&amp;gt;&amp;gt;John: Hello John, how are you?\nloop HealthCheck\n    John-&amp;gt;&amp;gt;John: Fight against hypochondria\nend\nNote right of John: Rational thoughts!\nJohn--&amp;gt;&amp;gt;Alice: Great!\nJohn-&amp;gt;&amp;gt;Bob: How about you?\nBob--&amp;gt;&amp;gt;John: Jolly good!\n&quot;}" data-plain="sequenceDiagram
+Alice-&gt;&gt;John: Hello John, how are you?
+loop HealthCheck
+    John-&gt;&gt;John: Fight against hypochondria
+end
+Note right of John: Rational thoughts!
+John--&gt;&gt;Alice: Great!
+John-&gt;&gt;Bob: How about you?
+Bob--&gt;&gt;John: Jolly good!
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="mermaid" aria-label="Raw mermaid code">sequenceDiagram
+Alice-&gt;&gt;John: Hello John, how are you?
+loop HealthCheck
+    John-&gt;&gt;John: Fight against hypochondria
+end
+Note right of John: Rational thoughts!
+John--&gt;&gt;Alice: Great!
+John-&gt;&gt;Bob: How about you?
+Bob--&gt;&gt;John: Jolly good!
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h3 class="heading-element" dir="auto">Gantt chart [<a href="https://mermaid.js.org/syntax/gantt.html" rel="nofollow">docs</a> - <a href="https://mermaid.live/edit#pako:eNp90cGOgyAQBuBXIZxtFbG29bbZ3fsmvXKZylhJEAyOTZrGd1_sto3xsHMBhu-HBO689hp5xS_giJQbsCbjHTv9jcp9-q63SKhZpb3DhMXSOIiE5ZkoNpnYZGXynh6U-4jBK7JnVfBYJo9QvgjtEya1cj8QwFq0TMz4lZqxTBg0hOF5m1jifI2Lf7Bc490CyxUu1rhc4GLGPOEdhg6Mjq92V44xxanFDhWv4lRjA6MlxZWbIh17DYTf2pAPvGrADphwGMmfbq7mFYURX-jLwCVA91bWg8YYunO69Y8vMgPFI2vvGnOZ-2Owsd0S9UOVpvP29mKoHc_b2nfpYHQLgdrrsUzLvDxALrHcS9hJqeuzOB6avBCN3mciBz5N0y_wxZ0J" rel="nofollow">live editor</a>]</h3><a id="user-content-gantt-chart-docs---live-editor" class="anchor" aria-label="Permalink: Gantt chart [docs - live editor]" href="#gantt-chart-docs---live-editor"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="gantt
+    section Section
+    Completed :done,    des1, 2014-01-06,2014-01-08
+    Active        :active,  des2, 2014-01-07, 3d
+    Parallel 1   :         des3, after des1, 1d
+    Parallel 2   :         des4, after des1, 1d
+    Parallel 3   :         des5, after des3, 1d
+    Parallel 4   :         des6, after des4, 1d"><pre class="notranslate"><code>gantt
+    section Section
+    Completed :done,    des1, 2014-01-06,2014-01-08
+    Active        :active,  des2, 2014-01-07, 3d
+    Parallel 1   :         des3, after des1, 1d
+    Parallel 2   :         des4, after des1, 1d
+    Parallel 3   :         des5, after des3, 1d
+    Parallel 4   :         des6, after des4, 1d
+</code></pre></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="f864e263-e2f7-486a-8433-ce3ce520b612" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/mermaid?docs_host=https%3A%2F%2Fdocs.github.com" data-type="mermaid" aria-label="mermaid rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;gantt\n    section Section\n    Completed :done,    des1, 2014-01-06,2014-01-08\n    Active        :active,  des2, 2014-01-07, 3d\n    Parallel 1   :         des3, after des1, 1d\n    Parallel 2   :         des4, after des1, 1d\n    Parallel 3   :         des5, after des3, 1d\n    Parallel 4   :         des6, after des4, 1d\n&quot;}" data-plain="gantt
+    section Section
+    Completed :done,    des1, 2014-01-06,2014-01-08
+    Active        :active,  des2, 2014-01-07, 3d
+    Parallel 1   :         des3, after des1, 1d
+    Parallel 2   :         des4, after des1, 1d
+    Parallel 3   :         des5, after des3, 1d
+    Parallel 4   :         des6, after des4, 1d
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="mermaid" aria-label="Raw mermaid code">gantt
+    section Section
+    Completed :done,    des1, 2014-01-06,2014-01-08
+    Active        :active,  des2, 2014-01-07, 3d
+    Parallel 1   :         des3, after des1, 1d
+    Parallel 2   :         des4, after des1, 1d
+    Parallel 3   :         des5, after des3, 1d
+    Parallel 4   :         des6, after des4, 1d
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h3 class="heading-element" dir="auto">Class diagram [<a href="https://mermaid.js.org/syntax/classDiagram.html" rel="nofollow">docs</a> - <a href="https://mermaid.live/edit#pako:eNpdkTFPwzAQhf-K5QlQ2zQJJG1UBaGWDYmBgYEwXO1LYuTEwXYqlZL_jt02asXm--690zvfgTLFkWaUSTBmI6DS0BTt2lfzkKx-p1PytEO9f1FtdaQkI2ulZNGuVqK1qEtgmOfk7BitSzKdOhg59XuNGgk0RDxed-_IOr6uf8cZ6UhTZ8bvHqS5ub1mr9svZPbjk6DEBlu7AQuXyBkx4gcvDk9cUMJq0XT_YaW0kNK5j-ufAoRzcihaQvLcoN4Jv50vvVxw_xrnD3RCG9QNCO4-8OgpqK1dpoJm7smxhF7agp6kfcfB4jMXVmmalW4tnFDorXrbt4xmVvc4is53GKFUwNF5DtTuO3-sShjrJjLVlqLyvNfS4drazmRB4NuzSti6386YagIjeA3a1rtlEiRRsoAoxiSN4SGOOduGy0UZ3YclT-dhBHQYhj8dc6_I" rel="nofollow">live editor</a>]</h3><a id="user-content-class-diagram-docs---live-editor" class="anchor" aria-label="Permalink: Class diagram [docs - live editor]" href="#class-diagram-docs---live-editor"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="classDiagram
+Class01 &lt;|-- AveryLongClass : Cool
+&lt;&lt;Interface&gt;&gt; Class01
+Class09 --&gt; C2 : Where am I?
+Class09 --* C3
+Class09 --|&gt; Class07
+Class07 : equals()
+Class07 : Object[] elementData
+Class01 : size()
+Class01 : int chimp
+Class01 : int gorilla
+class Class10 {
+  &lt;&lt;service&gt;&gt;
+  int id
+  size()
+}
+"><pre class="notranslate"><code>classDiagram
+Class01 &lt;|-- AveryLongClass : Cool
+&lt;&lt;Interface&gt;&gt; Class01
+Class09 --&gt; C2 : Where am I?
+Class09 --* C3
+Class09 --|&gt; Class07
+Class07 : equals()
+Class07 : Object[] elementData
+Class01 : size()
+Class01 : int chimp
+Class01 : int gorilla
+class Class10 {
+  &lt;&lt;service&gt;&gt;
+  int id
+  size()
+}
+
+</code></pre></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="556c3ba6-6c1e-4cb0-8be7-64154a970ee3" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/mermaid?docs_host=https%3A%2F%2Fdocs.github.com" data-type="mermaid" aria-label="mermaid rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;classDiagram\nClass01 &amp;lt;|-- AveryLongClass : Cool\n&amp;lt;&amp;lt;Interface&amp;gt;&amp;gt; Class01\nClass09 --&amp;gt; C2 : Where am I?\nClass09 --* C3\nClass09 --|&amp;gt; Class07\nClass07 : equals()\nClass07 : Object[] elementData\nClass01 : size()\nClass01 : int chimp\nClass01 : int gorilla\nclass Class10 {\n  &amp;lt;&amp;lt;service&amp;gt;&amp;gt;\n  int id\n  size()\n}\n\n&quot;}" data-plain="classDiagram
+Class01 &lt;|-- AveryLongClass : Cool
+&lt;&lt;Interface&gt;&gt; Class01
+Class09 --&gt; C2 : Where am I?
+Class09 --* C3
+Class09 --|&gt; Class07
+Class07 : equals()
+Class07 : Object[] elementData
+Class01 : size()
+Class01 : int chimp
+Class01 : int gorilla
+class Class10 {
+  &lt;&lt;service&gt;&gt;
+  int id
+  size()
+}
+
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="mermaid" aria-label="Raw mermaid code">classDiagram
+Class01 &lt;|-- AveryLongClass : Cool
+&lt;&lt;Interface&gt;&gt; Class01
+Class09 --&gt; C2 : Where am I?
+Class09 --* C3
+Class09 --|&gt; Class07
+Class07 : equals()
+Class07 : Object[] elementData
+Class01 : size()
+Class01 : int chimp
+Class01 : int gorilla
+class Class10 {
+  &lt;&lt;service&gt;&gt;
+  int id
+  size()
+}
+
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h3 class="heading-element" dir="auto">State diagram [<a href="https://mermaid.js.org/syntax/stateDiagram.html" rel="nofollow">docs</a> - <a href="https://mermaid.live/edit#pako:eNpdkEFvgzAMhf8K8nEqpYSNthx22Xbcqcexg0sCiZQQlDhIFeK_L8A6TfXp6fOz9ewJGssFVOAJSbwr7ByadGR1n8T6evpO0vQ1uZDSekOrXGFsPqJPO6q-2-imH8f_0TeHXm50lfelsAMjnEHFY6xpMdRAUhhRQxUlFy0GTTXU_RytYeAx-AdXZB1ULWovdoCB7OXWN1CRC-Ju-r3uz6UtchGHJqDbsPygU57iysb2reoWHpyOWBINvsqypb3vFMlw3TfWZF5xiY7keC6zkpUnZIUojwW-FAVvrvn51LLnvOXHQ84Q5nn-AVtLcwk" rel="nofollow">live editor</a>]</h3><a id="user-content-state-diagram-docs---live-editor" class="anchor" aria-label="Permalink: State diagram [docs - live editor]" href="#state-diagram-docs---live-editor"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="stateDiagram-v2
+[*] --&gt; Still
+Still --&gt; [*]
+Still --&gt; Moving
+Moving --&gt; Still
+Moving --&gt; Crash
+Crash --&gt; [*]"><pre class="notranslate"><code>stateDiagram-v2
+[*] --&gt; Still
+Still --&gt; [*]
+Still --&gt; Moving
+Moving --&gt; Still
+Moving --&gt; Crash
+Crash --&gt; [*]
+</code></pre></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="b7b5232f-214a-484a-a79a-05664643c5c7" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/mermaid?docs_host=https%3A%2F%2Fdocs.github.com" data-type="mermaid" aria-label="mermaid rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;stateDiagram-v2\n[*] --&amp;gt; Still\nStill --&amp;gt; [*]\nStill --&amp;gt; Moving\nMoving --&amp;gt; Still\nMoving --&amp;gt; Crash\nCrash --&amp;gt; [*]\n&quot;}" data-plain="stateDiagram-v2
+[*] --&gt; Still
+Still --&gt; [*]
+Still --&gt; Moving
+Moving --&gt; Still
+Moving --&gt; Crash
+Crash --&gt; [*]
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="mermaid" aria-label="Raw mermaid code">stateDiagram-v2
+[*] --&gt; Still
+Still --&gt; [*]
+Still --&gt; Moving
+Moving --&gt; Still
+Moving --&gt; Crash
+Crash --&gt; [*]
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h3 class="heading-element" dir="auto">Pie chart [<a href="https://mermaid.js.org/syntax/pie.html" rel="nofollow">docs</a> - <a href="https://mermaid.live/edit#pako:eNo9jsFugzAMhl8F-VzBgEEh13Uv0F1zcYkTIpEEBadShXj3BU3dzf_n77e8wxQUgYDVkvQSbsFsEgpRtEN_5i_kvzx05XiC-xvUHVzAUXRoVe7v0heFBJ7JkQSRR0Ua08ISpD-ymlaFTN_KcoggNC4bXQATh5-Xn0BwTPSWbhZNRPdvLQEV5dIO_FrPZ43dOJ-cgtfWnDzFJeOZed1EVZ3r0lie06Ocgqs2q2aMPD_HvuqbfsCmpf7aYte2anrU46Cbz1qr60fdIBzH8QvW9lkl" rel="nofollow">live editor</a>]</h3><a id="user-content-pie-chart-docs---live-editor" class="anchor" aria-label="Permalink: Pie chart [docs - live editor]" href="#pie-chart-docs---live-editor"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="pie
+&quot;Dogs&quot; : 386
+&quot;Cats&quot; : 85.9
+&quot;Rats&quot; : 15"><pre class="notranslate"><code>pie
+"Dogs" : 386
+"Cats" : 85.9
+"Rats" : 15
+</code></pre></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="80704e48-9511-437d-b472-c08d8179e7e1" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/mermaid?docs_host=https%3A%2F%2Fdocs.github.com" data-type="mermaid" aria-label="mermaid rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;pie\n\&quot;Dogs\&quot; : 386\n\&quot;Cats\&quot; : 85.9\n\&quot;Rats\&quot; : 15\n&quot;}" data-plain="pie
+&quot;Dogs&quot; : 386
+&quot;Cats&quot; : 85.9
+&quot;Rats&quot; : 15
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="mermaid" aria-label="Raw mermaid code">pie
+"Dogs" : 386
+"Cats" : 85.9
+"Rats" : 15
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h3 class="heading-element" dir="auto">Git graph [experimental - <a href="https://mermaid.live/edit#pako:eNqNkMFugzAMhl8F-VyVAR1tOW_aA-zKxSSGRCMJCk6lCvHuNZPKZdM0n-zf3_8r8QIqaIIGMqnB8kfEybQ--y4VnLP8-9RF9Mpkmm40hmlnDKmvkPiH_kfS7nFo_VN0FAf6XwocQGgxa_nGsm1bYEOOWmik1dRjGrmF1q-Cpkkj07u2HCI0PY4zHQATh8-7V9BwTPSE3iwOEd1OjQE1iWkBvk_bzQY7s0Sq4Hs7bHqKo8iGeZqbPN_WR7mpSd1RHpvPVhuMbG7XOq_L-oJlRfW5wteq0qorrpe-PBW9Pr8UJcK6rg-BLYPQ" rel="nofollow">live editor</a>]</h3><a id="user-content-git-graph-experimental---live-editor" class="anchor" aria-label="Permalink: Git graph [experimental - live editor]" href="#git-graph-experimental---live-editor"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="gitGraph
+  commit
+  commit
+  branch develop
+  checkout develop
+  commit
+  commit
+  checkout main
+  merge develop
+  commit
+  commit"><pre class="notranslate"><code>gitGraph
+  commit
+  commit
+  branch develop
+  checkout develop
+  commit
+  commit
+  checkout main
+  merge develop
+  commit
+  commit
+</code></pre></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="b278b806-3138-49a8-964c-e776f4396efc" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/mermaid?docs_host=https%3A%2F%2Fdocs.github.com" data-type="mermaid" aria-label="mermaid rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;gitGraph\n  commit\n  commit\n  branch develop\n  checkout develop\n  commit\n  commit\n  checkout main\n  merge develop\n  commit\n  commit\n&quot;}" data-plain="gitGraph
+  commit
+  commit
+  branch develop
+  checkout develop
+  commit
+  commit
+  checkout main
+  merge develop
+  commit
+  commit
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="mermaid" aria-label="Raw mermaid code">gitGraph
+  commit
+  commit
+  branch develop
+  checkout develop
+  commit
+  commit
+  checkout main
+  merge develop
+  commit
+  commit
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h3 class="heading-element" dir="auto">Bar chart (using gantt chart) [<a href="https://mermaid.js.org/syntax/gantt.html" rel="nofollow">docs</a> - <a href="https://mermaid.live/edit#pako:eNptkU1vhCAQhv8KIenNugiI4rkf6bmXpvEyFVxJFDYyNt1u9r8X63Z7WQ9m5pknLzieaBeMpQ3dg0dsPUkPOhwteXZIXmJcbCT3xMAxkuh8Z8kIEclyMIB209fqKcwTICFvG4IvFy_oLrZ-g9F26ILfQgvNFN94VaRXQ1iWqpumZBcu1J8p1E1TXDx59eQNr5LyEqjJn6hv5QnGNlxevZJmdLLpy5xJSzut45biYCfb0iaVxvawjNjS1p-TCguG16PvaIPzYjO67e3BwX6GiTY9jPFKH43DMF_hGMDY1J4oHg-_f8hFTJFd8L3br3yZx4QHxENsdrt1nO8dDstH3oVpF50ZYMbhU6ud4qoGLqyqBJRCmO6j0HXPZdGbihUc6Pmc0QP49xD-b5X69ZQv2gjO81IwzWqhC1lKrjJ6pA3nVS7SMiVjrKirWlYp5fs3osgrWeo00lorLWvOzz8JVbXm" rel="nofollow">live editor</a>]</h3><a id="user-content-bar-chart-using-gantt-chart-docs---live-editor" class="anchor" aria-label="Permalink: Bar chart (using gantt chart) [docs - live editor]" href="#bar-chart-using-gantt-chart-docs---live-editor"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="gantt
+    title Git Issues - days since last update
+    dateFormat  X
+    axisFormat %s
+
+    section Issue19062
+    71   : 0, 71
+    section Issue19401
+    36   : 0, 36
+    section Issue193
+    34   : 0, 34
+    section Issue7441
+    9    : 0, 9
+    section Issue1300
+    5    : 0, 5"><pre class="notranslate"><code>gantt
+    title Git Issues - days since last update
+    dateFormat  X
+    axisFormat %s
+
+    section Issue19062
+    71   : 0, 71
+    section Issue19401
+    36   : 0, 36
+    section Issue193
+    34   : 0, 34
+    section Issue7441
+    9    : 0, 9
+    section Issue1300
+    5    : 0, 5
+</code></pre></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="d69c438f-bd01-403f-84fa-8dd110c95eaf" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/mermaid?docs_host=https%3A%2F%2Fdocs.github.com" data-type="mermaid" aria-label="mermaid rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;gantt\n    title Git Issues - days since last update\n    dateFormat  X\n    axisFormat %s\n\n    section Issue19062\n    71   : 0, 71\n    section Issue19401\n    36   : 0, 36\n    section Issue193\n    34   : 0, 34\n    section Issue7441\n    9    : 0, 9\n    section Issue1300\n    5    : 0, 5\n&quot;}" data-plain="gantt
+    title Git Issues - days since last update
+    dateFormat  X
+    axisFormat %s
+
+    section Issue19062
+    71   : 0, 71
+    section Issue19401
+    36   : 0, 36
+    section Issue193
+    34   : 0, 34
+    section Issue7441
+    9    : 0, 9
+    section Issue1300
+    5    : 0, 5
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="mermaid" aria-label="Raw mermaid code">gantt
+    title Git Issues - days since last update
+    dateFormat  X
+    axisFormat %s
+
+    section Issue19062
+    71   : 0, 71
+    section Issue19401
+    36   : 0, 36
+    section Issue193
+    34   : 0, 34
+    section Issue7441
+    9    : 0, 9
+    section Issue1300
+    5    : 0, 5
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h3 class="heading-element" dir="auto">User Journey diagram [<a href="https://mermaid.js.org/syntax/userJourney.html" rel="nofollow">docs</a> - <a href="https://mermaid.live/edit#pako:eNplkMFuwjAQRH9l5TMiTVIC-FqqnjhxzWWJN4khsSN7XRSh_HsdKBVt97R6Mzsj-yoqq0hIAXCywRkaSwNxWHNHsB_hYt1ZmwYUfiueKtbWwIcFtjf5zgH2eCZgQgkrCXt64GgMg2fUzkvIn5Xd_V5COtMFvCH_62ht_5yk7MU8sn61HDTfxD8VYiF6cj1qFd94nWkpuKWYKWRcFdUYOi5FaaZoDYNCpnel2Toha-w8LQQGtofRVEKyC_Qw7TQ2DvsfV2dRUTy6Ch6H-UMb7TlGVtbUupl5cF3ELfPgZZLM8rLR3IbjsrJ94rVq0XH7uS2SIis2mOVUrHNc5bmqjul2U2evaa3WL2mGYpqmL2BGiho" rel="nofollow">live editor</a>]</h3><a id="user-content-user-journey-diagram-docs---live-editor" class="anchor" aria-label="Permalink: User Journey diagram [docs - live editor]" href="#user-journey-diagram-docs---live-editor"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="  journey
+    title My working day
+    section Go to work
+      Make tea: 5: Me
+      Go upstairs: 3: Me
+      Do work: 1: Me, Cat
+    section Go home
+      Go downstairs: 5: Me
+      Sit down: 3: Me"><pre class="notranslate"><code>  journey
+    title My working day
+    section Go to work
+      Make tea: 5: Me
+      Go upstairs: 3: Me
+      Do work: 1: Me, Cat
+    section Go home
+      Go downstairs: 5: Me
+      Sit down: 3: Me
+</code></pre></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="b79477e8-2b03-4af5-9347-a34f8fe98553" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/mermaid?docs_host=https%3A%2F%2Fdocs.github.com" data-type="mermaid" aria-label="mermaid rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;  journey\n    title My working day\n    section Go to work\n      Make tea: 5: Me\n      Go upstairs: 3: Me\n      Do work: 1: Me, Cat\n    section Go home\n      Go downstairs: 5: Me\n      Sit down: 3: Me\n&quot;}" data-plain="  journey
+    title My working day
+    section Go to work
+      Make tea: 5: Me
+      Go upstairs: 3: Me
+      Do work: 1: Me, Cat
+    section Go home
+      Go downstairs: 5: Me
+      Sit down: 3: Me
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="mermaid" aria-label="Raw mermaid code">  journey
+    title My working day
+    section Go to work
+      Make tea: 5: Me
+      Go upstairs: 3: Me
+      Do work: 1: Me, Cat
+    section Go home
+      Go downstairs: 5: Me
+      Sit down: 3: Me
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h3 class="heading-element" dir="auto">C4 diagram [<a href="https://mermaid.js.org/syntax/c4.html" rel="nofollow">docs</a>]</h3><a id="user-content-c4-diagram-docs" class="anchor" aria-label="Permalink: C4 diagram [docs]" href="#c4-diagram-docs"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="C4Context
+title System Context diagram for Internet Banking System
+
+Person(customerA, &quot;Banking Customer A&quot;, &quot;A customer of the bank, with personal bank accounts.&quot;)
+Person(customerB, &quot;Banking Customer B&quot;)
+Person_Ext(customerC, &quot;Banking Customer C&quot;)
+System(SystemAA, &quot;Internet Banking System&quot;, &quot;Allows customers to view information about their bank accounts, and make payments.&quot;)
+
+Person(customerD, &quot;Banking Customer D&quot;, &quot;A customer of the bank, &lt;br/&gt; with personal bank accounts.&quot;)
+
+Enterprise_Boundary(b1, &quot;BankBoundary&quot;) {
+
+  SystemDb_Ext(SystemE, &quot;Mainframe Banking System&quot;, &quot;Stores all of the core banking information about customers, accounts, transactions, etc.&quot;)
+
+  System_Boundary(b2, &quot;BankBoundary2&quot;) {
+    System(SystemA, &quot;Banking System A&quot;)
+    System(SystemB, &quot;Banking System B&quot;, &quot;A system of the bank, with personal bank accounts.&quot;)
+  }
+
+  System_Ext(SystemC, &quot;E-mail system&quot;, &quot;The internal Microsoft Exchange e-mail system.&quot;)
+  SystemDb(SystemD, &quot;Banking System D Database&quot;, &quot;A system of the bank, with personal bank accounts.&quot;)
+
+  Boundary(b3, &quot;BankBoundary3&quot;, &quot;boundary&quot;) {
+    SystemQueue(SystemF, &quot;Banking System F Queue&quot;, &quot;A system of the bank, with personal bank accounts.&quot;)
+    SystemQueue_Ext(SystemG, &quot;Banking System G Queue&quot;, &quot;A system of the bank, with personal bank accounts.&quot;)
+  }
+}
+
+BiRel(customerA, SystemAA, &quot;Uses&quot;)
+BiRel(SystemAA, SystemE, &quot;Uses&quot;)
+Rel(SystemAA, SystemC, &quot;Sends e-mails&quot;, &quot;SMTP&quot;)
+Rel(SystemC, customerA, &quot;Sends e-mails to&quot;)"><pre class="notranslate"><code>C4Context
+title System Context diagram for Internet Banking System
+
+Person(customerA, "Banking Customer A", "A customer of the bank, with personal bank accounts.")
+Person(customerB, "Banking Customer B")
+Person_Ext(customerC, "Banking Customer C")
+System(SystemAA, "Internet Banking System", "Allows customers to view information about their bank accounts, and make payments.")
+
+Person(customerD, "Banking Customer D", "A customer of the bank, &lt;br/&gt; with personal bank accounts.")
+
+Enterprise_Boundary(b1, "BankBoundary") {
+
+  SystemDb_Ext(SystemE, "Mainframe Banking System", "Stores all of the core banking information about customers, accounts, transactions, etc.")
+
+  System_Boundary(b2, "BankBoundary2") {
+    System(SystemA, "Banking System A")
+    System(SystemB, "Banking System B", "A system of the bank, with personal bank accounts.")
+  }
+
+  System_Ext(SystemC, "E-mail system", "The internal Microsoft Exchange e-mail system.")
+  SystemDb(SystemD, "Banking System D Database", "A system of the bank, with personal bank accounts.")
+
+  Boundary(b3, "BankBoundary3", "boundary") {
+    SystemQueue(SystemF, "Banking System F Queue", "A system of the bank, with personal bank accounts.")
+    SystemQueue_Ext(SystemG, "Banking System G Queue", "A system of the bank, with personal bank accounts.")
+  }
+}
+
+BiRel(customerA, SystemAA, "Uses")
+BiRel(SystemAA, SystemE, "Uses")
+Rel(SystemAA, SystemC, "Sends e-mails", "SMTP")
+Rel(SystemC, customerA, "Sends e-mails to")
+</code></pre></div>
+<section class="js-render-needs-enrichment render-needs-enrichment position-relative" data-identity="f321fd39-1c28-4f99-babd-a1b6fd616772" data-host="https://viewscreen.githubusercontent.com" data-src="https://viewscreen.githubusercontent.com/markdown/mermaid?docs_host=https%3A%2F%2Fdocs.github.com" data-type="mermaid" aria-label="mermaid rendered output container">
+  <div class="js-render-enrichment-target" data-json="{&quot;data&quot;:&quot;C4Context\ntitle System Context diagram for Internet Banking System\n\nPerson(customerA, \&quot;Banking Customer A\&quot;, \&quot;A customer of the bank, with personal bank accounts.\&quot;)\nPerson(customerB, \&quot;Banking Customer B\&quot;)\nPerson_Ext(customerC, \&quot;Banking Customer C\&quot;)\nSystem(SystemAA, \&quot;Internet Banking System\&quot;, \&quot;Allows customers to view information about their bank accounts, and make payments.\&quot;)\n\nPerson(customerD, \&quot;Banking Customer D\&quot;, \&quot;A customer of the bank, &amp;lt;br/&amp;gt; with personal bank accounts.\&quot;)\n\nEnterprise_Boundary(b1, \&quot;BankBoundary\&quot;) {\n\n  SystemDb_Ext(SystemE, \&quot;Mainframe Banking System\&quot;, \&quot;Stores all of the core banking information about customers, accounts, transactions, etc.\&quot;)\n\n  System_Boundary(b2, \&quot;BankBoundary2\&quot;) {\n    System(SystemA, \&quot;Banking System A\&quot;)\n    System(SystemB, \&quot;Banking System B\&quot;, \&quot;A system of the bank, with personal bank accounts.\&quot;)\n  }\n\n  System_Ext(SystemC, \&quot;E-mail system\&quot;, \&quot;The internal Microsoft Exchange e-mail system.\&quot;)\n  SystemDb(SystemD, \&quot;Banking System D Database\&quot;, \&quot;A system of the bank, with personal bank accounts.\&quot;)\n\n  Boundary(b3, \&quot;BankBoundary3\&quot;, \&quot;boundary\&quot;) {\n    SystemQueue(SystemF, \&quot;Banking System F Queue\&quot;, \&quot;A system of the bank, with personal bank accounts.\&quot;)\n    SystemQueue_Ext(SystemG, \&quot;Banking System G Queue\&quot;, \&quot;A system of the bank, with personal bank accounts.\&quot;)\n  }\n}\n\nBiRel(customerA, SystemAA, \&quot;Uses\&quot;)\nBiRel(SystemAA, SystemE, \&quot;Uses\&quot;)\nRel(SystemAA, SystemC, \&quot;Sends e-mails\&quot;, \&quot;SMTP\&quot;)\nRel(SystemC, customerA, \&quot;Sends e-mails to\&quot;)\n&quot;}" data-plain="C4Context
+title System Context diagram for Internet Banking System
+
+Person(customerA, &quot;Banking Customer A&quot;, &quot;A customer of the bank, with personal bank accounts.&quot;)
+Person(customerB, &quot;Banking Customer B&quot;)
+Person_Ext(customerC, &quot;Banking Customer C&quot;)
+System(SystemAA, &quot;Internet Banking System&quot;, &quot;Allows customers to view information about their bank accounts, and make payments.&quot;)
+
+Person(customerD, &quot;Banking Customer D&quot;, &quot;A customer of the bank, &lt;br/&gt; with personal bank accounts.&quot;)
+
+Enterprise_Boundary(b1, &quot;BankBoundary&quot;) {
+
+  SystemDb_Ext(SystemE, &quot;Mainframe Banking System&quot;, &quot;Stores all of the core banking information about customers, accounts, transactions, etc.&quot;)
+
+  System_Boundary(b2, &quot;BankBoundary2&quot;) {
+    System(SystemA, &quot;Banking System A&quot;)
+    System(SystemB, &quot;Banking System B&quot;, &quot;A system of the bank, with personal bank accounts.&quot;)
+  }
+
+  System_Ext(SystemC, &quot;E-mail system&quot;, &quot;The internal Microsoft Exchange e-mail system.&quot;)
+  SystemDb(SystemD, &quot;Banking System D Database&quot;, &quot;A system of the bank, with personal bank accounts.&quot;)
+
+  Boundary(b3, &quot;BankBoundary3&quot;, &quot;boundary&quot;) {
+    SystemQueue(SystemF, &quot;Banking System F Queue&quot;, &quot;A system of the bank, with personal bank accounts.&quot;)
+    SystemQueue_Ext(SystemG, &quot;Banking System G Queue&quot;, &quot;A system of the bank, with personal bank accounts.&quot;)
+  }
+}
+
+BiRel(customerA, SystemAA, &quot;Uses&quot;)
+BiRel(SystemAA, SystemE, &quot;Uses&quot;)
+Rel(SystemAA, SystemC, &quot;Sends e-mails&quot;, &quot;SMTP&quot;)
+Rel(SystemC, customerA, &quot;Sends e-mails to&quot;)
+" dir="auto">
+    <div class="render-plaintext-hidden" dir="auto">
+      <pre lang="mermaid" aria-label="Raw mermaid code">C4Context
+title System Context diagram for Internet Banking System
+
+Person(customerA, "Banking Customer A", "A customer of the bank, with personal bank accounts.")
+Person(customerB, "Banking Customer B")
+Person_Ext(customerC, "Banking Customer C")
+System(SystemAA, "Internet Banking System", "Allows customers to view information about their bank accounts, and make payments.")
+
+Person(customerD, "Banking Customer D", "A customer of the bank, &lt;br/&gt; with personal bank accounts.")
+
+Enterprise_Boundary(b1, "BankBoundary") {
+
+  SystemDb_Ext(SystemE, "Mainframe Banking System", "Stores all of the core banking information about customers, accounts, transactions, etc.")
+
+  System_Boundary(b2, "BankBoundary2") {
+    System(SystemA, "Banking System A")
+    System(SystemB, "Banking System B", "A system of the bank, with personal bank accounts.")
+  }
+
+  System_Ext(SystemC, "E-mail system", "The internal Microsoft Exchange e-mail system.")
+  SystemDb(SystemD, "Banking System D Database", "A system of the bank, with personal bank accounts.")
+
+  Boundary(b3, "BankBoundary3", "boundary") {
+    SystemQueue(SystemF, "Banking System F Queue", "A system of the bank, with personal bank accounts.")
+    SystemQueue_Ext(SystemG, "Banking System G Queue", "A system of the bank, with personal bank accounts.")
+  }
+}
+
+BiRel(customerA, SystemAA, "Uses")
+BiRel(SystemAA, SystemE, "Uses")
+Rel(SystemAA, SystemC, "Sends e-mails", "SMTP")
+Rel(SystemC, customerA, "Sends e-mails to")
+</pre>
+    </div>
+  </div>
+  <span class="js-render-enrichment-loader d-flex flex-justify-center flex-items-center width-full" style="min-height:100px" role="presentation">
+    <span data-view-component="true">
+  <svg style="box-sizing: content-box; color: var(--color-icon-primary);" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" data-view-component="true" class="octospinner mx-auto tmp-mx-auto anim-rotate">
+    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-opacity="0.25" stroke-width="2" vector-effect="non-scaling-stroke" fill="none"></circle>
+    <path d="M15 8a7.002 7.002 0 00-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+</svg>    <span class="sr-only">Loading</span>
+</span>
+  </span>
+</section>
+
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">Release</h2><a id="user-content-release" class="anchor" aria-label="Permalink: Release" href="#release"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">For those who have the permission to do so:</p>
+<p dir="auto">Update version number in <code>package.json</code>.</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" dir="auto" data-snippet-clipboard-copy-content="npm publish"><pre>npm publish</pre></div>
+<p dir="auto">The above command generates files into the <code>dist</code> folder and publishes them to <a href="https://www.npmjs.com" rel="nofollow">https://www.npmjs.com</a>.</p>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">Related projects</h2><a id="user-content-related-projects" class="anchor" aria-label="Permalink: Related projects" href="#related-projects"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<ul dir="auto">
+<li><a href="https://github.com/mermaid-js/mermaid-cli">Command Line Interface</a></li>
+<li><a href="https://github.com/mermaid-js/mermaid-live-editor">Live Editor</a></li>
+<li><a href="https://github.com/TomWright/mermaid-server">HTTP Server</a></li>
+</ul>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">Contributors <a href="https://github.com/mermaid-js/mermaid/issues?q=is%3Aissue+is%3Aopen+label%3A%22Good+first+issue%21%22"><img src="https://camo.githubusercontent.com/c7a9958ddcabad81b9cc2cb4d4d55938ebd76b718a78742807572c4bb6dd09f9/68747470733a2f2f696d672e736869656c64732e696f2f6769746875622f6c6162656c732f6d65726d6169642d6a732f6d65726d6169642f476f6f6425323066697273742532306973737565253231" alt="Good first issue" data-canonical-src="https://img.shields.io/github/labels/mermaid-js/mermaid/Good%20first%20issue%21" style="max-width: 100%;"></a> <a href="https://github.com/mermaid-js/mermaid/graphs/contributors"><img src="https://camo.githubusercontent.com/49e18973dd2db4eb7066946b71bbccdb8c072bd495c86ff3276efaab061b2d2d/68747470733a2f2f696d672e736869656c64732e696f2f6769746875622f636f6e7472696275746f72732f6d65726d6169642d6a732f6d65726d616964" alt="Contributors" data-canonical-src="https://img.shields.io/github/contributors/mermaid-js/mermaid" style="max-width: 100%;"></a> <a href="https://github.com/mermaid-js/mermaid/graphs/contributors"><img src="https://camo.githubusercontent.com/711be7c4b5cf1e81a430517226293b4dca0d4270aed5c911315f905e33bb6aa4/68747470733a2f2f696d672e736869656c64732e696f2f6769746875622f636f6d6d69742d61637469766974792f6d2f6d65726d6169642d6a732f6d65726d616964" alt="Commits" data-canonical-src="https://img.shields.io/github/commit-activity/m/mermaid-js/mermaid" style="max-width: 100%;"></a></h2><a id="user-content-contributors---" class="anchor" aria-label="Permalink: Contributors " href="#contributors---"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">Mermaid is a growing community and is always accepting new contributors. There's a lot of different ways to help out and we're always looking for extra hands! Look at <a href="https://github.com/mermaid-js/mermaid/issues/866" data-hovercard-type="issue" data-hovercard-url="/mermaid-js/mermaid/issues/866/hovercard">this issue</a> if you want to know where to start helping out.</p>
+<p dir="auto">Detailed information about how to contribute can be found in the <a href="https://mermaid.js.org/community/contributing.html" rel="nofollow">contribution guide</a></p>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">Security and safe diagrams</h2><a id="user-content-security-and-safe-diagrams" class="anchor" aria-label="Permalink: Security and safe diagrams" href="#security-and-safe-diagrams"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">For public sites, it can be precarious to retrieve text from users on the internet, storing that content for presentation in a browser at a later stage. The reason is that the user content can contain embedded malicious scripts that will run when the data is presented. For Mermaid this is a risk, specially as mermaid diagrams contain many characters that are used in html which makes the standard sanitation unusable as it also breaks the diagrams. We still make an effort to sanitize the incoming code and keep refining the process but it is hard to guarantee that there are no loop holes.</p>
+<p dir="auto">As an extra level of security for sites with external users we are happy to introduce a new security level in which the diagram is rendered in a sandboxed iframe preventing javascript in the code from being executed. This is a great step forward for better security.</p>
+<p dir="auto"><em>Unfortunately you cannot have a cake and eat it at the same time which in this case means that some of the interactive functionality gets blocked along with the possible malicious code.</em></p>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">Reporting vulnerabilities</h2><a id="user-content-reporting-vulnerabilities" class="anchor" aria-label="Permalink: Reporting vulnerabilities" href="#reporting-vulnerabilities"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">To report a vulnerability, please e-mail <a href="mailto:security@mermaid.live">security@mermaid.live</a> with a description of the issue, the steps you took to create the issue, affected versions, and if known, mitigations for the issue.</p>
+<div class="markdown-heading" dir="auto"><h2 class="heading-element" dir="auto">Appreciation</h2><a id="user-content-appreciation" class="anchor" aria-label="Permalink: Appreciation" href="#appreciation"><svg data-component="Octicon" class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a></div>
+<p dir="auto">A quick note from Knut Sveidqvist:</p>
+<blockquote>
+<p dir="auto"><em>Many thanks to the <a href="https://d3js.org/" rel="nofollow">d3</a> and <a href="https://github.com/cpettitt/dagre-d3">dagre-d3</a> projects for providing the graphical layout and drawing libraries!</em></p>
+<p dir="auto"><em>Thanks also to the <a href="https://bramp.github.io/js-sequence-diagrams" rel="nofollow">js-sequence-diagram</a> project for usage of the grammar for the sequence diagrams. Thanks to Jessica Peter for inspiration and starting point for gantt rendering.</em></p>
+<p dir="auto"><em>Thank you to <a href="https://github.com/tylerlong">Tyler Long</a> who has been a collaborator since April 2017.</em></p>
+<p dir="auto"><em>Thank you to the ever-growing list of <a href="https://github.com/mermaid-js/mermaid/graphs/contributors">contributors</a> that brought the project this far!</em></p>
+</blockquote>
+<hr>
+<p dir="auto"><em>Mermaid was created by Knut Sveidqvist for easier documentation.</em></p>
+</article></div>
