@@ -189,12 +189,24 @@ function decorateAttributes(el: Element): void {
   }
 
   if (HEADING_TAGS.has(el.tagName)) {
-    // Set `class` BEFORE `dir`: hast serialises properties in insertion order
-    // and GitHub emits `class` first (`<h2 class="heading-element" dir="auto">`).
+    // `class` BEFORE `dir`: hast serialises properties in insertion order and
+    // GitHub emits `class` first (`<h2 class="heading-element" dir="auto">`).
     // The corpus suite cannot catch a swap here — `normalize.ts`'s
-    // `sortAttributes` sorts the keys — so a direct string assertion in
-    // test/rules/rawshape.test.ts pins it, mirroring engine.ts's coupling #2.
+    // `sortAttributes` sorts the keys — so direct string assertions in
+    // test/rules/rawshape.test.ts pin it, mirroring engine.ts's coupling #2.
+    //
+    // Appending `className` is enough only when the element has no `dir` yet.
+    // An author-supplied `dir` is already in insertion order from parsing, so
+    // it has to be deleted and reinserted or it would serialise first and the
+    // invariant would silently hold on one path and not the other. The author's
+    // `dir` consequently moves after any attribute it originally preceded;
+    // UNMEASURED which order GitHub emits in that case, but attribute order
+    // carries no meaning in HTML and self-consistency with the 46 measured
+    // no-author-`dir` instances is the better-supported guess.
+    const authorDir = el.properties.dir
+    delete el.properties.dir
     el.properties.className = [...tokenList(el.properties.className), 'heading-element']
+    if (authorDir !== undefined) el.properties.dir = authorDir
   }
 
   if (DIR_AUTO_TAGS.has(el.tagName) && !tokenList(el.properties.className).includes('contains-task-list')) {

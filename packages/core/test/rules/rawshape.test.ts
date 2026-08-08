@@ -54,6 +54,27 @@ describe('applyRawShape', () => {
       expect(md().render('<ul><li>x</li></ul>\n')).not.toContain('<li dir=')
     })
 
+    /**
+     * UNMEASURED judgment call — and the ONLY one in this rule that is reachable
+     * with default options, so it is the one that most needs a test. `dir` is in
+     * `defaultSchema.attributes['*']`, so an author `dir` survives the sanitizer
+     * and reaches this rule on the normal path. No corpus input writes one
+     * (`grep -rn 'dir="' packages/core/test/corpus/` is empty across all 60
+     * inputs), so there is no oracle. readit preserves the author's value rather
+     * than overwriting it: GitHub's filters are observed preserving author
+     * attributes elsewhere — a hand-written heading `id` survives beside the
+     * anchor's own, per github-only/user-content-id — and preserving cannot
+     * destroy author intent, whereas overwriting can.
+     */
+    it('UNMEASURED: leaves an author dir untouched instead of overwriting it', () => {
+      expect(md().render('<p dir="rtl">x</p>\n')).toBe('<p dir="rtl">x</p>\n')
+      expect(md().render('<ul dir="rtl"><li>x</li></ul>\n')).toBe('<ul dir="rtl"><li>x</li></ul>\n')
+      // Through the real engine too, to show the default path really does reach
+      // here — unlike the author-`style` call, which the sanitizer makes
+      // unreachable without allowDangerousHtml.
+      expect(render('<p dir="rtl">x</p>\n')).toBe('<p dir="rtl">x</p>\n')
+    })
+
     it('marks the <p> parse5 synthesises from an unclosed author <p>', () => {
       // Oracle bytes, from test/fixtures/real-world/mermaid.html: the stray
       // `<p>` on line 9 of that README closes the previous paragraph and opens
@@ -86,6 +107,31 @@ describe('applyRawShape', () => {
     it('emits class BEFORE dir on the heading element (unsortable by the corpus suite)', () => {
       expect(md().render('<h3>T</h3>\n')).toContain('<h3 class="heading-element" dir="auto">')
       expect(md().render('<h3>T</h3>\n')).not.toContain('<h3 dir="auto" class="heading-element">')
+    })
+
+    /**
+     * The same invariant on the one path that does not get it for free. When the
+     * author supplied `dir`, that key is already in hast's insertion order from
+     * parsing, so merely appending `className` would emit `dir` first and break
+     * the ordering the case above pins. `decorateAttributes` therefore deletes
+     * and reinserts `dir` on headings; these two cases are what hold it there.
+     * Invisible to the corpus for the same `sortAttributes` reason.
+     */
+    it('keeps class before dir even when the author supplied the dir', () => {
+      expect(md().render('<h2 dir="rtl">T</h2>\n')).toContain(
+        '<h2 class="heading-element" dir="rtl">',
+      )
+      expect(md().render('<h2 dir="rtl">T</h2>\n')).not.toContain('<h2 dir="rtl" class=')
+    })
+
+    it('moves the author dir after class rather than breaking the ordering', () => {
+      // The author's `dir` ends up after `align`, which it preceded in the
+      // source. UNMEASURED which order GitHub emits here, but attribute order
+      // carries no meaning in HTML, and staying self-consistent with the 46
+      // measured no-author-`dir` instances is the better-supported guess.
+      expect(md().render('<h2 dir="rtl" align="center">T</h2>\n')).toContain(
+        '<h2 align="center" class="heading-element" dir="rtl">',
+      )
     })
 
     it('keeps the author attributes ahead of class and dir', () => {
@@ -298,8 +344,9 @@ describe('applyRawShape', () => {
      */
     it('KNOWN DEVIATION: allocates markdown-first, not document-order', () => {
       const html = render('<h2>Dup</h2>\n\n## Dup\n')
-      const rawHeadingBlock = html.slice(0, html.indexOf('## Dup') === -1 ? html.length : undefined)
-      expect(rawHeadingBlock).toContain('href="#dup-1"') // the raw <h2>, which came first
+      // The raw <h2> comes first in the source, so GitHub would give IT the bare
+      // slug. readit gives it the suffixed one: `#dup-1` appears before `#dup`.
+      expect(html).toContain('href="#dup-1"')
       expect(html.indexOf('href="#dup-1"')).toBeLessThan(html.indexOf('href="#dup"'))
     })
   })
