@@ -6,13 +6,14 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "tsc --noEmit && npm run typecheck --workspaces --if-present",
     "oracle:refresh": "tsx packages/core/scripts/oracle-refresh.ts",
     "oracle:manifest": "tsx packages/core/scripts/build-oracle-manifest.ts",
     "gen:svg-stylesheet": "vite-node tools/gen-svg-stylesheet.ts",
     "refresh:math-golden": "vite-node tools/refresh-math-golden.ts"
   },
   "devDependencies": {
+    "typescript": "5.9.3",
     "vite-node": "6.0.0",
     "vitest": "4.1.10"
   }

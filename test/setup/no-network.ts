@@ -75,7 +75,14 @@ const realLookup = dns.lookup
 }
 
 const realFetch = globalThis.fetch
-globalThis.fetch = function patchedFetch(input: RequestInfo | URL, init?: RequestInit) {
+// Parameters<typeof realFetch> rather than the global `RequestInfo`/`RequestInit` names: with
+// `lib: ["ES2023"]` and `types: ["node"]` there is no DOM lib, so `RequestInfo` is not in scope
+// and this file failed to compile the moment it was brought under tsc. Deriving the parameter
+// types from the function actually being wrapped is also what keeps the wrapper honest.
+globalThis.fetch = function patchedFetch(
+  input: Parameters<typeof realFetch>[0],
+  init?: Parameters<typeof realFetch>[1],
+) {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
   let host: string
   try {

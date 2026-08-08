@@ -1,0 +1,25 @@
+{
+  "//": [
+    "Covers the repo-root TypeScript that belongs to no workspace: the offline gate and its",
+    "setup file (test/), the generator scripts (tools/) and vitest.config.ts. Before this",
+    "existed, `npm run typecheck` delegated only to the two packages, so none of these files",
+    "was type-checked by anything at all — the offline gate in particular did not compile.",
+    "Same compilerOptions as packages/*/tsconfig.json, deliberately: strict,",
+    "noUncheckedIndexedAccess and verbatimModuleSyntax are what much of this codebase's",
+    "defensive guarding exists to satisfy, and root-level test infrastructure is not exempt."
+  ],
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": ["test/**/*.ts", "tools/**/*.ts", "vitest.config.ts"]
+}
