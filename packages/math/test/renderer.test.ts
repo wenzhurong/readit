@@ -31,8 +31,9 @@ describe('createMathRenderer', () => {
 
   it('strips MathJax data-latex hints so untrusted TeX lives only in data-tex', () => {
     const html = createMathRenderer().render('\\text{a"b<c>}', false)
+    // 'data-latex-item' contains 'data-latex', so this one assertion covers both attributes;
+    // the separate not.toContain('data-latex-item') this replaced could not fail on its own.
     expect(html).not.toContain('data-latex')
-    expect(html).not.toContain('data-latex-item')
     expect(html.match(/data-tex=/g)).toHaveLength(1)
   })
 
@@ -49,9 +50,47 @@ describe('createMathRenderer', () => {
     expect(html.match(/javascript:/g)).toHaveLength(1)
   })
 
-  it('does not ship the unicode package, so \\unicode is undefined', () => {
-    const html = createMathRenderer().render('\\unicode[foo;color:red]{41}', false)
-    expect(html).not.toMatch(/\sstyle="color/)
+  /**
+   * The assertion this replaced was `not.toMatch(/\sstyle="color/)`, which could not fail:
+   * `\unicode`'s optional argument is `[height,depth,fontname]`, not CSS, so it has no
+   * `style=` emission path in any configuration — with or without the package. It was testing
+   * the wrong vector under the right name. (The real CSS vector is `\style{}` from the html
+   * package; see the test below.)
+   *
+   * What the name actually claims, asserted directly: with the unicode package loaded,
+   * `\unicode{41}` renders U+0041 as an ordinary glyph. Without it, `noundefined` renders the
+   * control sequence itself in red — the same treatment a macro that certainly does not exist
+   * gets. The red is the discriminator, and a real character has none of it.
+   */
+  it('does not ship the unicode package, so \\unicode is an undefined macro and not a character', () => {
+    const undefinedMacro = createMathRenderer().render('\\unicode{41}', false)
+    const realCharacter = createMathRenderer().render('A', false)
+    const alsoUndefined = createMathRenderer().render('\\definitelyNotAMacro', false)
+
+    expect(undefinedMacro).toContain('fill="red"')
+    expect(alsoUndefined).toContain('fill="red"')
+    expect(realCharacter).not.toContain('fill="red"')
+    expect(undefinedMacro).not.toBe(realCharacter)
+    // The literal source survives in data-tex, inert.
+    expect(undefinedMacro).toContain('data-tex="\\unicode{41}"')
+  })
+
+  /**
+   * `\style{...}{...}` is the html package's CSS-injection vector, the counterpart to the
+   * `\href` URL vector covered above, and it was the genuinely untested one. Not loading the
+   * package is the whole mitigation (SPEC §7.5 is a package allowlist, not a safe-handler), so
+   * what this pins is that no author-supplied CSS reaches an attribute.
+   */
+  it('does not ship the html package, so \\style injects no author-controlled CSS', () => {
+    const html = createMathRenderer().render('\\style{color:blue;position:fixed}{x}', false)
+    const styles = [...html.matchAll(/\sstyle="([^"]*)"/g)].map((m) => m[1] ?? '')
+    // MathJax's own container alignment is the only style attribute in the output.
+    expect(styles).toHaveLength(1)
+    expect(styles[0]).toMatch(/^vertical-align: -?[\d.]+ex;$/)
+    expect(styles.join(' ')).not.toContain('color')
+    expect(styles.join(' ')).not.toContain('position')
+    // Undefined-macro rendering, exactly as for \unicode above — not the requested colour.
+    expect(html).toContain('fill="red"')
   })
 
   it('emits no equation-number ids (tags: none)', () => {
