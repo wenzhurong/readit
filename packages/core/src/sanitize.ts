@@ -3,7 +3,12 @@ import type { Root } from 'hast'
 import { fromHtml } from 'hast-util-from-html'
 import { toHtml } from 'hast-util-to-html'
 import { type Schema, defaultSchema, sanitize } from 'hast-util-sanitize'
-import { applyClobber, applyRawHtmlTransform, prefixUserContentTree } from './rules/clobber.js'
+import {
+  applyClobber,
+  applyRawHtmlTransform,
+  prefixUserContentTree,
+  type RawHtmlFallback,
+} from './rules/clobber.js'
 
 /**
  * `hast-util-sanitize`'s `defaultSchema` deliberately mirrors GitHub's
@@ -35,8 +40,33 @@ export function sanitizeUserHtml(html: string): string {
   return toHtml(sanitizeTree(fromHtml(html, { fragment: true })))
 }
 
+/**
+ * The sanitizer's degradation when the joined run no longer splits back into
+ * one part per chunk (`rules/clobber.ts`'s `RawHtmlFallback`, reachable today
+ * only via `<template>`).
+ *
+ * It must NOT be `keepChunksUnchanged`: the whole point of this stage is that
+ * author HTML never reaches the output unfiltered, and re-emitting the input
+ * would trade a crash for an XSS hole. So instead of abandoning the transform
+ * it abandons only the *join* — each chunk is sanitized on its own. Every byte
+ * this returns is still `sanitizeTree` output, which is the safety property
+ * `applyRawHtmlPolicy` promises; nothing else about the schema changes.
+ *
+ * What is lost is precisely what the join buys: a chunk is an unbalanced
+ * fragment (`<div>\n` and `</div>\n` are two tokens), so on its own `<div>\n`
+ * re-serialises as `<div></div>` and a lone `</div>\n` as nothing at all. Wrappers
+ * therefore stop wrapping. That is a structural regression, not a safety one,
+ * and it stays local: each chunk keeps its position in the document, so a
+ * `<template>` in one paragraph cannot delete or relocate raw HTML elsewhere.
+ * The two rejected alternatives both fail that last property — dropping the run
+ * outright deletes every unrelated raw element in the document, and collapsing
+ * the whole sanitized run into the first chunk relocates them all.
+ */
+export const sanitizeChunksIndependently: RawHtmlFallback = (chunks) =>
+  chunks.map(sanitizeUserHtml)
+
 export function applySanitize(md: MarkdownIt): void {
-  applyRawHtmlTransform(md, 'readit_sanitize', sanitizeTree)
+  applyRawHtmlTransform(md, 'readit_sanitize', sanitizeTree, sanitizeChunksIndependently)
 }
 
 /**

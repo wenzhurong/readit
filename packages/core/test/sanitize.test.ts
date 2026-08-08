@@ -5,6 +5,7 @@ import { applyHeadingAnchors, OCTICON_LINK } from '../src/rules/heading.js'
 import { applyCodeBlock } from '../src/rules/codeblock.js'
 import { applyEmoji } from '../src/rules/emoji.js'
 import { applyRawHtmlPolicy, sanitizeUserHtml } from '../src/sanitize.js'
+import { render } from '../src/index.js'
 
 function md(allowDangerousHtml: boolean) {
   const m = new MarkdownIt({ html: true })
@@ -133,6 +134,107 @@ describe('sanitize', () => {
     expect(m.renderInline(':shipit:')).toBe(
       '<img class="emoji" title=":shipit:" alt=":shipit:" src="emoji/shipit.png" ' +
         'height="20" width="20" align="absmiddle">',
+    )
+  })
+})
+
+/**
+ * `<template>` is the ONE element in HTML5 whose children hast parks under
+ * `.content` instead of `.children`, and the ONE element (of 18 swept in both
+ * block and inline position) that makes `transformRawHtmlChunks`'s split fail.
+ * `defaultSchema.tagNames` has no `template`, so `hast-util-sanitize` deletes
+ * the element together with its content fragment — and the run separator that
+ * was sitting inside it goes too. The serialised tree then has fewer parts
+ * than there were chunks.
+ *
+ * Until this suite existed that mismatch **threw**, so `render()` was a
+ * partial function on a standard HTML5 element in the DEFAULT (safe) mode —
+ * the mode every host uses, and the only mode that runs a sanitizer at all.
+ * `allowDangerousHtml: true` never threw, because nothing drops the element
+ * there. A crash on ordinary web-component documentation is a denial of
+ * service on the host, so the mismatch degrades instead.
+ *
+ * The sanitizer's degradation is NOT "hand the chunks back unchanged" — that
+ * would emit unsanitized author HTML, turning a crash into an XSS hole. It is
+ * "sanitize each chunk on its own", i.e. the sanitizer minus the join. Every
+ * emitted byte is still `sanitizeTree` output; the only thing lost is the
+ * cross-chunk structure the join exists to preserve, which is exactly what
+ * failed.
+ */
+describe('KNOWN LIMITATION: <template> breaks the raw-HTML run split', () => {
+  /**
+   * Exact bytes, measured 2026-08-08 after the degradation landed. They are
+   * NOT what GitHub emits and NOT what the joined pass would have emitted —
+   * they are the documented shape of the degraded path, pinned so a future
+   * change to it is a visible diff rather than a silent one. The wart to
+   * expect in all three: a chunk that was half of a tag pair re-serialises on
+   * its own, so `<p>` becomes an empty `<p></p>` and its `</p>` partner
+   * vanishes, and the text those tags used to wrap ends up beside them.
+   */
+  it('block position: renders instead of throwing', () => {
+    expect(() => render('<template><p>x</p></template>\n')).not.toThrow()
+    expect(render('<template><p>x</p></template>\n')).toBe(
+      '<p dir="auto" data-line="0"><p dir="auto"></p>x</p>\n',
+    )
+  })
+
+  it('markdown-split position: renders instead of throwing, and keeps the markdown', () => {
+    expect(() => render('<template>\n\nmd\n\n</template>\n')).not.toThrow()
+    expect(render('<template>\n\nmd\n\n</template>\n')).toBe(
+      '<p dir="auto" data-line="2">md</p>\n\n',
+    )
+  })
+
+  it('inline position: renders instead of throwing, and keeps the surrounding text', () => {
+    expect(() => render('a <template>b <b>c</b> d</template> e\n')).not.toThrow()
+    expect(render('a <template>b <b>c</b> d</template> e\n')).toBe(
+      '<p dir="auto" data-line="0">a b <b></b>c d e</p>\n',
+    )
+  })
+
+  /**
+   * The load-bearing assertion of this whole fix. A `<template>` anywhere in
+   * the document forces the degraded path for the WHOLE run — every
+   * html_block/html_inline token in the document shares one run — so the
+   * degraded path has to be at least as safe as the normal one for raw HTML
+   * that has nothing to do with `<template>`.
+   */
+  it('the degraded path still sanitizes: no author HTML escapes', () => {
+    const html = render(
+      '<template>t</template>\n\n' +
+        '<img src="x.png" onerror="alert(1)" class="c" style="color:red">\n\n' +
+        '<a href="javascript:alert(2)">j</a>\n\n' +
+        '<span onclick="alert(3)">s</span>\n',
+    )
+    expect(html).not.toContain('onerror')
+    expect(html).not.toContain('onclick')
+    expect(html).not.toContain('javascript:')
+    expect(html).not.toContain('style="color:red"')
+    expect(html).not.toContain('class="c"')
+    expect(html).not.toContain('<template>')
+  })
+
+  /**
+   * Blast radius. Every html_block/html_inline token in the document shares
+   * ONE run, so the degraded path is what renders the unrelated `<div>` too.
+   * Per-chunk sanitizing keeps it where the author put it, with its id still
+   * prefixed — the two rejected fallbacks would have deleted it (drop the run)
+   * or moved it to the top of the document (collapse the run into chunk 0).
+   */
+  it('the degraded path leaves unrelated raw HTML in place, still filtered', () => {
+    expect(render('<template>t</template>\n\n<div id="dup">d</div>\n')).toBe(
+      '<p dir="auto" data-line="0">t</p>\n<div id="user-content-dup">d</div>\n',
+    )
+  })
+
+  /**
+   * `allowDangerousHtml: true` never took the degraded path — `applyClobber`
+   * keeps `<template>` and hast round-trips `.content`, so the split succeeds.
+   * Pinned so the fix above cannot quietly change the dangerous mode too.
+   */
+  it('allowDangerousHtml keeps <template> intact and never degraded', () => {
+    expect(render('<template><p>x</p></template>\n', { allowDangerousHtml: true })).toContain(
+      '<template><p>x</p></template>',
     )
   })
 })

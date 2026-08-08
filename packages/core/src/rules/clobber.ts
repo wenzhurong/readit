@@ -12,9 +12,16 @@ export const CLOBBER_PREFIX = 'user-content-'
  *
  * So the whole run is joined with a text sentinel, parsed once, transformed,
  * serialised and split back. The sentinel is plain text, so it survives the
- * round trip everywhere text is allowed. The one place it does not is inside a
- * `<table>`, where the HTML parser foster-parents it out; that case is pinned
- * by a test rather than silently mis-handled.
+ * round trip everywhere text is allowed. Two measured places where it does not,
+ * both pinned by tests rather than silently mis-handled:
+ *
+ *  - inside a `<table>`, where the HTML parser foster-parents it out, so the
+ *    run still splits into the right number of parts but the tags move;
+ *  - inside a `<template>`, whose children hast parks under `.content` rather
+ *    than `.children`. A transform that DELETES the element deletes that
+ *    fragment with it — `hast-util-sanitize` does, `template` is absent from
+ *    `defaultSchema.tagNames` — and the separator goes too, so the run splits
+ *    into FEWER parts than there were chunks. See `RawHtmlFallback`.
  *
  * The sentinel uses U+E000 (private use area) so it can never collide with real
  * document text, and unlike ASCII whitespace or NUL it survives the HTML
@@ -45,20 +52,47 @@ export type ChunkKind = 'block' | 'inline'
  */
 export type RawHtmlTransform = (tree: Root, kinds: readonly ChunkKind[], env: Env) => Root
 
+/**
+ * What to emit when the transformed tree no longer splits back into one part
+ * per input chunk (the `<template>` case above). Same arguments as the
+ * transform, minus the tree that is now known to be unusable.
+ *
+ * This is per-caller and NOT a default the whole module can pick, because the
+ * safe answer differs by caller:
+ *
+ *  - `applyClobber` and `applyRawShape` take `keepChunksUnchanged`. Both run on
+ *    content that has already passed whatever policy applies — `applyRawShape`
+ *    is registered strictly after `applyRawHtmlPolicy`, and `applyClobber` only
+ *    runs under `allowDangerousHtml: true`, where author HTML passes through by
+ *    design. Re-emitting the input is therefore exactly as safe as the stage
+ *    that produced it; the only loss is the decoration/prefixing.
+ *  - `applySanitize` must NOT. Handing author HTML back unchanged from the
+ *    sanitizer would convert a crash into an XSS hole, which is strictly worse
+ *    than the crash. It supplies its own fallback — see `sanitize.ts`.
+ *
+ * `render()` must be total over arbitrary untrusted Markdown, so this is a
+ * degradation and never a throw. Both degradations are pinned by tests.
+ */
+export type RawHtmlFallback = (
+  chunks: readonly string[],
+  kinds: readonly ChunkKind[],
+  env: Env,
+) => string[]
+
+/** The default fallback: re-emit the run exactly as it came in. */
+export const keepChunksUnchanged: RawHtmlFallback = (chunks) => [...chunks]
+
 export function transformRawHtmlChunks(
   chunks: readonly string[],
   transform: RawHtmlTransform,
   kinds: readonly ChunkKind[] = [],
   env: Env = {},
+  fallback: RawHtmlFallback = keepChunksUnchanged,
 ): string[] {
   if (chunks.length === 0) return []
   const tree = fromHtml(chunks.join(SENTINEL), { fragment: true })
   const parts = toHtml(transform(tree, kinds, env)).split(SENTINEL)
-  if (parts.length !== chunks.length) {
-    throw new Error(
-      `raw HTML run lost its structure: ${chunks.length} chunks in, ${parts.length} out`,
-    )
-  }
+  if (parts.length !== chunks.length) return fallback(chunks, kinds, env)
   return parts
 }
 
@@ -67,6 +101,7 @@ export function applyRawHtmlTransform(
   md: MarkdownIt,
   ruleName: string,
   transform: RawHtmlTransform,
+  fallback: RawHtmlFallback = keepChunksUnchanged,
 ): void {
   md.core.ruler.push(ruleName, (state) => {
     const targets: Token[] = []
@@ -90,6 +125,7 @@ export function applyRawHtmlTransform(
       transform,
       kinds,
       state.env,
+      fallback,
     )
     for (const [i, token] of targets.entries()) token.content = out[i] ?? token.content
     return true

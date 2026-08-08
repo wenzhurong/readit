@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import MarkdownIt from 'markdown-it'
 import GithubSlugger from 'github-slugger'
+import type { Root } from 'hast'
 import {
   applyClobber,
   prefixUserContent,
   transformRawHtmlChunks,
   type ChunkKind,
+  type RawHtmlFallback,
+  type RawHtmlTransform,
 } from '../../src/rules/clobber.js'
 import { decorateRawTree } from '../../src/rules/rawshape.js'
+
+/** Worst case for the split: a transform that returns nothing at all. */
+const dropEverything: RawHtmlTransform = (): Root => ({ type: 'root', children: [] })
 
 function md() {
   const m = new MarkdownIt({ html: true })
@@ -99,6 +105,46 @@ describe('clobber', () => {
         kinds,
       ),
     ).toEqual(['\n', '<markdown-accessiblity-table><table></table></markdown-accessiblity-table>\n'])
+  })
+
+  /**
+   * The split can also fail outright, not just re-order: a transform that
+   * removes the subtree the separator landed in takes the separator with it,
+   * and the run no longer splits back into one part per chunk.
+   *
+   * This used to `throw`, which made every caller — including `render()` in
+   * its DEFAULT safe mode — a partial function. readit renders arbitrary
+   * untrusted Markdown as a total function, so the mismatch degrades to a
+   * caller-chosen fallback instead. See the `<template>` cases in
+   * test/sanitize.test.ts for the real input that reaches this branch.
+   */
+  it('degrades instead of throwing when the run no longer splits back', () => {
+    expect(() => transformRawHtmlChunks(['<i>', '</i>'], dropEverything)).not.toThrow()
+  })
+
+  it('degrades to the chunks unchanged by default', () => {
+    expect(transformRawHtmlChunks(['<i>', '</i>'], dropEverything)).toEqual(['<i>', '</i>'])
+  })
+
+  /**
+   * The default is wrong for the sanitizer — handing author HTML back
+   * unchanged would turn a crash into an XSS hole — so the fallback is the
+   * caller's to choose, and it is handed the same `kinds`/`env` the transform
+   * got so it can make the same decisions.
+   */
+  it('lets a caller supply its own fallback, with the same kinds and env', () => {
+    const seen: { kinds: readonly ChunkKind[]; env: unknown }[] = []
+    const fallback: RawHtmlFallback = (chunks, kinds, env) => {
+      seen.push({ kinds, env })
+      return chunks.map(() => '')
+    }
+    const kinds: ChunkKind[] = ['inline', 'inline']
+    const env = { marker: 1 }
+    expect(transformRawHtmlChunks(['<i>', '</i>'], dropEverything, kinds, env, fallback)).toEqual([
+      '',
+      '',
+    ])
+    expect(seen).toEqual([{ kinds, env }])
   })
 
   // The same transform over a non-table split pair keeps both tags where the
