@@ -217,10 +217,15 @@ readit/
 | `applyAlerts` | SHAPE | 规格里没有 alerts |
 | `applyFrontmatter` | SHAPE | |
 | `applyEmoji` | SHAPE | |
-| `applyCodeBlock` | SHAPE | |
+| `applyCodeBlock` | SHAPE（数组外） | 带 `opts.highlighter` 第二参，不匹配 `Rule = (md) => void`，由 `createEngine` 在 SHAPE 循环之后单独调用 |
 | `applyMathInline` | SHAPE | 规格里 `$` 是普通字符 |
-| `applyRawHtmlPolicy` | SHAPE | 内部组合 clobber + sanitize；`user-content-` 前缀会破坏带 `id` 的规格用例 |
+| `applyMathBlock` | SHAPE | ```` ```math ```` 围栏；规格里它就是普通 fenced code。**不装 fence 渲染器**——`applyCodeBlock` 在 SHAPE 循环之后注册，会覆盖任何 SHAPE 槽里装的 fence 渲染器，所以它改在 core rule 里把 token 类型换成 `math_block` |
+| `applyDecorate` | SHAPE | `<img style="max-width:100%">`、外链 `rel="nofollow"`、裸图的 `<a target="_blank">` 全是 GitHub 外壳。⚠️ 必须排在 `applyAutolink`（SEMANTIC）之后，见 C2 耦合 #5 |
+| `applyRawHtmlPolicy` | SHAPE（数组外） | 带 `opts.allowDangerousHtml` 第二参，同样不匹配 `Rule`；内部组合 clobber + sanitize，`user-content-` 前缀会破坏带 `id` 的规格用例 |
+| `applyRawShape` | **两个数组都不进** | 签名是匹配的，但位置承重：它把带 class 的标记写进 html_block/html_inline 的 token.content（C3(a) 平时禁止的事），靠的是「卫生化器已经跑完」。core rule 按 push 顺序执行，数组里每一条都跑在 `readit_sanitize` / `readit_clobber` **之前**，所以只能由 `createEngine` 在 `applyRawHtmlPolicy` **之后**单独调用。进数组会静默灭掉它的五项装饰。见 C2 耦合 #4 |
 | `applySourceLine` | SHAPE | `data-line` 是 readit 自有产物 |
+
+共 19 条：4 条 SEMANTIC + 12 条 SHAPE 数组成员 + 3 条数组外由 `createEngine` 直接调用（`applyCodeBlock`、`applyRawHtmlPolicy`、`applyRawShape`）。这张表不再靠手工维护对齐——`test/integration.test.ts` 的「rule registry」套件拿源码里导出的 `applyXxx` 与两个数组加这三条做集合比对，漏一条就红。
 
 **⚠️ 对 Task 7 正文的修正：** G2 起草时不知道槽位的存在，把两件事写进了同一个 `applyTable`。不拆的话 GFM 表格那 8 个例子会因为多出的外壳而全部失败，且没有干净的白名单理由（外壳不是"任何 JS 解析器都不可能匹配"的那一类）。
 
@@ -344,7 +349,13 @@ import type { MarkdownIt, Token } from 'markdown-it'  // 类型
 |---|---|
 | Task 3 / Task 4 正文的白名单条数 | 正文总结句写的「16 PERMANENT + 12 TEMPORARY」算错了，**以 14 + 14 为准**（PERMANENT = 187, 217, 218, 279, 280 + 9 条 emphasis；TEMPORARY = 199, 491, 621–631, 652）。白名单条目本身逐条都是实测且正确的，只有总结句的计数错了。执行时跑一遍 `grep` 计数核对 |
 | Task 7 | 见 C1 末尾的拆分要求 |
-| Task 26 的 `corpus.json` | 那是 33 KB 数据，无法内联进本文档，任务块给的是从起草目录拷贝 + sha256 校验的路径。⚠️ **如果执行时该临时目录已被清理且无网络，Task 26 会卡住。** 建议在开工第一天就把 `corpus.json` 先落进仓库并提交，不要等到 Task 26 |
+| Task 26 的 `corpus.json` | 那是 33 KB 数据，无法内联进本文档，任务块给的是从起草目录拷贝 + sha256 校验的路径。⚠️ **如果执行时该临时目录已被清理且无网络，Task 26 会卡住。** 建议在开工第一天就把 `corpus.json` 先落进仓库并提交，不要等到 Task 26 —— **执行时已照此处理**，见提交 `20e74e3`，sha256 `0ca62a76…f03a41` 与期望吻合，159 条 |
+| Task 28 正文 Step 3 的 MathDocument 作用域 | **参考代码有 bug，执行期修正。** 简报把 `output` / `doc` 的构造提到 `createMathRenderer()` 作用域，即整个渲染器共享一个 `MathDocument` —— 那正是 SPEC §17.3 明确警告的宏泄漏形态（实测：先转 `\newcommand{\zz}{\alpha}\zz` 再转裸 `\zz`，第二条会渲染出 α 字形）。SPEC §17.3 的结论是**每条公式一个全新 MathDocument**，而简报的代码是每个渲染器一个。实现者识破并把构造移进 `render()`，另加了一条简报里没有的宏泄漏回归测试；评审在同一渲染器实例上实跑两次确认输出与从未见过该宏的渲染器字节相同。⚠️ 这条 bug 若照抄，Task 29 的顺序置换测试会红——但那已是下一个任务，且症状（"某些公式渲染结果依赖它前面渲染过什么"）极难定位到源头 |
+| **任务执行顺序：Task 24 与 Task 32 的循环依赖** | **计划排序缺陷，执行期发现并解开。** Task 24（语料快照断言）要把 `render()` 的输出与 GitHub 黄金文件比对，但 `render()` 走 `createEngine`，而 `SEMANTIC_RULES`/`SHAPE_RULES` 两个数组要到 Task 32 才被填充 —— 按计划顺序，Task 24 的断言会全红，而红的套件不能提交。反过来，Task 32 的验收线第 3 条（语料 100% diff）又需要 Task 24 的断言机制存在。**解法：把 Task 32 拆成两步**，Task 24 夹在中间：<br>· **32a 装配** —— 按契约 C1 的槽位表与 C2 的顺序填充两个数组，跑通集成测试<br>· **24 语料断言** —— 此时 `render()` 已产出 GitHub 形状，刷取黄金文件、写断言、建夜间漂移预警<br>· **32b 验收** —— 核对四条验收线的实测数字，清空 TEMPORARY 白名单<br>实际执行顺序：25 → 26 → 27 → 28 → 29 → 30 → 31 → 33 → **32a** → **24** → **32b**。这只改执行次序，不改任何交付内容 |
+| Task 21 正文缺 `dropDataLine` 这一步 | **正文遗漏，执行期已补。** SPEC §17.5 明确要求归一化器在九步之外**再加一步删掉 `data-line`**（那是 readit 自有的滚动同步产物，GitHub 从不发它；不删则每个带该属性的元素都是永久 diff），但计划 Task 21 正文没有把这一步写进去。执行时由派发补上并实现、测试。另：Task 21 参考代码的 `flattenMermaid` 有过度归一化 bug —— 它匹配任何 `js-render-needs-enrichment` section 而不检查 `data-type`，会把 `geojson` 之类的 section 也折成伪造的 mermaid 内容；`joinPath` 另有一处把 `./a.md` 与 `../a.md`、`/a.md` 与目录相对 `a.md` 塌缩成同一 token 的缺陷。两者均在执行期由评审发现并修复。**过度归一化是这个任务最危险的失效方式：它不会报错，只会让整套保真度主张静默失效而套件一片绿。** |
+| Task 14 正文 Step 3 的闭合搜索 | **参考实现有 bug，已在执行期修正。** 原代码 `while (close < tokens.length && tokens[close]?.type !== 'blockquote_close') close++` 匹配的是**第一个** `blockquote_close`，无深度跟踪。alert 正文内若嵌套引用块（`> [!CAUTION]` 里再引用一段，完全正常的写法），会匹配到内层的闭合，产出 `</div>` 与 `</blockquote>` 交错的畸形 HTML。正确做法是深度计数：从 `i+1` 起 `depth=1`，遇 `blockquote_open` 加一、遇 `blockquote_close` 减一，取归零处；扫到末尾仍未归零则放弃转换。⚠️ 这与既有的 `open.level !== 0` 守卫**是两件事**：后者拒绝「触发行本身被嵌套」，前者处理「已接受的 alert 正文里有嵌套引用块」，两者都需要。原 11 条测试无一能抓到它——其中名为 "nested in another blockquote" 的那条测的是触发行被嵌套，场景不同 |
+| Task 11 的 `matchEmail` 域名扫描 | **执行期裁决：不得改为复用 `checkDomain`。** GFM 0.29 规格对两者定义**不同**——`valid domain`（spec 行 9205–9209，www/url 用）要求「最后两段不得含下划线」；extended email autolink（spec 行 9316–9321）只要求「字母数字或 `-`/`_`，以 `.` 分隔，至少一个 `.`，末字符不得为 `-` 或 `_`」，**没有**最后两段的限制。所以 `a@b_c.d_e.com` 按规格就该链接，而 `checkDomain` 会错误拒绝。手写扫描器实现的是一条真正不同的规则，看起来像重复但不是。执行期一名评审依据控制端派发时误加的「必须复用 checkDomain」提出过此项，已依规格原文驳回 |
+| Task 2 正文的 `"vitest": "4.0.18"` | **执行期裁决：改为 `4.1.10`。** 三条依据：(1) `4.0.18` 有 critical 告警 GHSA-5xrq-8626-4rwp（UI-server 文件读/执行），而它已是 4.0.x 最高版，补丁只在 4.1.10，非 semver-major；(2) 全局约束写的是 `vitest@4`，4.1.10 满足它；(3) 计划自身不一致——本计划另一处任务引用的就是 `vitest 4.1.10`，留在 4.0.18 会在那个任务落地时产生真冲突。属于解计划内部矛盾，不是推翻计划决策。提交 `aae1f3c`，升级后 `npm audit` 归零 |
 
 ---
 ### Task 1: M0 Spike —— 把壳决策从推测变成事实
@@ -878,7 +889,7 @@ export type SuiteId = 'commonmark-0.31.2' | 'gfm-0.29'
 /**
  * 唯一一条允许的归一化：把 XHTML 自闭合空元素写成 HTML5 形式。
  * 规格文件里是 `<br />`，readit 用 xhtmlOut:false（GitHub 发 `<br>`）。
- * 只对固定的 15 个空元素名生效；代码块里的 `<` 已被转义成 `&lt;`，扫不到。
+ * 只对固定的 13 个空元素名（HTML5 现行空元素集；param 已从规范移除）生效；代码块里的 `<` 已被转义成 `&lt;`，扫不到。
  * 除此之外**不做任何归一化** —— 比较是字节级的。
  */
 const VOID_SELF_CLOSING =
@@ -9522,6 +9533,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { render } from '../src/index.js'
+import { createSpecEngine } from '../src/engine.js'
+import { DEFAULT_OPTIONS } from '../src/types.js'
 
 const SRC = readFileSync(join(import.meta.dirname, 'integration/kitchen-sink.md'), 'utf8')
 
@@ -9597,16 +9610,29 @@ describe('all 16 rules in one engine', () => {
 })
 
 describe('createSpecEngine loads only the semantic slot', () => {
-  it('emits no GitHub shape for a plain heading', async () => {
-    const { createSpecEngine } = await import('../src/engine.js')
-    const { DEFAULT_OPTIONS } = await import('../src/types.js')
-    const md = createSpecEngine(DEFAULT_OPTIONS)
+  const md = createSpecEngine(DEFAULT_OPTIONS)
+
+  it('emits no GitHub shape for a plain heading', () => {
     expect(md.render('# hi')).toBe('<h1>hi</h1>\n')
   })
 
   it('still applies the semantic rules', () => {
-    // 见上一条的 import；此处复用同一个实例
     // <s> -> <del> 属于 SEMANTIC，规格引擎必须仍然生效
+    expect(md.render('~~x~~')).toBe('<p><del>x</del></p>\n')
+  })
+
+  it('does not apply the shape rules', () => {
+    // dir="auto"、markdown-heading wrapper、data-line 全部属于 SHAPE
+    const html = md.render('# hi\n\n| a |\n| - |\n| b |\n')
+    expect(html).not.toContain('dir="auto"')
+    expect(html).not.toContain('markdown-heading')
+    expect(html).not.toContain('markdown-accessiblity-table')
+    expect(html).not.toContain('data-line')
+  })
+
+  it('still applies the semantic half of the table rule', () => {
+    // align 属性归 SEMANTIC，外壳归 SHAPE —— 见契约 C1 对 Task 7 的拆分要求
+    expect(md.render('| a |\n|:-:|\n| b |\n')).toContain('align="center"')
   })
 })
 ```
@@ -9712,11 +9738,11 @@ cd packages/core && npx vitest run
 
 | # | 验收线 | 目标 | 实测 |
 |---|--------|------|------|
-| 1 | GFM 0.29 规格 | 672/672 减白名单，且 TEMPORARY 条目**已清空**（Task 10–13 应该把 autolink 11 条、tagfilter 1 条、table 1 条、strikethrough 1 条全部修好） | |
-| 2 | CommonMark 0.31.2 规格 | 652/652 减白名单（仅 3 条 PERMANENT） | |
-| 3 | 语料归一化 diff | 58 个语料 100% 通过 | |
-| 4 | 美元护栏 | `github` 模式 154/159 + 5 条具名偏离；`strict` 模式 147/159 | |
-| 5 | 数学确定性 | 重复 + 顺序置换 + 跨进程三类全绿；10 条 README 构造全部**同步**渲染成功 | |
+| 1 | GFM 0.29 规格 | 672/672 减白名单，且 TEMPORARY 条目**已清空**（Task 10–13 应该把 autolink 11 条、tagfilter 1 条、table 1 条、strikethrough 1 条全部修好） | **MET。** `npx vitest run test/spec/gfm.test.ts` → 674 tests passed（672 examples + 2 元测试）。`known-failures.json` 的 `gfm-0.29` 段 14 条，全部 PERMANENT，`TEMPORARY` 计数 = 0（`grep -c TEMPORARY` → 0）。658/672 字节级精确匹配 + 14 条白名单（对照棘轮反向断言：白名单条目若转为匹配会使测试反过来失败，防腐烂）。14 条 PERMANENT 每条都附具体理由（9 条 emphasis 0.29/0.31.2 版本漂移、3 条空引用块内部换行的上游渲染器行为、2 条 cmark-gfm 自己标记 `disabled` 的任务列表例子）。Task 10–13 原先要修的 14 条 TEMPORARY（autolink 11 + tagfilter 1 + table 1 + strikethrough 1）已确认全部修好、清出白名单，不是被重新分类成 PERMANENT 蒙混过去。 |
+| 2 | CommonMark 0.31.2 规格 | 652/652 减白名单（仅 3 条 PERMANENT） | **MET。** `npx vitest run test/spec/spec.test.ts` → 654 tests passed（652 examples + 2 元测试）。`known-failures.json` 的 `commonmark-0.31.2` 段恰好 3 条，全部 PERMANENT（同一空引用块内部换行问题，markdown-it 15 上游渲染器行为，§13.1 归一化器第 9 步折叠），649/652 精确匹配。 |
+| 3 | 语料归一化 diff | 58 个语料 100% 通过 | **NOT MET。** 实测 **45/60**（目标文本写的"58"是本表起草时的估计值；语料在 Task 24 定稿后实际收敛到 60 个文件，落在 SPEC 13.3 规定的 45–60 目标带内——见 `corpus.test.ts` 的 band 断言）。`npx vitest run test/corpus.test.ts` → 64 tests passed（60 语料 + 4 元测试）全绿，**但这是棘轮通过，不是 diff 通过**：15 个文件被记录在 `known-mismatches.json` 里，测试断言的是"这些文件继续且仍然不匹配"（反向棘轮），不是"文件匹配"。用独立脚本绕过棘轮直接跑 `compareToFixture`，得到 **45/60 真字节级匹配、15/60 真不匹配**，不匹配文件名单与 `known-mismatches.json` 的 15 个键逐一对应，无陈旧条目（无"在白名单里但其实已经匹配"的情况）。详见下方"验收线 2 缺口核算"。 |
+| 4 | 美元护栏 | `github` 模式 154/159 + 5 条具名偏离；`strict` 模式 147/159 | **MET。** `npx vitest run test/inline-math/corpus.test.ts --reporter=verbose` → 166 tests passed。`github` 模式：154/159 一致 + 5 条具名偏离（M025/M047/M082/M083/M096，每条都是"断言与 GitHub 不同"的独立 `it`，不是跳过），与目标完全一致。`strict` 模式：147/159（154 减去 7 条 STRICT_ONLY_LOSSES：PRE00/M036/M048/M049/M077/M079/M088），与目标完全一致。 |
+| 5 | 数学确定性 | 重复 + 顺序置换 + 跨进程三类全绿；10 条 README 构造全部**同步**渲染成功 | **MET。** `npx vitest run packages/math/test/determinism.test.ts --reporter=verbose` → 5/5 passed：(a) 重复渲染字节相同、(b) 顺序置换（identity/reverse/+1/+2/+3 五种排列）逐一相同、(b2) `\newcommand` 宏不跨 `convert()` 泄漏、(c) 两个独立 node 子进程的 SHA-256 一致、(d) golden constructs 在置换下也稳定。`npx vitest run packages/math/test/golden-readme-constructs.test.ts` → 11/11 passed：10 条 README 构造全部同步渲染成功并匹配各自 golden 文件，外加 1 条"无懒加载字体块"整体检查。 |
 
 ⚠️ 第 1 行的 TEMPORARY 清空是硬要求。如果跑完发现 TEMPORARY 里还有剩余，说明 Task 10–13 有没做完的部分，**不要把它改成 PERMANENT 蒙混过去**——PERMANENT 的定义是「任何 JS 解析器都不可能匹配」，autolink 和 tagfilter 都不属于这一类。
 
@@ -9887,3 +9913,254 @@ git commit -m "feat(core): 链接与图片的 GitHub 装饰（nofollow / max-wid
 
 补上自审发现的覆盖缺口：SPEC §17.1 新增的两条 §6 规则此前无任务负责。"
 ```
+
+---
+
+## 追加任务（Task 24 实测后，用户定范围「只修大的两件 + 棘轮白名单」）
+
+> Task 24 首次把保真度主张放到 60 份真实语料上量，得到 **38/60**。22 个不匹配归因为
+> readit 真 bug 13 个成因 / D-MERMAID 3 文件（M5 范围外）/ 归一化器缺口 2 / unknown 0，
+> 该测量本身经独立复现确认可信（评审自己跑了套件、把 14 个不匹配重新过了真实 render()
+> 管线比字节、确认归一化器与 src/** 未被改动）。
+>
+> 用户裁定：本计划内只修**两件大的**——Task 34（块级数学，属计划缺口）与 Task 35
+> （原生 HTML 装饰，影响面最大）；其余 11 个成因 + 2 个归一化器缺口入棘轮白名单
+> （Task 36），归计划二。
+
+---
+
+### Task 34: 块级数学（`$$` 段落 + ```math 围栏）+ 回退元素外形
+
+> ⚠️ **这是一个计划缺口，不是 bug 修复。** SPEC §8.6 明写 `inlineMath: 'off'` 时
+> "`$$…$$` 块与 ```math 围栏仍工作"，但起草期没有任何任务负责这个机制：T25 只做了
+> R1–R8 行内美元护栏，T28 只做了 MathJax 渲染器。`packages/core/src/rules/math-inline.ts`
+> 是唯一的数学规则文件，里面没有任何块级路径。与 Task 33 同类。
+
+**实测地面真相 —— 先读夹具，不要照报告的散文实现。** Task 24 的报告在这里有一处
+归因错误：它说块级 `$$` 的失败症状包含"`\,` 甚至被 CommonMark 反斜杠反转义成字面 `,`"。
+**GitHub 自己的输出里也是 `,`。** 那是正确行为，不是缺陷。
+
+三份夹具就是验收标准（`data-run-id` 已由归一化器的 `NONDETERMINISTIC_ATTRS` 剥除，
+不必产出）：
+
+| 语料 | GitHub 实测输出 |
+|---|---|
+| `corpus/frontend/math-block.md`<br>`$$\n\int_0^1 x^2 \, dx = \frac{1}{3}\n$$` | `<p dir="auto"><math-renderer class="js-display-math" style="display: block">$$`<br>`\int_0^1 x^2 , dx = \frac{1}{3}`<br>`$$</math-renderer></p>` |
+| `corpus/frontend/math-fence.md`<br>```` ```math\n\sum_{n=1}^{\infty} …\n``` ```` | `<math-renderer class="js-display-math" style="display: block">$$\sum_{n=1}^{\infty} …$$</math-renderer>`（**顶层，无 `<p>`**） |
+| `corpus/frontend/math-inline.md` | `<math-renderer class="js-inline-math" style="display: inline-block">$e^{i\pi} + 1 = 0$</math-renderer>` |
+
+从这三行读出的四条硬事实，每一条都改变实现形状：
+
+1. **块级 `$$` 是行内层构造，不是块级构造。** 它被包在 `<p dir="auto">` 里，且 `\,`
+   经过了 CommonMark 转义处理 —— 两者都证明它走的是段落的 inline 流水线。
+   **所以复用 `math_inline` token（`markup === '$$'`），不要新建块级规则。**
+   当前失败的原因是扫描器在一个 inline token 的 children 里不跨 `softbreak` 合并
+   —— `$$\n…\n$$` 被切成 text/softbreak/text/softbreak/text。
+2. **```math 围栏是块级的**，顶层无 `<p>` 包裹 → 需要真正的块级 token。
+   围栏体被 trim 后由 GitHub **自己补上** `$$`…`$$` 定界符（源码里没有）。
+3. **回退元素的 class 随 display 切换**，当前 `math-inline.ts:331` 无论如何都写
+   `js-inline-math`，且两种情况都漏了 `style`。正确形状：
+   `display ? 'class="js-display-math" style="display: block"' : 'class="js-inline-math" style="display: inline-block"'`。
+4. **围栏不能靠覆盖 `md.renderer.rules.fence` 实现。** `createEngine` 里
+   `applyCodeBlock(md, opts.highlighter)` 在 `SHAPE_RULES` **之后**注册，会把 SHAPE
+   槽里任何 `fence` 渲染器覆盖掉。用 **core rule 改 token 类型**（`fence` +
+   `info === 'math'` → 新块级 token），这样 codeblock 的 `fence` 渲染器根本看不到它，
+   与注册顺序无关。
+
+**Files:**
+- Create: `packages/core/src/rules/math-block.ts`
+- Test: `packages/core/test/rules/math-block.test.ts`
+- Modify: `packages/core/src/rules/math-inline.ts`（回退外形；跨 softbreak 的 `$$` 跨度）
+- Modify: `packages/core/src/engine.ts`（`applyMathBlock` 加进 `SHAPE_RULES`，紧跟 `applyMathInline`）
+
+**Interfaces:**
+- Produces: `export function applyMathBlock(md: MarkdownIt): void`
+- 渲染器接缝与行内一致：`env.readit.math` 存在时 `renderer.render(tex, /* display */ true)`；
+  不存在时发上表的回退元素。**围栏传给渲染器的是纯 TeX（不含 `$$`）**，与
+  `math_inline` 的 `token.content` 语义一致。
+
+**槽位：SHAPE。** 规格不期望这些。
+
+**`'off'` 模式的硬约束：** `applyMathInline` 当前第一行就是 `if (mode === 'off') return`，
+会把块级一起关掉。SPEC §8.6 明确要求 `'off'` 时块级 `$$` 与 ```math **仍然工作**。
+块级路径必须在 mode 闸门**之外**。这条要有具名测试。
+
+**不得回归：** `packages/core/test/corpus/inline-math/` 下 159 条护栏语料
+（经 `NON_SNAPSHOT_DIRS` 排除出快照套件，但有自己的测试）必须继续全绿。
+R1–R8 行内判定逻辑不在本任务范围内 —— 不要为了让块级过而放宽行内护栏。
+
+- [ ] **Step 1: 写会失败的测试（TDD，先红后绿）**
+  覆盖：三份夹具各自的精确输出；`inlineMath: 'off'` 下块级两种形式仍工作；
+  围栏体首尾空白被 trim；`env.readit.math` 存在时走渲染器且 `display === true`；
+  非 `math` info 的围栏不受影响（仍走 codeblock 的 wrapper）。
+- [ ] **Step 2: 实现至绿**
+- [ ] **Step 3: 跑 `npm test`**，报告 `packages/core/test/corpus.test.ts` 里
+  `frontend/math-block`、`frontend/math-fence`、`frontend/math-inline` 三条的前后状态。
+  **其余语料的红是已知的（38/60），不是你引入的** —— 但如果**新增**了红，那是回归，必须报。
+
+---
+
+### Task 36: 语料不匹配的棘轮白名单
+
+> Task 24 刻意没建白名单，`npm test` 因此在根级首次变红。用户裁定建棘轮式白名单。
+
+**照搬项目已在用且已验证的模式** —— `known-failures.json` 的**双向棘轮**：
+白名单**外**出现新失败 → 断构建；白名单**内**的条目现在通过了 → **也**断构建。
+第二个方向是关键：它保证修好一条就必须删一条，白名单只能缩不能悄悄留。
+
+**Files:**
+- Create: `packages/core/test/known-mismatches.json`
+- Modify: `packages/core/test/corpus.test.ts`
+
+**每条条目必须具名带成因**，字段至少：语料路径、成因分类
+（`readit-bug` | `deviation` | `normalizer-gap`）、一行说明、以及对应的 Task 24
+报告成因编号。不允许无说明的裸路径 —— 白名单的价值全在于它是一份**可读的欠账清单**，
+不是一个静音开关。
+
+**内容来自 Task 24 报告的实测归因**，在 Task 34、Task 35 落地**之后**生成，
+这样它记录的是真实剩余欠账，而不是一份立刻就过期的清单。
+
+- [ ] **Step 1** 写棘轮逻辑的测试（双向都要有具名测试：注入一个假的新失败应断；
+  把一个已通过项塞进白名单应断）
+- [ ] **Step 2** 实现，填入剩余不匹配
+- [ ] **Step 3** `npm test` 必须**全绿**，并在报告里给出白名单条目数与分类计数
+
+---
+
+### Task 35: 原生 HTML 的 SHAPE 层装饰（applyRawShape）
+
+> 本任务的机制由一次**只读架构调研**确定，调研做了可运行原型并实测了增量，不是纸上建议。
+> 下面每一条"实测"都有原型或直接运行 markdown-it/卫生化器为据。
+
+**问题：** `applyDirAuto` / `applyDecorate` / `applyHeadingAnchors` / `applyTableWrapper`
+全都挂在 markdown-it 自己的语义 token 上（`paragraph_open`、`image`、`heading_open`、
+`table_open`、`link_open`）。GitHub 的流水线装饰的是**最终 HTML**，不管元素来自 Markdown
+语法还是作者手写的 HTML。真实 README 里这是最大的单一失配来源。
+
+**机制：** 新增 SHAPE 规则 `applyRawShape`，复用**已有的** `applyRawHtmlTransform`
+hast 接缝（`rules/clobber.ts:41`），在 `createEngine` 里注册于
+`applyRawHtmlPolicy(md, opts.allowDangerousHtml)` **之后**。
+
+> **它不进 `SHAPE_RULES` 数组，这是承重的。** core rule 按 push 顺序执行，数组里所有规则
+> 都跑在卫生化**之前**。实测跑一遍卫生化，装饰会被全灭：
+> ```
+> <img style="max-width: 100%;">              → <img>                （style 剥掉）
+> <markdown-accessiblity-table><table>…       → <table>…             （外壳整个删掉）
+> <div class="markdown-heading"><h2 class=…>  → <div><h2 class="">   （class 清空）
+> <a rel="nofollow"> / <a target="_blank">    → <a>                  （两个都剥）
+> ```
+> 实测 `createEngine` 的核心规则顺序：
+> `… readit_task_list → readit_heading_anchor → readit_dir_auto → readit_decorate
+> → readit_sourceline → readit_sanitize`。`readit_raw_shape` 排在 `readit_sanitize` 之后。
+>
+> **`createSpecEngine` 两条都没有**，所以规格套件 649/652 与 658/672 **在构造上不可能动**。
+
+**Files:**
+- Create: `packages/core/src/rules/rawshape.ts`
+- Test: `packages/core/test/rules/rawshape.test.ts`
+- Modify: `packages/core/src/engine.ts`（`applyRawHtmlPolicy` 之后加一行；文档块加耦合 #4）
+- Modify: `packages/core/src/rules/clobber.ts`（导出 `SENTINEL`；`applyRawHtmlTransform`
+  的 transform 类型加 `kinds` 形参）
+- Modify: `packages/core/src/rules/decorate.ts`（导出 `GITHUB_HOSTS` 与 `isExternal`）
+- Modify: `packages/core/src/rules/heading.ts:47`（slugger 改为 `state.env.readitSlugger ??= …`）
+
+**Interfaces:**
+```ts
+export type ChunkKind = 'block' | 'inline'
+export function decorateRawTree(tree: Root, slugger: GithubSlugger, kinds: readonly ChunkKind[]): Root
+export function applyRawShape(md: MarkdownIt): void   // core rule 'readit_raw_shape'
+```
+
+**已解决：Task 24 实现者没把握的那个 `html_block` 问题。** 直接跑 markdown-it 15 实测：
+- `<img src="…" alt="…" width="120">\n` → **一个 `html_block` token**，`map=[0,1]`，
+  **无 `paragraph_open`**。`img` 不在 CommonMark 条件 6 的块标签表里，所以这是**条件 7**
+  （完整开标签独占一行）。`applyDirAuto` 挂在 `paragraph_open` 上（`dirauto.ts:10-15`），
+  因此**永远不可能触发**。
+- `text <img src="a.png"> more\n` → `paragraph_open` / `inline`（含 `html_inline` 子）/ `paragraph_close`。
+
+**GitHub 的 `<p>` 不来自它的解析器。** 反证（全部取自夹具）：顶层 `<a name="legacy">` 不得
+`<p>`；`<br>\n<br>` 不得 `<p>`；顶层 `<a href>…</a>` 的 html_block 不得 `<p>`。
+`<p>` 是 GitHub 的**图片过滤器**为「无 `<a>` 祖先的裸 `<img>`」单独发的。4 个正例
+（`image-raw-html`、`tauri` 第 1 行、`sindresorhus-is` 第 7 行、`mermaid` 第 41 行）
++ 3 个反例一致。
+
+→ readit 的条件：`<img>` 无 `<a>` 祖先 **且** 是合并树的根级子节点 **且** 其 chunk 是 `html_block`。
+
+> **chunk-kind 闸门是承重的，不是防御性的。** 原型不加这个闸门时实测得到
+> `<p dir="auto">text <p dir="auto">…</p> more</p>`。`transformRawHtmlChunks` 把
+> block 与 inline chunk **合并成一棵树**，所以光靠树中位置分不出来——这就是 `kinds`
+> 必须穿进 transform 的原因。
+
+**覆盖（五项装饰全覆盖，均对着 oracle 验过）：**
+
+| 装饰 | 覆盖的原生 HTML 形态 |
+|---|---|
+| `dir="auto"` | `p`、`h1`–`h6`、`ul`、`ol`（跳过 `contains-task-list`），含 parse5 自动闭合出来的 `<p>` |
+| 标题锚点 | 任意 `h1`–`h6`，wrapper + `class="heading-element"` + 文本派生 slug，作者 `id` 保留 |
+| 图片 `style` + 外层 `<a>` | 任意 `img`；有 `a` 祖先时只加 style 不加外层 |
+| `rel="nofollow"` | 任意外部 `a[href]` |
+| `<markdown-accessiblity-table>` | 任意 `table` |
+
+**⚠️ 明确留在桌上的（任务书不得让这些读起来像已覆盖）：**
+1. `real-world/mermaid` **不会翻绿**。它的原生 HTML 区在原型下已字节一致，但仍卡在
+   (a) mermaid 围栏渲染（D-MERMAID，M5）与 (b) 一个归一化器缺口：GitHub 把跨仓库的
+   绝对 `github.com/<other>/blob/….jpg` 改写成 `/raw/`，而 `undoGithubUrlRewrites`
+   只处理 oracle 文档自己仓库的。
+2. `real-world/sindresorhus-is` **不会翻绿**。残留两因：动图上的 `data-animated-image=""`
+   （GitHub 读图片字节判定，离线不可复现——需归一化规则或具名偏离），
+   以及合成图片锚点 `href` 上的 camo URL（`restoreCamo` 只改 `img[data-canonical-src]`，
+   不改外层 `<a>`）。
+3. `github-only/image-absolute-external` 与 `github-only/anchor-image` **不是**原生 HTML bug，
+   但共用图片机制：各自唯一的 diff 是合成锚点的 `rel="noopener noreferrer nofollow"`
+   vs readit 的 `rel="noopener noreferrer"`。`decorate.ts:107` 应在 `isExternal(src)` 时补
+   `nofollow`。**单修这条也不会让它们翻绿**——(2) 的 camo-href 缺口同样作用于它们。
+4. `gfm/footnotes` 是**同一类** bug（装饰挂在 token 类型上，够不着非 token 的标记）
+   但位置不同：那段标记由 `footnote.ts` 的渲染器字符串直接发出，从不是 `html_block`，
+   `applyRawShape` 够不着。最省的修法在 `footnote.ts` 自己。**本任务不做。**
+5. **原生标题的属性顺序**：朴素实现会得到 `<h2 dir="auto" class="heading-element">`，
+   而 GitHub 发的是 `class` 在 `dir` 前。**语料测试抓不到这个**——`normalize.ts` 的
+   `sortAttributes` 会把键排序。必须先设 `className` 再设 `dir`，并用一条**直接字符串断言**
+   的测试钉住，照耦合 #2 的先例。
+6. 带 `height` 的图片 style（`max-width: 100%; height: auto; max-height: 150px;`）在整个
+   夹具集里**只有一个实例**，对 46 个朴素 `max-width: 100%;`。「有 `height` 属性 → 扩展形式」
+   这条推断与三个 `width`-only 反例相容，但百分比高度、CSS 单位高度、`width`+`height`
+   同时出现三种情况**未验证**。
+
+**风险（调研已实测，不是推测）：**
+- `test/rules/clobber.test.ts:70` 的 `KNOWN LIMITATION`（跨 markdown 内容切开的原生表格会被重排）：
+  测试用恒等 transform 断言，所以**不会失败**，但行为会退化——实测
+  `['<table>\n','</table>\n']` 加表格外壳 transform → `['\n', '<markdown-accessiblity-table><table></table></markdown-accessiblity-table>\n']`，
+  表格和外壳双双落进错误的 chunk。**扩展那条钉子测试，不要让它悄悄漂移。**
+- **重复锚点 id**（原型实测确认）：`<h2>Dup</h2>\n\n## Dup\n` 产出两个都是
+  `id="user-content-dup"` / `href="#dup"` 的元素。这是正确性 bug 不是外观问题。
+  共享 slugger 后仍有偏差：分配顺序是「先 markdown 后 raw」而非文档顺序，冲突时
+  readit 把裸 slug 给 markdown 标题，GitHub 可能给 raw 的。语料里无文件触发。**用测试钉住这条偏离。**
+- `test/sanitize.test.ts:71` 会继续通过（它建的是只带 `applyAlerts`+`applyRawHtmlPolicy`
+  的裸 MarkdownIt），但它此后编码了一条与 oracle 相反的期望。加注释说明它测的是隔离下的卫生化器。
+- `test/rules/decorate.test.ts`（181 行）是改 `decorate.ts` 时风险最高的单测文件。
+- **未暴露**：对抗性计时门（最大原生 HTML 文档实测约 1 ms，预算 1000 ms）、
+  `sourceline.ts`（对 `html_block` 的 `attrSet` 是 no-op，markdown-it 的 html_block
+  渲染器只发 `token.content` 忽略 attrs）、emoji（`readit_raw` 永不是 html_block/html_inline）。
+
+**契约：**
+- **C3(a) 在此有一个合法例外，必须在代码注释里写明。** 本规则把带 class 的 HTML 写进
+  `html_block`/`html_inline` 的 `token.content`——这在平时是被禁止的，但**卫生化器已经跑完**，
+  永远看不到它。不写明的话，下一个读代码的人会来"修"掉它。
+- C3(b) 不涉及：不覆盖任何渲染器，tagfilter 的 `html_block`/`html_inline` 链
+  （`tagfilter.ts:43-53`）不受影响，九个被过滤标签也不出现在装饰里。
+- C3(c) 成立：不读任何选项；slugger 是挂在**另一个** env 键上的 scratch state
+  （`env.readitExplain` 已是先例，见 `math-inline.ts:352`）。C3(c) 管的是 `env.readit` 下的**选项**。
+
+**两种 `allowDangerousHtml` 模式都必须正确**（原型实测两模式装饰一致）。
+一处**未实测的判断**，任务书须标明：`true` 时作者手写的 `<img style=…>` 能活过 clobber，
+会被装饰器覆盖。GitHub 的过滤器**据信**跳过已带 style 的图片。`false` 时该情形不可达
+（卫生化剥掉 style），**因此没有 oracle**。建议照 GitHub 推测实现（跳过），并标为未实测。
+
+**提交拆分：** `decorate.ts` 的两处一行改动（`GITHUB_HOSTS` 加
+`help.github.com`/`docs.github.com`；合成锚点补 `nofollow`）**单独一个提交**，
+这样语料的变动可以归因。`applyRawShape` 必须 `import { isExternal } from './decorate.js'`
+而不是复制谓词——复制会造出两处要改的漂移，而这个豁免集已经吃过一次这个亏。
+
+**验收：** 语料从当前基线 +3（`github-only/image-raw-html`、`github-only/user-content-id`、
+`real-world/tauri` 翻绿），`GITHUB_HOSTS` 一行再 +1（`real-world/gitignore`）。
+规格套件 649/652 与 658/672 **必须一字不动**。任何其他测试的状态变化都是回归，必须上报。

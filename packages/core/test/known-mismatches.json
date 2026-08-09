@@ -1,0 +1,236 @@
+{
+  "frontend/mermaid-large": {
+    "diff": {
+      "hunks": 1,
+      "edits": 8
+    },
+    "output": [
+      "<div class=\"highlight highlight-source-mermaid notranslate position-relative overflow-auto\" data-snippet-clipboard-copy-content=\"flowchart TD\n  n0 --> n1 --> n2 --> n3 --> n4 --> n5 --> n6 --> n7 --> n8 --> n9\n  n0 --> n9\n  n1 --> n8\n  n2 --> n7\n  n3 --> n6\n  n4 --> n5\" dir=\"auto\">",
+      "<pre>",
+      "flowchart TD\n  n0 --> n1 --> n2 --> n3 --> n4 --> n5 --> n6 --> n7 --> n8 --> n9\n  n0 --> n9\n  n1 --> n8\n  n2 --> n7\n  n3 --> n6\n  n4 --> n5",
+      "</pre>",
+      "</div>"
+    ],
+    "causes": [
+      {
+        "category": "deviation",
+        "explanation": "D-MERMAID: the ```mermaid fence renders as an ordinary highlight-source-mermaid code block (<div class=\"highlight highlight-source-mermaid\">...<pre>SOURCE</pre></div>); GitHub emits <section data-type=\"mermaid\">SOURCE</section>. Mermaid rendering is milestone M5, out of scope for this plan. Verified: the entire 5-vs-3-line diff is exactly this wrapper-shape difference; the mermaid source text itself is identical on both sides.",
+        "source": "task-24-report.md \"known deviation / D-MERMAID\"; re-verified against the live diff in task-36"
+      }
+    ]
+  },
+  "frontend/mermaid-syntax-error": {
+    "diff": {
+      "hunks": 1,
+      "edits": 8
+    },
+    "output": [
+      "<div class=\"highlight highlight-source-mermaid notranslate position-relative overflow-auto\" data-snippet-clipboard-copy-content=\"flowchart LR\n  A[[[ --> ???\" dir=\"auto\">",
+      "<pre>",
+      "flowchart LR\n  A[[[ --> ???",
+      "</pre>",
+      "</div>"
+    ],
+    "causes": [
+      {
+        "category": "deviation",
+        "explanation": "D-MERMAID, same mechanism as frontend/mermaid-large: highlight-source-mermaid code block vs GitHub's <section data-type=\"mermaid\">. Verified: 5-vs-3-line diff is entirely the wrapper shape; the (deliberately invalid) mermaid source text matches on both sides.",
+        "source": "task-24-report.md \"known deviation / D-MERMAID\"; re-verified against the live diff in task-36"
+      }
+    ]
+  },
+  "frontend/mermaid-valid": {
+    "diff": {
+      "hunks": 1,
+      "edits": 8
+    },
+    "output": [
+      "<div class=\"highlight highlight-source-mermaid notranslate position-relative overflow-auto\" data-snippet-clipboard-copy-content=\"flowchart LR\n  A[Hard] --> B(Round)\" dir=\"auto\">",
+      "<pre>",
+      "flowchart LR\n  A[Hard] --> B(Round)",
+      "</pre>",
+      "</div>"
+    ],
+    "causes": [
+      {
+        "category": "deviation",
+        "explanation": "D-MERMAID, same mechanism as frontend/mermaid-large: highlight-source-mermaid code block vs GitHub's <section data-type=\"mermaid\">. Verified: 5-vs-3-line diff is entirely the wrapper shape; the mermaid source text matches on both sides.",
+        "source": "task-24-report.md \"known deviation / D-MERMAID\"; re-verified against the live diff in task-36"
+      }
+    ]
+  },
+  "gfm/emoji": {
+    "diff": {
+      "hunks": 1,
+      "edits": 2
+    },
+    "causes": [
+      {
+        "category": "readit-bug",
+        "explanation": "Custom-emoji <img src> is a local relative path (src=\"emoji/shipit.png\", then x-readit-rel:... after normalization) because applyEmoji's customBase default ('emoji/') is never overridden from engine.ts. GitHub's real src is the absolute https://github.githubassets.com/images/icons/emoji/shipit.png. Verified: the only diff line is this one src attribute; everything else in the 5-line output matches.",
+        "source": "task-24-report.md readit-bug #4 (rules/emoji.ts); re-verified against the live diff in task-36"
+      }
+    ]
+  },
+  "gfm/footnotes": {
+    "diff": {
+      "hunks": 2,
+      "edits": 4
+    },
+    "causes": [
+      {
+        "category": "readit-bug",
+        "explanation": "The footnotes section's <h2 id=\"footnote-label\"> and <ol> never get dir=\"auto\" because rules/footnote.ts builds them as a hardcoded raw string outside the token pipeline, so applyDirAuto (which walks heading_open/ordered_list_open tokens) never sees them. GitHub adds dir=\"auto\" to both. Verified: exactly 2 diff lines out of 38 (the <h2> and <ol> open tags); the rest of the footnotes markup matches.",
+        "source": "task-24-report.md readit-bug #5 (rules/footnote.ts:310); re-verified against the live diff in task-36"
+      }
+    ]
+  },
+  "gfm/strikethrough": {
+    "diff": {
+      "hunks": 3,
+      "edits": 6
+    },
+    "causes": [
+      {
+        "category": "readit-bug",
+        "explanation": "Strikethrough tilde matching doesn't follow GFM: GFM accepts one OR two matching tildes (~single~ -> <del>single</del>; a 3-tilde run ~~~three~~~ is left fully literal), but markdown-it core's built-in strikethrough rule (unmodified by rules/strikethrough.ts, which only remaps s_open/s_close -> <del>) accepts exactly two and partially matches a 3-tilde run instead of leaving it literal. Verified with a bare `new MarkdownIt().render(...)` (no readit rule involved) reproducing the same wrong output, and against the live diff: readit emits <del>three</del> inside stray tildes where GitHub's oracle leaves '~~~three~~~' as plain text.",
+        "source": "task-24-report.md readit-bug #6; re-verified (including the bare-markdown-it repro) against the live diff in task-36"
+      }
+    ]
+  },
+  "gfm/tagfilter": {
+    "diff": {
+      "hunks": 1,
+      "edits": 2
+    },
+    "output": [
+      "x y z a c&#x3C;/plaintext> "
+    ],
+    "causes": [
+      {
+        "category": "readit-bug",
+        "explanation": "The 9 GFM-tagfilter tag names (title, textarea, style, xmp, iframe, noembed, noframes, script, plaintext) are stripped outright, not defused, because applyRawHtmlPolicy -> applySanitize (hast-util-sanitize's defaultSchema, which doesn't list those tag names) runs as a core-rule token transform before applyTagfilter's renderer-level wrapper ever sees the content. GitHub keeps all of it and only escapes the leading '<' of those 9 tags. Verified: readit's actual output is 'x y z a c&#x3C;/plaintext> ' (most tag content silently gone) vs GitHub's '&#x3C;title>x&#x3C;/title> &#x3C;textarea>y&#x3C;/textarea> ... &#x3C;plaintext>c&#x3C;/plaintext> ' (everything preserved, just the '<' escaped).",
+        "source": "task-24-report.md readit-bug #7 (sanitize.ts vs rules/tagfilter.ts ordering); re-verified against the live diff in task-36"
+      }
+    ]
+  },
+  "github-only/anchor-emoji": {
+    "diff": {
+      "hunks": 1,
+      "edits": 2
+    },
+    "causes": [
+      {
+        "category": "readit-bug",
+        "explanation": "Heading-anchor slugs don't map an emoji glyph to its :shortcode: the way GitHub's slugger does. '## 🚀 Launch' -> readit: href=\"#-launch\", id=\"user-content--launch\", aria-label=\"Permalink: 🚀 Launch\" (emoji dropped from the slug, kept in the label); GitHub: href=\"#rocket-launch\", id=\"user-content-rocket-launch\", aria-label=\"Permalink: :rocket: Launch\" (slugged from the shortcode text). Verified: the single diff line is exactly this anchor's href/id/aria-label triplet; the rest of the 22-line output matches.",
+        "source": "task-24-report.md readit-bug #8 (rules/heading.ts via github-slugger); re-verified against the live diff in task-36"
+      }
+    ]
+  },
+  "github-only/anchor-image": {
+    "diff": {
+      "hunks": 1,
+      "edits": 2
+    },
+    "causes": [
+      {
+        "category": "normalizer-gap",
+        "explanation": "D-CAMO restoration (restoreCamo in normalize.ts) only rewrites an <img>'s data-canonical-src back onto its src; it has no equivalent for a wrapping <a href> that GitHub also camo-proxies for the synthetic image-wrapper anchor. The anchor's rel is now correct (task-35 fixed the nofollow gap) -- the ONLY remaining diff is the camo href itself, which the normalizer cannot converge because the raw fixture's wrapping <a> carries no data-canonical-src counterpart to restore from. Verified: exactly 1 diff line out of 29, and it is the href, not rel.",
+        "source": "task-24-report.md normalizer-gap 'D-CAMO ... not a wrapping <a href>'; narrowed per task-35-report.md section 3 (\"one diff each, the camo href. Their rel now matches.\"); re-verified against the live diff in task-36"
+      }
+    ]
+  },
+  "github-only/frontmatter-malformed": {
+    "diff": {
+      "hunks": 1,
+      "edits": 18
+    },
+    "causes": [
+      {
+        "category": "readit-bug",
+        "explanation": "Malformed-YAML-frontmatter fallback isn't implemented. Source `---\\ntitle: [unclosed\\n---\\n\\nBody text.` should render GitHub's `<div class=\"flash flash-error mb-3\">Error in user YAML: ...</div>` banner followed by the raw block as a highlight-source-yaml snippet; readit instead falls through to parsing it as ordinary CommonMark (first `---` becomes <hr>, `title: [unclosed` becomes an <h2> heading with its own anchor). Verified against the full un-truncated actual/expected strings: readit's actual output has no flash-error div and no yaml code block at all -- it is a structurally different document (hr + heading + anchor vs error banner + code fence), not a small attribute diff.",
+        "source": "task-24-report.md readit-bug #10 (rules/frontmatter.ts); re-verified against the live diff in task-36"
+      }
+    ]
+  },
+  "github-only/frontmatter-scalar": {
+    "diff": {
+      "hunks": 2,
+      "edits": 6
+    },
+    "causes": [
+      {
+        "category": "readit-bug",
+        "explanation": "CORRECTION of task-24's finding #11, which had the direction backwards. Verified against the current diff: for an `empty: {}` YAML frontmatter value, readit's nested table emits a SPURIOUS `<table><thead><tr></tr></thead><tbody><tr></tr></tbody></table>` (an empty header row AND an empty body row), while GitHub's oracle emits a fully empty `<table><tbody></tbody></table>` -- no thead, no rows at all. Task 24 had claimed the opposite (readit missing a thead GitHub adds); that is not what the current diff shows, and the underlying rule likely changed between task-24 and now.",
+        "source": "task-24-report.md readit-bug #11 (rules/frontmatter.ts) is SUPERSEDED here -- verified against the live diff in task-36, which shows readit over-generating (spurious thead + spurious tbody row), not under-generating (missing thead)"
+      }
+    ]
+  },
+  "github-only/image-absolute-external": {
+    "diff": {
+      "hunks": 1,
+      "edits": 2
+    },
+    "causes": [
+      {
+        "category": "normalizer-gap",
+        "explanation": "Same mechanism as github-only/anchor-image: the synthetic image-wrapper anchor's rel is now correct (task-35), but D-CAMO restoration doesn't cover the wrapping <a href>, only the nested <img src>. Verified: exactly 1 diff line out of 5, the camo href.",
+        "source": "task-24-report.md normalizer-gap 'D-CAMO ... not a wrapping <a href>'; narrowed per task-35-report.md section 3; re-verified against the live diff in task-36"
+      }
+    ]
+  },
+  "real-world/hast-util-sanitize": {
+    "diff": {
+      "hunks": 3,
+      "edits": 305
+    },
+    "causes": [
+      {
+        "category": "normalizer-gap",
+        "explanation": "flattenHighlight (normalize.ts) only unwraps <span> highlighting inside `div.highlight` when a class starts with 'highlight-source-'; this README's three ```html fences get Linguist's text.html.basic scope, wrapped as `highlight-text-html-basic`, which the prefix check misses. Since this test renders with highlighter: null, readit's actual HTML has no span markup at all for those blocks, while GitHub's real oracle HTML keeps its baked-in pl-* syntax-highlighting spans un-flattened -- a genuine, large byte-level diff (1131 of the 1390 expected lines) that cascades in array-index offset after the first unflattened block. Verified directly: re-normalizing both sides with flattenHighlight's guard widened from 'highlight-source-' to any 'highlight-' prefix (scratch-only, normalize.ts itself untouched) makes the two sides byte-identical -- confirming this is the ONLY residual cause for this file, not one of several.",
+        "source": "task-24-report.md normalizer-gap 'flattenHighlight only matches highlight-source-*'; confirmed as the sole residual cause via a scratch verification (widened-guard equality check) in task-36"
+      }
+    ]
+  },
+  "real-world/mermaid": {
+    "diff": {
+      "hunks": 22,
+      "edits": 84
+    },
+    "causes": [
+      {
+        "category": "deviation",
+        "explanation": "D-MERMAID: all 10 ```mermaid fences in this README render as highlight-source-mermaid code blocks instead of GitHub's <section data-type=\"mermaid\">. Same mechanism as the frontend/mermaid-* trio; dominates the file's line count (this README is almost entirely mermaid examples).",
+        "source": "task-24-report.md \"known deviation / D-MERMAID\"; re-verified against the live diff in task-36"
+      },
+      {
+        "category": "normalizer-gap",
+        "explanation": "undoGithubUrlRewrites (normalize.ts) only canonicalizes relative URLs and absolute URLs against the DOCUMENT's own repo/ref prefixes. This README has one absolute cross-repo link, `https://github.com/mermaid-js/mermaid/blob/master/docs/intro/img/book-banner-post-release.jpg`, pointing at a different repo than the corpus file's own oracle target. GitHub rewrites that specific /blob/ path to /raw/ on serve; the normalizer has no mechanism to canonicalize a /blob/-vs-/raw/ difference for a repo that isn't the document's own. Verified: this is the first diff in document order (index ~145), a single <img src> attribute, isolated from the mermaid-shape diffs that follow it.",
+        "source": "task-35-report.md section 3 (\"the /blob/ -> /raw/ cross-repo normalizer gap\"); re-verified against the live diff in task-36"
+      },
+      {
+        "category": "readit-bug",
+        "explanation": "NEW finding, not in task-24 or task-35: the '## Contributors [![badge1](...)](...)  [![badge2](...)](...)  [![badge3](...)](...)' heading (three consecutive linked badge images, one source-level space between each) produces aria-label=\"Permalink: Contributors   \" (three trailing spaces -- one per stripped image/link pair) where GitHub's oracle has aria-label=\"Permalink: Contributors \" (a single trailing space, collapsed). The anchor id and href already match (github-slugger already collapses the slug); only the human-readable aria-label text keeps one raw space per removed inline element instead of collapsing consecutive whitespace the way GitHub's heading-label algorithm does. Verified directly on the un-widened live diff (present at both the raw pre-fix index and after neutralizing the two other real-world/mermaid causes in a scratch check) and reproduced against the isolated markdown source.",
+        "source": "task-36 (no prior report entry; found and verified directly against the live diff and a minimal render() repro)"
+      }
+    ]
+  },
+  "real-world/sindresorhus-is": {
+    "diff": {
+      "hunks": 2,
+      "edits": 4
+    },
+    "causes": [
+      {
+        "category": "normalizer-gap",
+        "explanation": "data-animated-image=\"\" is present on GitHub's <img> (it detects an animated GIF from the image's actual bytes) but absent from readit's output, since readit never fetches or inspects image bytes offline. Not reproducible without a network fetch, which this suite must not add.",
+        "source": "task-35-report.md section 3 (\"real-world/sindresorhus-is — two diffs left: data-animated-image=\\\"\\\" and the camo URL ...\"); re-verified against the live diff in task-36"
+      },
+      {
+        "category": "normalizer-gap",
+        "explanation": "Same D-CAMO wrapping-<a href> gap as github-only/anchor-image: the synthetic image-wrapper anchor's rel now matches (task-35), but its camo-proxied href has no data-canonical-src counterpart for restoreCamo to restore from.",
+        "source": "task-24-report.md normalizer-gap 'D-CAMO ... not a wrapping <a href>'; narrowed per task-35-report.md section 3 (\"the anchor's rel now matches the oracle\"); re-verified against the live diff in task-36"
+      }
+    ]
+  }
+}

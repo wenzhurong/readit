@@ -1,0 +1,23 @@
+{
+  "commonmark-0.31.2": {
+    "218": "PERMANENT · 空引用块的内部换行。markdown-it 15 渲染器发 <blockquote></blockquote>，规格要 <blockquote>\\n</blockquote>。三个 preset 一致，是上游渲染器行为。纯空白差异，§13.1 归一化器第 9 步会折叠掉，L2 黄金文件不受影响。",
+    "239": "PERMANENT · 同 218，输入是 '>'。markdown-it 15 上游渲染器行为。",
+    "240": "PERMANENT · 同 218，输入是 '>\\n>  \\n> '。markdown-it 15 上游渲染器行为。"
+  },
+  "gfm-0.29": {
+    "187": "PERMANENT · 空引用块的内部换行，同 commonmark-0.31.2 的 218。markdown-it 15 上游渲染器行为。",
+    "217": "PERMANENT · 空引用块 '>' 的内部换行。markdown-it 15 上游渲染器行为。",
+    "218": "PERMANENT · 空引用块 '>\\n>  \\n> ' 的内部换行。markdown-it 15 上游渲染器行为。",
+    "279": "PERMANENT · 任务列表。cmark-gfm 自己把这条标成 'example disabled'（其官方 runner 跳过）。且 GFM 规格期望 <input disabled=\"\" type=\"checkbox\">，readit 按 SPEC §6 规则 5 发 GitHub 的属性序 type,id,disabled,class,aria-label,checked —— 两者永远不等。",
+    "280": "PERMANENT · 同 279，嵌套任务列表，同样被上游标成 'example disabled'。",
+    "398": "PERMANENT · emphasis 漂移：'__foo, __bar__, baz__'。GFM 规格冻结在 CommonMark 0.29（2019-04-06），markdown-it 15 实现 0.31.2。0.31.x 改了 delimiter run 的匹配规则，任何现代 JS 解析器都不可能同时满足两版。见 SPEC §15 第 3 条。",
+    "426": "PERMANENT · emphasis 0.29 vs 0.31.2 漂移：'foo******bar*********baz'。见 SPEC §15 第 3 条。",
+    "434": "PERMANENT · emphasis 0.29 vs 0.31.2 漂移：'__foo __bar__ baz__'。见 SPEC §15 第 3 条。",
+    "435": "PERMANENT · emphasis 0.29 vs 0.31.2 漂移：'____foo__ bar__'。见 SPEC §15 第 3 条。",
+    "436": "PERMANENT · emphasis 0.29 vs 0.31.2 漂移：'**foo **bar****'。见 SPEC §15 第 3 条。",
+    "473": "PERMANENT · emphasis 0.29 vs 0.31.2 漂移：'****foo****' 期望单层 <strong>，0.31.2 出双层。见 SPEC §15 第 3 条。",
+    "474": "PERMANENT · emphasis 0.29 vs 0.31.2 漂移：'____foo____'。见 SPEC §15 第 3 条。",
+    "475": "PERMANENT · emphasis 0.29 vs 0.31.2 漂移：'******foo******'。见 SPEC §15 第 3 条。",
+    "477": "PERMANENT · emphasis 0.29 vs 0.31.2 漂移：'_____foo_____'。见 SPEC §15 第 3 条。"
+  }
+}

@@ -1,0 +1,362 @@
+{
+  "frontend/highlight-diff": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/highlight-diff.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "frontend/highlight-js": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/highlight-js.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "frontend/highlight-no-lang": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/highlight-no-lang.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "frontend/highlight-python": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/highlight-python.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "frontend/highlight-rust": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/highlight-rust.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "frontend/highlight-ts": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/highlight-ts.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "frontend/highlight-unknown-lang": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/highlight-unknown-lang.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "frontend/math-block": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/math-block.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "frontend/math-currency": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/math-currency.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "frontend/math-fence": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/math-fence.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "frontend/math-in-code": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/math-in-code.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "frontend/math-inline": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/math-inline.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "frontend/mermaid-large": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/mermaid-large.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "frontend/mermaid-syntax-error": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/mermaid-syntax-error.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "frontend/mermaid-valid": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/frontend/mermaid-valid.md",
+    "dir": "packages/core/test/corpus/frontend"
+  },
+  "gfm/autolink-bare-domain": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/gfm/autolink-bare-domain.md",
+    "dir": "packages/core/test/corpus/gfm"
+  },
+  "gfm/autolink-trailing-punct": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/gfm/autolink-trailing-punct.md",
+    "dir": "packages/core/test/corpus/gfm"
+  },
+  "gfm/autolink-www": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/gfm/autolink-www.md",
+    "dir": "packages/core/test/corpus/gfm"
+  },
+  "gfm/emoji": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/gfm/emoji.md",
+    "dir": "packages/core/test/corpus/gfm"
+  },
+  "gfm/footnotes": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/gfm/footnotes.md",
+    "dir": "packages/core/test/corpus/gfm"
+  },
+  "gfm/indented-code-block": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/gfm/indented-code-block.md",
+    "dir": "packages/core/test/corpus/gfm"
+  },
+  "gfm/strikethrough": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/gfm/strikethrough.md",
+    "dir": "packages/core/test/corpus/gfm"
+  },
+  "gfm/table-alignment": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/gfm/table-alignment.md",
+    "dir": "packages/core/test/corpus/gfm"
+  },
+  "gfm/table-escaped-pipe": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/gfm/table-escaped-pipe.md",
+    "dir": "packages/core/test/corpus/gfm"
+  },
+  "gfm/table-inline-code-pipe": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/gfm/table-inline-code-pipe.md",
+    "dir": "packages/core/test/corpus/gfm"
+  },
+  "gfm/table-ragged-rows": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/gfm/table-ragged-rows.md",
+    "dir": "packages/core/test/corpus/gfm"
+  },
+  "gfm/tagfilter": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/gfm/tagfilter.md",
+    "dir": "packages/core/test/corpus/gfm"
+  },
+  "gfm/task-list": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/gfm/task-list.md",
+    "dir": "packages/core/test/corpus/gfm"
+  },
+  "github-only/alert-case-insensitive": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/alert-case-insensitive.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/alert-caution": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/alert-caution.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/alert-important": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/alert-important.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/alert-malformed": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/alert-malformed.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/alert-multi-paragraph": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/alert-multi-paragraph.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/alert-nested": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/alert-nested.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/alert-note": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/alert-note.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/alert-tip": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/alert-tip.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/alert-warning": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/alert-warning.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/anchor-cjk": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/anchor-cjk.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/anchor-duplicate": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/anchor-duplicate.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/anchor-emoji": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/anchor-emoji.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/anchor-image": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/anchor-image.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/anchor-leading-digit": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/anchor-leading-digit.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/anchor-punctuation": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/anchor-punctuation.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/frontmatter-list": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/frontmatter-list.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/frontmatter-malformed": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/frontmatter-malformed.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/frontmatter-multiline": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/frontmatter-multiline.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/frontmatter-scalar": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/frontmatter-scalar.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/frontmatter-toml": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/frontmatter-toml.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/image-absolute-external": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/image-absolute-external.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/image-raw-html": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/image-raw-html.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/image-relative-bare": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/image-relative-bare.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/image-relative-linked": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/image-relative-linked.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/link-relative": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/link-relative.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "github-only/user-content-id": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/github-only/user-content-id.md",
+    "dir": "packages/core/test/corpus/github-only"
+  },
+  "real-world/gitignore": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/real-world/gitignore.md",
+    "dir": "packages/core/test/corpus/real-world"
+  },
+  "real-world/hast-util-sanitize": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/real-world/hast-util-sanitize.md",
+    "dir": "packages/core/test/corpus/real-world"
+  },
+  "real-world/markdown-it": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/real-world/markdown-it.md",
+    "dir": "packages/core/test/corpus/real-world"
+  },
+  "real-world/mermaid": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/real-world/mermaid.md",
+    "dir": "packages/core/test/corpus/real-world"
+  },
+  "real-world/sindresorhus-is": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/real-world/sindresorhus-is.md",
+    "dir": "packages/core/test/corpus/real-world"
+  },
+  "real-world/tauri": {
+    "repo": "wenzhurong/readit",
+    "ref": "d4819f13827870f25bf0676bfc6400949f3c0d8b",
+    "path": "packages/core/test/corpus/real-world/tauri.md",
+    "dir": "packages/core/test/corpus/real-world"
+  }
+}

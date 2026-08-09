@@ -1,0 +1,50 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # A peer gate to `unit`, not a prerequisite of it. Deliberately NOT folded into the unit job:
+  #
+  #  - It runs once, not three times. tsc's result does not depend on the OS, so putting it in
+  #    the matrix would triple the cost for three identical answers.
+  #  - It runs ALONGSIDE the tests rather than gating them. Both signals are wanted from a single
+  #    push — a type error should not hide whether the suite also went red, and vice versa.
+  #
+  # What this actually enforces: `strict`, `noUncheckedIndexedAccess` and `verbatimModuleSyntax`.
+  # A great deal of this codebase's defensive guarding (every documented `!`, every explicit
+  # `?? ''`) exists only to satisfy those flags, and `npm test` cannot enforce them — vitest
+  # transpiles TypeScript without type-checking it, so before this job nothing checked them
+  # automatically anywhere.
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.20.0'
+          cache: npm
+      - run: npm ci
+      # Root tsconfig (test/, tools/, vitest.config.ts) plus both workspaces.
+      - run: npm run typecheck
+
+  unit:
+    name: unit (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.20.0'
+          cache: npm
+      - run: npm ci
+      # test/setup/no-network.ts severs outbound sockets inside the worker,
+      # so this run is offline on every OS, including the two with no unshare.
+      - run: npm test

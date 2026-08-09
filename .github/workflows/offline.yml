@@ -1,0 +1,38 @@
+name: offline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  offline:
+    name: test suite with no egress
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.20.0'
+          cache: npm
+
+      # The only step allowed to use the network.
+      - run: npm ci
+
+      # If this step's curl succeeds, the namespace is not actually isolated and
+      # every assertion below would be vacuous. Fail loudly instead.
+      - name: Verify the network namespace really has no egress
+        run: |
+          set -euo pipefail
+          if sudo unshare --net -- sh -c 'ip link set lo up; curl -sS --max-time 5 -o /dev/null https://registry.npmjs.org/'; then
+            echo "::error::network namespace still reached the internet; the offline gate is vacuous"
+            exit 1
+          fi
+          echo "namespace has no egress"
+
+      # Catches anything the in-process JS guard cannot see: native addons,
+      # child processes, WASM loaders, and any dependency that opens a socket
+      # before test/setup/no-network.ts is evaluated.
+      - name: Run the suite inside the namespace
+        run: sudo unshare --net -- sh -c 'ip link set lo up; exec npm test'

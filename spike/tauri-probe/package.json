@@ -1,0 +1,31 @@
+{
+  "name": "tauri-probe",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@codemirror/commands": "6.10.4",
+    "@codemirror/lang-markdown": "6.5.2",
+    "@codemirror/language": "6.12.4",
+    "@codemirror/state": "6.7.1",
+    "@codemirror/view": "6.43.8",
+    "@mathjax/mathjax-tex-font": "4.1.3",
+    "@mathjax/src": "4.1.3",
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-opener": "2.5.4",
+    "@wooorm/starry-night": "3.10.0",
+    "hast-util-to-html": "^9.0.5",
+    "mermaid": "11.16.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.3"
+  }
+}

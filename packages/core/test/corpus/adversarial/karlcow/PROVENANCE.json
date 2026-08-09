@@ -1,0 +1,6 @@
+{
+  "repo": "karlcow/markdown-testsuite",
+  "ref": "92d125d8d97f1c01191c84404b13319f60b38502",
+  "license": "MIT",
+  "vendored": "tests/*.md inputs only; .out expectations excluded"
+}
