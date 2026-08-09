@@ -15,6 +15,7 @@
 import { writeFile } from 'node:fs/promises'
 import { discoverCorpus } from '../test/corpus-harness.js'
 import { buildSelfTargets } from './oracle-refresh.js'
+import { fileURLToPath } from 'node:url'
 
 /** Path of the corpus directory inside the repo, as it appears in a GitHub `contents` URL. */
 const PREFIX = 'packages/core/test/corpus'
@@ -28,12 +29,16 @@ export async function main(): Promise<number> {
   }
   const names = discoverCorpus()
   const targets = buildSelfTargets(names, repo, ref, PREFIX)
-  const manifestPath = new URL('../test/oracle-manifest.json', import.meta.url).pathname
+  // fileURLToPath, not `.pathname` — see the note in test/corpus-harness.ts.
+  const manifestPath = fileURLToPath(new URL('../test/oracle-manifest.json', import.meta.url))
   await writeFile(manifestPath, JSON.stringify(targets, null, 2) + '\n', 'utf8')
   process.stdout.write(`wrote ${targets.length} targets to ${manifestPath}\n`)
   return 0
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Compare real paths, not a hand-built file:// string: on Windows the URL form is
+// `file:///D:/...` while argv[1] is `D:\...`, so the naive comparison is never true and
+// the script silently does nothing when run directly.
+if (fileURLToPath(import.meta.url) === process.argv[1]) {
   main().then((code) => process.exit(code))
 }

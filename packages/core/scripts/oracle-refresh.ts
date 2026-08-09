@@ -8,6 +8,7 @@
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export interface OracleTarget {
   /** Fixture name; the fixture lands at test/fixtures/<name>.html */
@@ -209,7 +210,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   // the single most likely real failure this tool will hit. The corpus is still safe either way
   // (nothing is written on a rejection — see refreshAll) but the operator experience is not.
   try {
-    const root = argv[0] ?? new URL('../test', import.meta.url).pathname
+    const root = argv[0] ?? fileURLToPath(new URL('../test', import.meta.url))
     const targets = await readManifest(join(root, 'oracle-manifest.json'))
     const written = await refreshAll(targets, token, join(root, 'fixtures'), globalThis.fetch as unknown as FetchLike)
     process.stdout.write(`refreshed ${written.length} fixtures\n`)
@@ -221,6 +222,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Real paths, not a hand-built file:// string — see build-oracle-manifest.ts.
+if (fileURLToPath(import.meta.url) === process.argv[1]) {
   main().then((code) => process.exit(code))
 }

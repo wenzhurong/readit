@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import MarkdownIt from 'markdown-it'
 import type { MarkdownIt as MarkdownItType, RendererRule } from 'markdown-it'
-import { applyTagfilter, filterDisallowedTags, TAGFILTER_TAGS } from '../../src/rules/tagfilter.js'
+import {
+  applyTagfilter,
+  filterDisallowedTags,
+  TAGFILTER_CORE_RULE,
+  TAGFILTER_TAGS,
+} from '../../src/rules/tagfilter.js'
 import { createEngine, createSpecEngine, SHAPE_RULES, type Rule } from '../../src/engine.js'
 import { DEFAULT_OPTIONS } from '../../src/types.js'
 
@@ -338,14 +343,29 @@ describe('tagfilter is outermost in createEngine', () => {
   })
 
   /**
-   * Which mode can see the escaping at all. Under the default
-   * `allowDangerousHtml: false` the sanitizer deletes these elements from
-   * `token.content` before any renderer runs, so the filter has nothing left to
-   * escape and `&lt;script>` never appears; the nine tags are only observably
-   * neutralised under `allowDangerousHtml: true`. A third registration is
-   * checked here too — the identity again, for the same reason.
+   * Both modes must DEFUSE, and this test used to assert that only one did.
+   *
+   * Its previous comment recorded the bug as if it were the design: "under the
+   * default `allowDangerousHtml: false` the sanitizer deletes these elements
+   * from `token.content` before any renderer runs, so the filter has nothing
+   * left to escape and `&lt;script>` never appears; the nine tags are only
+   * observably neutralised under `allowDangerousHtml: true`."
+   *
+   * That is not what GFM specifies and not what GitHub does. `tagfilter`
+   * ESCAPES; deleting is a strictly different, lossier outcome, and GitHub's
+   * oracle for `test/corpus/gfm/tagfilter.md` keeps every byte of all nine
+   * elements with only the leading `<` escaped. See `applyTagfilterRawContent`
+   * in src/rules/tagfilter.ts for the ordering fix.
+   *
+   * A third registration is checked here too — the identity again.
+   *
+   * The escape SPELLING differs by path and both are the same character: the
+   * renderer-level filter writes `&lt;`, while any path that round-trips the
+   * content through hast (`sanitizeTree`, `prefixUserContentTree`) re-serialises
+   * a literal `<` in text as `&#x3C;`. Normalisation collapses the two, which is
+   * why the corpus fixture converges either way.
    */
-  it('neutralises all nine tags in dangerous mode, and a third registration is still free', () => {
+  it('neutralises all nine tags in BOTH modes, and a third registration is still free', () => {
     for (const allowDangerousHtml of [false, true]) {
       const md = createEngine({ ...DEFAULT_OPTIONS, allowDangerousHtml })
       const thrice = createEngine({ ...DEFAULT_OPTIONS, allowDangerousHtml })
@@ -357,8 +377,138 @@ describe('tagfilter is outermost in createEngine', () => {
         expect(thrice.render(src, {})).toBe(html)
         expect(html).not.toContain('&amp;lt;')
         expect(html).not.toContain(`<${tag}>`)
-        if (allowDangerousHtml) expect(html).toContain(`&lt;${tag}>`)
+        expect(html, `${tag} (allowDangerousHtml: ${allowDangerousHtml})`).toMatch(
+          new RegExp(`(&lt;|&#x3C;)${tag}>`),
+        )
+        // The element's TEXT survives in both modes — defused, not deleted.
+        expect(html, `${tag} body (allowDangerousHtml: ${allowDangerousHtml})`).toContain('x')
+        expect(html).toContain('<div id="user-content-d">keep</div>')
       }
     }
+  })
+})
+
+/**
+ * ## The ordering bug: `tagfilter` must run BEFORE the sanitizer, not after it
+ *
+ * `applyTagfilter`'s renderer chain cannot see the nine tags in the default mode,
+ * because `applyRawHtmlPolicy(false)` -> `applySanitize` is a CORE-rule token
+ * transform (`applyRawHtmlTransform`) that rewrites `token.content` long before the
+ * renderer stage exists. `hast-util-sanitize`'s `defaultSchema` lists none of the
+ * nine in `tagNames`, so it unwrapped or stripped them all and the filter arrived to
+ * find nothing left.
+ *
+ * GitHub's pipeline runs cmark-gfm (tagfilter included) FIRST and sanitizes its
+ * OUTPUT, so by the time its sanitizer runs the nine tags are already inert text.
+ * `applyTagfilter`'s core-rule half (`TAGFILTER_CORE_RULE`) restores that order.
+ */
+describe('tagfilter defuses before the sanitizer can delete (GFM says escape, not strip)', () => {
+  const SRC =
+    '<title>x</title> <textarea>y</textarea> <style>z</style> <xmp>a</xmp>\n' +
+    '<iframe></iframe> <noembed></noembed> <noframes></noframes>\n' +
+    '<script>b</script> <plaintext>c</plaintext>\n'
+
+  /** The exact shape of `test/corpus/gfm/tagfilter.md` and its committed oracle. */
+  it('keeps every byte of the corpus document, escaping only the leading <', () => {
+    const html = createEngine(DEFAULT_OPTIONS).render(SRC, {})
+    expect(html).toBe(
+      '&#x3C;title>x&#x3C;/title> &#x3C;textarea>y&#x3C;/textarea> ' +
+        '&#x3C;style>z&#x3C;/style> &#x3C;xmp>a&#x3C;/xmp>\n' +
+        '&#x3C;iframe>&#x3C;/iframe> &#x3C;noembed>&#x3C;/noembed> &#x3C;noframes>&#x3C;/noframes>\n' +
+        '&#x3C;script>b&#x3C;/script> &#x3C;plaintext>c&#x3C;/plaintext>\n',
+    )
+  })
+
+  /**
+   * The four the sanitizer used to erase most completely. `script` went with its
+   * body (`defaultSchema.strip`), and `plaintext` took the rest of the run with it.
+   */
+  it('a block-level <script> is defused, not deleted with its body', () => {
+    const html = createEngine(DEFAULT_OPTIONS).render('<script>alert(1)</script>\n', {})
+    expect(html).toBe('&#x3C;script>alert(1)&#x3C;/script>\n')
+    // Escaped text, so nothing executes: the output carries no real `<script`.
+    expect(html).not.toContain('<script')
+  })
+
+  it('an inline <script> is defused, so the run no longer degrades', () => {
+    expect(createEngine(DEFAULT_OPTIONS).render('a <script>q</script> b\n', {})).toBe(
+      '<p dir="auto" data-line="0">a &#x3C;script>q&#x3C;/script> b</p>\n',
+    )
+  })
+
+  /**
+   * Defusing is not a hole. The nine come out as TEXT, so a payload inside one of
+   * them is inert even though it is now visible — which is the whole point of the
+   * extension, and what GitHub does. What must NOT happen is a real live element
+   * or a live attribute surviving, and each assertion below is one way that could
+   * have gone wrong.
+   */
+  it('leaves the defused nine inert: text, never a live element or attribute', () => {
+    const md = createEngine(DEFAULT_OPTIONS)
+    for (const src of [
+      '<script>alert(1)</script>\n',
+      '<script src="//evil"></script>\n',
+      '<SCRIPT>alert(1)</SCRIPT>\n',
+      '<style>body{background:url(javascript:alert(1))}</style>\n',
+      '<iframe src="javascript:alert(1)"></iframe>\n',
+      '<scr<script>ipt>alert(1)</script>\n',
+      'a <script>q</script> b\n',
+    ]) {
+      const html = md.render(src, {})
+      // No real start tag for any of the nine survives, in any case.
+      expect(html, src).not.toMatch(/<\/?(?:title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext)[\s/>]/i)
+      // And no double escaping, which would make the text unreadable instead.
+      expect(html, src).not.toContain('&amp;lt;')
+      expect(html, src).not.toContain('&amp;#x3C;')
+    }
+    // A live attribute inside a defused element is still the sanitizer's problem,
+    // and the sanitizer still gets it: the `<img>` here is a real element (it is
+    // not one of the nine), so `onerror` must be stripped from it as usual.
+    const withImg = md.render('<title><img src=x onerror=alert(1)></title>\n', {})
+    expect(withImg).toContain('&#x3C;title>')
+    expect(withImg).not.toContain('onerror')
+  })
+
+  /**
+   * Everything OUTSIDE the nine is untouched by this change — the sanitizer still
+   * owns it, and still deletes/strips exactly what it did before. This is the
+   * constraint the fix must not trade away.
+   */
+  it('does not weaken the sanitizer for anything outside the nine tags', () => {
+    const md = createEngine(DEFAULT_OPTIONS)
+    expect(md.render('<b class="x" id="i" onclick="y()">bold</b>\n', {})).toBe(
+      '<p dir="auto" data-line="0"><b id="user-content-i">bold</b></p>\n',
+    )
+    expect(md.render('<a href="javascript:alert(1)">x</a>\n', {})).not.toContain('javascript:')
+    expect(md.render('<template><p>t</p></template>\n', {})).not.toContain('<template')
+    expect(md.render('<video src="v.mp4"></video>\n', {})).not.toContain('<video')
+  })
+
+  /**
+   * The core rule is registered ONCE per engine even though `createEngine` calls
+   * `applyTagfilter` twice. This is not a micro-optimisation: the second call
+   * happens after `applyRawShape`, so a second core pass would run readit's OWN
+   * generated markup (the C3(a)-sanctioned raw shapes) through a filter meant for
+   * author HTML. It also keeps `enginesOnceAndTwice` above honest: that
+   * construction removes the second RENDERER registration only, so it can only
+   * describe itself as "createEngine minus exactly the second registration"
+   * while there is nothing else to remove.
+   *
+   * The guard is a `WeakSet` keyed by instance — see `registerRawContentFilter`
+   * in src/rules/tagfilter.ts.
+   */
+  it('registers its core rule once per engine, however often applyTagfilter is called', () => {
+    const md = createEngine(DEFAULT_OPTIONS)
+    const count = (m: typeof md): number =>
+      m.core.ruler.__rules__.filter((r) => r.name === TAGFILTER_CORE_RULE).length
+    expect(count(md)).toBe(1)
+    applyTagfilter(md)
+    applyTagfilter(md)
+    expect(count(md)).toBe(1)
+
+    const bare = new MarkdownIt({ html: true, linkify: false })
+    applyTagfilter(bare)
+    applyTagfilter(bare)
+    expect(count(bare)).toBe(1)
   })
 })

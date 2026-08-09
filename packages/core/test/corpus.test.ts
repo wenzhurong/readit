@@ -37,26 +37,28 @@ import knownMismatchesJson from './known-mismatches.json' with { type: 'json' }
  *
  *  1. A corpus file not listed here must match its oracle fixture, full stop — an unrecorded
  *     mismatch fails loudly and by name (see task-24-report.md for how the original 22 were
- *     diagnosed, and task-36-report.md for the verified-current 15).
+ *     diagnosed, and task-36-report.md for the 15 that survived to the start of this branch —
+ *     the ledger has since shrunk, and this comment deliberately no longer names its size, for
+ *     the same reason the blind-surface figure below is recomputed instead of quoted).
  *  2. A file that IS listed must still fail to match — the moment it starts matching, the debt is
  *     paid off and the stale entry must be deleted, or the ledger could quietly rot into a
  *     permanent excuse instead of tracking real, current gaps.
  *  3. A listed file must still fail by the same MAGNITUDE it recorded. Without this the ledger
- *     over-matched: "still unequal" made all 15 listed files exempt from every kind of regression
+ *     over-matched: "still unequal" made every listed file exempt from every kind of regression
  *     detection, so a new and entirely unrelated bug landing inside one of them was invisible.
  *     Each entry pins a `diff` shape (see `diffShape`) and the assertion below is "still failing,
  *     AND still failing exactly this much".
  *
  *     What direction 3 can and cannot see: the shape moves iff a line changes MATCH STATUS, so
  *     its blind surface on a file is exactly the lines of readit's output that already differ.
- *     That figure is NOT quoted here — the test "the magnitude pin's blind surface is 99 of 5249
- *     lines" below recomputes it from the committed corpus every run, because a number written
+ *     That figure is NOT quoted here — the test "the magnitude pin's blind surface" below
+ *     recomputes it from the committed corpus every run, because a number written
  *     into a comment is a number nobody re-derives. (The 109 this comment used to state was
  *     `sum(max(1, removed))`, which credits a pure-insertion hunk with a readit line that does
  *     not exist; the honest count is the removed side alone.) It is bounded and disclosed, not
- *     total. But on four entries it IS total: `frontend/mermaid-{large,syntax-error,valid}` and
- *     `gfm/tagfilter` share no line at all with their oracle, which leaves `hunks` stuck at 1 and
- *     `edits` equal to the two line counts. Those four (16 lines) pin `output` verbatim instead —
+ *     total. But on three entries it IS total: `frontend/mermaid-{large,syntax-error,valid}`
+ *     share no line at all with their oracle, which leaves `hunks` stuck at 1 and
+ *     `edits` equal to the two line counts. Those three (15 lines) pin `output` verbatim instead —
  *     see `shapeCarriesNoSignal`, and direction 3b in the assertion below, which requires the pin
  *     exactly when the magnitude degenerates and forbids it otherwise.
  */
@@ -94,14 +96,20 @@ describe('corpus vs committed GitHub oracle fixtures (zero network)', () => {
    * line changes MATCH STATUS, so the lines it cannot see are exactly the lines of readit's output
    * that already fail to match — the removed side of every hunk. That is the disclosure this
    * mechanism owes, and a disclosure carried in a comment is one nobody re-derives: the figure
-   * stated in prose on this branch was 109, which is `sum(max(1, removed))` and credits a
-   * pure-insertion hunk (`removed: []`, no readit line at all) with one blind line. The real
-   * answer is 99, and it is asserted here so that widening the blind surface is a visible act.
+   * stated in prose when this test was written was 109, which is `sum(max(1, removed))` and
+   * credits a pure-insertion hunk (`removed: []`, no readit line at all) with one blind line.
+   * The honest count is the removed side alone, and it is asserted below so that widening the
+   * blind surface is a visible act.
    *
-   * `real-world/mermaid` carries 52 of the 99 on its own; see the residual note on
+   * `real-world/mermaid` carries the majority of it on its own; see the residual note on
    * `MismatchEntry.output` for why that is a stopping point and what closing it would cost.
+   *
+   * The numbers live in the assertion, NOT in this test's name. They were in the name, and that
+   * made every legitimate ledger shrink — paying off a debt and deleting its entry — into a test
+   * RENAME, which reads in a CI diff as one test disappearing and an unrelated one appearing.
+   * A pinned assertion catches a widening just as loudly and stays legible while the ledger moves.
    */
-  it("the magnitude pin's blind surface is 99 of 5249 lines, and 52 of those are one entry", () => {
+  it("the magnitude pin's blind surface is measured and pinned, and one entry dominates it", () => {
     let blind = 0
     let lines = 0
     let mermaid = 0
@@ -116,7 +124,7 @@ describe('corpus vs committed GitHub oracle fixtures (zero network)', () => {
       lines += result.actualLines.length
       if (name === 'real-world/mermaid') mermaid = removed
     }
-    expect({ blind, lines, mermaid }).toEqual({ blind: 99, lines: 5249, mermaid: 52 })
+    expect({ blind, lines, mermaid }).toEqual({ blind: 84, lines: 5229, mermaid: 52 })
   })
 
   it.each(NAMES)('%s', (name) => {
@@ -190,8 +198,8 @@ describe('corpus vs committed GitHub oracle fixtures (zero network)', () => {
     // `{ hunks, edits }` measures how a file's mismatch is SHAPED, which only says something about
     // content while some of the file still matches. When nothing matches — no shared line at all —
     // `hunks` is stuck at 1 and `edits` is just the two line counts, so any rewrite that preserves
-    // the line count is completely invisible. Four entries are in that state (the three
-    // `frontend/mermaid-*` files and `gfm/tagfilter`, 16 lines in total), and for them the honest
+    // the line count is completely invisible. Three entries are in that state (the
+    // `frontend/mermaid-*` files, 15 lines in total), and for them the honest
     // pin is not a magnitude at all but the output itself. The rule is enforced in both directions
     // so it maintains itself: an entry that becomes fully blind is forced to add `output`, and one
     // that stops being blind is told to drop it rather than carry a second thing to re-pin.

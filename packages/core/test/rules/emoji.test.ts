@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import MarkdownIt from 'markdown-it'
 import { applyEmoji } from '../../src/rules/emoji.js'
+import { render } from '../../src/index.js'
+import { GITHUB_EMOJI_BASE } from '../../src/types.js'
 
 function md(base?: string) {
   const m = new MarkdownIt({ html: true })
@@ -30,12 +32,48 @@ describe('emoji', () => {
     expect(p(':jp:')).toBe('🇯🇵')
   })
 
-  it('emits a bundled local PNG for custom emoji', () => {
+  // The default base is GitHub's own CDN, not a relative `emoji/` directory: readit's
+  // central claim is byte-equality with GitHub's blob view, and GitHub serves every one
+  // of the 23 custom shortcodes from this absolute host. A relative default rendered as
+  // a BROKEN IMAGE for every consumer that did not happen to copy data/emoji/ next to
+  // its own bundle, which is every consumer that only ever calls render().
+  it('emits GitHub\'s CDN URL for custom emoji', () => {
     expect(p(':shipit:')).toBe(
-      '<img class="emoji" title=":shipit:" alt=":shipit:" src="emoji/shipit.png" ' +
+      '<img class="emoji" title=":shipit:" alt=":shipit:" ' +
+        'src="https://github.githubassets.com/images/icons/emoji/shipit.png" ' +
         'height="20" width="20" align="absmiddle">',
     )
+    expect(p(':octocat:')).toContain(
+      'src="https://github.githubassets.com/images/icons/emoji/octocat.png"',
+    )
+  })
+
+  // The registration-time seam, for a caller composing applyEmoji into its own MarkdownIt.
+  // env.readit.emojiBase (next test) takes precedence when present, and is the seam a
+  // render() caller actually has; this one is what an env-less call falls back to.
+  it('still honours an explicit base for a host serving the bundled PNGs', () => {
     expect(md('/assets/').renderInline(':octocat:')).toContain('src="/assets/octocat.png"')
+    expect(md('emoji/').renderInline(':shipit:')).toContain('src="emoji/shipit.png"')
+  })
+
+  // The registration-time seam above is only reachable by a caller that builds its
+  // own MarkdownIt. `render()` builds the engine itself, so without this the CDN
+  // default would be unoverridable from outside the package — which is exactly the
+  // regression this pair of tests exists to prevent. See RenderOptions.emojiBase for
+  // the SPEC §6 rule 10 conflict that makes an offline escape load-bearing.
+  it('lets a host override the base through render(), not just through the rule', () => {
+    expect(render(':shipit:\n')).toContain(`src="${GITHUB_EMOJI_BASE}shipit.png"`)
+
+    const offline = render(':shipit:\n', { emojiBase: '/assets/emoji/' })
+    expect(offline).toContain('src="/assets/emoji/shipit.png"')
+    expect(offline).not.toContain('githubassets.com')
+  })
+
+  it('leaves unicode emoji alone when the base is overridden — only the 23 customs carry it', () => {
+    const offline = render(':smile: :shipit:\n', { emojiBase: '/assets/emoji/' })
+    expect(offline).toContain('😄')
+    expect(offline).not.toContain('/assets/emoji/smile.png')
+    expect(offline).toContain('/assets/emoji/shipit.png')
   })
 
   it('leaves unknown shortcodes as literal text', () => {

@@ -1,5 +1,9 @@
 import type { MarkdownIt, Token } from 'markdown-it'
 import emojiData from '../../data/emoji.json' with { type: 'json' }
+import { GITHUB_EMOJI_BASE } from '../types.js'
+import type { ReaditEnv } from './math-inline.js'
+
+export { GITHUB_EMOJI_BASE }
 
 const UNICODE: Record<string, string> = emojiData.unicode
 const CUSTOM = new Set<string>(emojiData.custom)
@@ -63,11 +67,38 @@ export function replaceEmoji(s: string, customBase: string): string[] {
 }
 
 /**
- * `customBase` is prefixed to the bundled PNG file name for the 23 custom
- * shortcodes. The 23 files live in `packages/core/data/emoji/` and must be
- * copied next to the bundle at build time; they are never fetched at runtime.
+ * Where GitHub serves the 23 custom-shortcode PNGs from. Measured against the
+ * blob-view oracle for `test/corpus/gfm/emoji.md`, whose fixture carries
+ * `src="https://github.githubassets.com/images/icons/emoji/shipit.png"`.
+ *
+ * This is a constant of GitHub's, not a readit deployment choice, which is why
+ * it is the DEFAULT rather than a `RenderOptions` field threaded through
+ * `state.env.readit` (C3(c)). readit's claim is byte-equality with GitHub, and
+ * there is exactly one string that satisfies it; a host that wants something
+ * else is departing from the oracle deliberately and can say so at the seam
+ * below. The previous default was the relative `emoji/`, which made every
+ * custom emoji a BROKEN IMAGE for any consumer that called `render()` without
+ * also copying `packages/core/data/emoji/` next to its own bundle — i.e. all of
+ * them, since `engine.ts` never passed an override.
  */
-export function applyEmoji(md: MarkdownIt, customBase = 'emoji/'): void {
+/**
+ * Prefix written before the PNG file name for the 23 custom shortcodes.
+ *
+ * Two seams, deliberately, because they serve different callers:
+ *
+ *  - `state.env.readit.emojiBase` — the REAL one. `render(src, {emojiBase})`
+ *    reaches it (contract C3(c): rules take no options, config arrives through
+ *    env at render time). This is what an offline host uses, and it is the
+ *    documented escape from the SPEC §6 rule 10 conflict described on
+ *    `RenderOptions.emojiBase`.
+ *  - `customBase` — the registration-time default, for standalone unit tests
+ *    that build a bare `MarkdownIt` with no env. `engine.ts` passes nothing,
+ *    so the constant below is what an env-less call produces.
+ *
+ * env wins when present. Nothing here ever fetches anything: the rule only
+ * writes a string into a `src` attribute.
+ */
+export function applyEmoji(md: MarkdownIt, customBase = GITHUB_EMOJI_BASE): void {
   // `??=` so this rule still works standalone in tests without clobbering the
   // central registration a later task adds in engine.ts (see tasklist.ts).
   md.renderer.rules.readit_raw ??= (tokens, idx) => tokens[idx]!.content
@@ -80,6 +111,7 @@ export function applyEmoji(md: MarkdownIt, customBase = 'emoji/'): void {
   // `text_special` still separate. See engine.ts coupling #6, and
   // test/rules/emoji.test.ts's "fires on a backslash-escaped colon".
   md.core.ruler.after('text_join', 'readit_emoji', (state) => {
+    const base = (state.env as ReaditEnv | undefined)?.readit?.emojiBase ?? customBase
     for (const token of state.tokens) {
       if (token.type !== 'inline' || !token.children) continue
       const next: Token[] = []
@@ -88,7 +120,7 @@ export function applyEmoji(md: MarkdownIt, customBase = 'emoji/'): void {
           next.push(child)
           continue
         }
-        const parts = replaceEmoji(child.content, customBase)
+        const parts = replaceEmoji(child.content, base)
         if (parts.length === 1) {
           child.content = parts[0] ?? ''
           next.push(child)

@@ -1,10 +1,15 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, posix, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { OracleProvenance } from '../scripts/oracle-refresh.js'
 import { normalize, toDiffLines } from './normalize.js'
 
-export const CORPUS_DIR = new URL('./corpus/', import.meta.url).pathname
-export const FIXTURES_DIR = new URL('./fixtures/', import.meta.url).pathname
+// fileURLToPath, never `.pathname`: on Windows `new URL(...).pathname` yields
+// `/D:/a/readit/...` — a leading slash before the drive letter — and joining that
+// produces `D:\D:\a\...`. Measured on windows-latest CI 2026-08-08, where it took
+// out four test files with ENOENT before anyone had run the suite on Windows.
+export const CORPUS_DIR = fileURLToPath(new URL('./corpus/', import.meta.url))
+export const FIXTURES_DIR = fileURLToPath(new URL('./fixtures/', import.meta.url))
 
 /**
  * Directories directly under CORPUS_DIR that carry no oracle fixture and must not be discovered
@@ -150,8 +155,8 @@ export interface DiffHunk {
  * already inside a hunk leaves both numbers untouched, so the pin's blind surface on any file is
  * exactly the removed side of its hunks — the lines of readit's output that already fail to match.
  * The size of that surface across the ledger is not quoted here; `corpus.test.ts` recomputes it
- * every run ("the magnitude pin's blind surface is 99 of 5249 lines"). Four entries
- * (`frontend/mermaid-large`, `-syntax-error`, `-valid`, `gfm/tagfilter`) share no line at all with
+ * every run ("the magnitude pin's blind surface is measured and pinned"). Three entries
+ * (`frontend/mermaid-large`, `-syntax-error`, `-valid`) share no line at all with
  * their oracle and are therefore 100% blind — `shapeCarriesNoSignal` detects exactly that case,
  * and `corpus.test.ts` requires those entries to pin their `output` verbatim instead.
  */
@@ -247,11 +252,14 @@ export function diffShape(actualLines: readonly string[], expectedLines: readonl
  * and `edits` degenerates into the two line counts — so any change that rewrites a line without
  * changing how many lines there are is completely invisible to the pin.
  *
- * Four ledger entries are in this state today (the three `frontend/mermaid-*` files, whose
- * `div.highlight` wrapper shares nothing with GitHub's `<section data-type="mermaid">`, and
- * `gfm/tagfilter`, whose entire normalized output is one line). For those, `corpus.test.ts`
- * requires the entry to pin `output` verbatim — a magnitude cannot protect a file whose
- * magnitude is a constant.
+ * Three ledger entries are in this state today: the `frontend/mermaid-*` files, whose
+ * `div.highlight` wrapper shares nothing with GitHub's `<section data-type="mermaid">`. For
+ * those, `corpus.test.ts` requires the entry to pin `output` verbatim — a magnitude cannot
+ * protect a file whose magnitude is a constant.
+ *
+ * There was a fourth, `gfm/tagfilter`, whose entire normalized output was one line. It is gone
+ * because the file now MATCHES its oracle (the tagfilter-vs-sanitizer ordering fix) and its entry
+ * was deleted, `output` pin included — direction 2 doing its job, not the pin being retired.
  */
 export function shapeCarriesNoSignal(
   shape: DiffShape,
@@ -354,7 +362,7 @@ export function formatDiffHunks(
  *
  * A third direction closes the over-match hole: "still failing" is not enough, because it made a
  * listed file exempt from ALL regression detection — a new, unrelated bug could land inside one of
- * the 15 listed files and nothing would notice. Each entry therefore also pins the *magnitude* of
+ * the listed files and nothing would notice. Each entry therefore also pins the *magnitude* of
  * its mismatch (`diff`), so the ratchet asserts "still failing, and still failing exactly this
  * much". A ledger entry excuses only the causes it names, not the whole file.
  *
@@ -503,7 +511,7 @@ export function shapeMismatchMessage(
     'Only once you have confirmed the change genuinely belongs to a cause already listed — or ' +
     'you are adding a new, named, explained cause alongside it — should you re-pin `diff` in ' +
     'test/known-mismatches.json. Re-pinning reflexively to get back to green throws away the ' +
-    'only protection these 15 files have.'
+    'only protection the ledgered files have.'
   )
 }
 
@@ -543,7 +551,7 @@ export interface MismatchValidationError {
  * KNOWN LIMIT of the `>= 1` floor: a file whose ONLY divergence from its oracle is invisible to
  * `toDiffLines` (say, whitespace inside a `<pre>` that survives normalization but not the line
  * split) would mismatch with a measured shape of `{ hunks: 0, edits: 0 }` and could therefore
- * never be legally pinned here. No corpus file is in that state today — all 15 pins are >= 1 —
+ * never be legally pinned here. No corpus file is in that state today — every pin is >= 1 —
  * and the floor is worth keeping, because relaxing it to allow a zero magnitude would also let a
  * genuinely-matching file be pinned as debt, which is direction 2's whole job to prevent. If it
  * ever happens, `corpus.test.ts` catches it by name with a dedicated message rather than letting

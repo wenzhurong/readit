@@ -3,7 +3,7 @@ import { DEFAULT_OPTIONS } from './types.js'
 import type { InlineMathMode, RenderOptions, RenderResult } from './types.js'
 import type { ReaditEnv } from './rules/math-inline.js'
 
-export { DEFAULT_OPTIONS } from './types.js'
+export { DEFAULT_OPTIONS, GITHUB_EMOJI_BASE } from './types.js'
 export type {
   ExplainEntry,
   Highlighter,

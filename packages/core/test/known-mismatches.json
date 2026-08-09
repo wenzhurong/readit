@@ -59,19 +59,6 @@
       }
     ]
   },
-  "gfm/emoji": {
-    "diff": {
-      "hunks": 1,
-      "edits": 2
-    },
-    "causes": [
-      {
-        "category": "readit-bug",
-        "explanation": "Custom-emoji <img src> is a local relative path (src=\"emoji/shipit.png\", then x-readit-rel:... after normalization) because applyEmoji's customBase default ('emoji/') is never overridden from engine.ts. GitHub's real src is the absolute https://github.githubassets.com/images/icons/emoji/shipit.png. Verified: the only diff line is this one src attribute; everything else in the 5-line output matches.",
-        "source": "task-24-report.md readit-bug #4 (rules/emoji.ts); re-verified against the live diff in task-36"
-      }
-    ]
-  },
   "gfm/footnotes": {
     "diff": {
       "hunks": 2,
@@ -82,35 +69,6 @@
         "category": "readit-bug",
         "explanation": "The footnotes section's <h2 id=\"footnote-label\"> and <ol> never get dir=\"auto\" because rules/footnote.ts builds them as a hardcoded raw string outside the token pipeline, so applyDirAuto (which walks heading_open/ordered_list_open tokens) never sees them. GitHub adds dir=\"auto\" to both. Verified: exactly 2 diff lines out of 38 (the <h2> and <ol> open tags); the rest of the footnotes markup matches.",
         "source": "task-24-report.md readit-bug #5 (rules/footnote.ts:310); re-verified against the live diff in task-36"
-      }
-    ]
-  },
-  "gfm/strikethrough": {
-    "diff": {
-      "hunks": 3,
-      "edits": 6
-    },
-    "causes": [
-      {
-        "category": "readit-bug",
-        "explanation": "Strikethrough tilde matching doesn't follow GFM: GFM accepts one OR two matching tildes (~single~ -> <del>single</del>; a 3-tilde run ~~~three~~~ is left fully literal), but markdown-it core's built-in strikethrough rule (unmodified by rules/strikethrough.ts, which only remaps s_open/s_close -> <del>) accepts exactly two and partially matches a 3-tilde run instead of leaving it literal. Verified with a bare `new MarkdownIt().render(...)` (no readit rule involved) reproducing the same wrong output, and against the live diff: readit emits <del>three</del> inside stray tildes where GitHub's oracle leaves '~~~three~~~' as plain text.",
-        "source": "task-24-report.md readit-bug #6; re-verified (including the bare-markdown-it repro) against the live diff in task-36"
-      }
-    ]
-  },
-  "gfm/tagfilter": {
-    "diff": {
-      "hunks": 1,
-      "edits": 2
-    },
-    "output": [
-      "x y z a c&#x3C;/plaintext> "
-    ],
-    "causes": [
-      {
-        "category": "readit-bug",
-        "explanation": "The 9 GFM-tagfilter tag names (title, textarea, style, xmp, iframe, noembed, noframes, script, plaintext) are stripped outright, not defused, because applyRawHtmlPolicy -> applySanitize (hast-util-sanitize's defaultSchema, which doesn't list those tag names) runs as a core-rule token transform before applyTagfilter's renderer-level wrapper ever sees the content. GitHub keeps all of it and only escapes the leading '<' of those 9 tags. Verified: readit's actual output is 'x y z a c&#x3C;/plaintext> ' (most tag content silently gone) vs GitHub's '&#x3C;title>x&#x3C;/title> &#x3C;textarea>y&#x3C;/textarea> ... &#x3C;plaintext>c&#x3C;/plaintext> ' (everything preserved, just the '<' escaped).",
-        "source": "task-24-report.md readit-bug #7 (sanitize.ts vs rules/tagfilter.ts ordering); re-verified against the live diff in task-36"
       }
     ]
   },
@@ -143,13 +101,13 @@
   "github-only/frontmatter-malformed": {
     "diff": {
       "hunks": 1,
-      "edits": 18
+      "edits": 2
     },
     "causes": [
       {
-        "category": "readit-bug",
-        "explanation": "Malformed-YAML-frontmatter fallback isn't implemented. Source `---\\ntitle: [unclosed\\n---\\n\\nBody text.` should render GitHub's `<div class=\"flash flash-error mb-3\">Error in user YAML: ...</div>` banner followed by the raw block as a highlight-source-yaml snippet; readit instead falls through to parsing it as ordinary CommonMark (first `---` becomes <hr>, `title: [unclosed` becomes an <h2> heading with its own anchor). Verified against the full un-truncated actual/expected strings: readit's actual output has no flash-error div and no yaml code block at all -- it is a structurally different document (hr + heading + anchor vs error banner + code fence), not a small attribute diff.",
-        "source": "task-24-report.md readit-bug #10 (rules/frontmatter.ts); re-verified against the live diff in task-36"
+        "category": "deviation",
+        "explanation": "D-YAML-DIAGNOSIS: the malformed-frontmatter fallback is now implemented (rules/frontmatter.ts renderFrontmatterError) and every structural byte matches -- the flash-error banner, the highlight-source-yaml wrapper with its dir=\"auto\" and its leading-newline data-snippet-clipboard-copy-content, the <pre> block, and the following <p>Body text.</p>. The ONE remaining diff line is the error TEXT inside the banner, and it is not reproducible: GitHub parses YAML with Psych/libyaml, which reports `did not find expected ',' or ']' while parsing a flow sequence at line 1 column 8` (blaming the '[' that opened the flow sequence), while readit parses with js-yaml, which reports `unexpected end of the stream within a flow collection` with a 0-based mark of 1:0 (blaming the point where the stream ran out). Different problem string, different context clause, different mark -- a difference in DIAGNOSIS, not in formatting, so no reformatting of js-yaml's output can produce libyaml's. readit reproduces GitHub's message FRAME exactly (`(<unknown>): <problem> at line L column C`, 1-based) and fills it with its own parser's reason and mark. Closing this would mean shipping a libyaml-compatible YAML parser or a hand-written table of libyaml error strings, neither of which is a bug fix. Verified: exactly 1 diff line out of 11, and it is the banner text. ⚠️ SCOPE: the \"one remaining diff line\" is measured for THIS input only. What actually changed is the rule's TRIGGER SET -- which documents get a banner at all is now js-yaml's rejection set, and that is not libyaml's. Concretely: js-yaml rejects duplicate mapping keys (`---\\nfoo: bar\\nfoo: baz\\n---`) where Psych overwrites and GitHub almost certainly renders a table; and CORE_SCHEMA rejects `!!binary`/`!!timestamp` where Psych resolves them. Both now show a red banner, unmeasured. The blast radius is any document whose first line is `---` with a later `---`, not just this corpus file. Measure those two cases against the oracle before trusting the banner's trigger boundary.",
+        "source": "visible-bugs-report.md bug 4; measured directly against js-yaml 4.x for the corpus body `title: [unclosed` and against the committed oracle fixture"
       }
     ]
   },

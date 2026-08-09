@@ -1,4 +1,4 @@
-import type { MarkdownIt, RendererRule } from 'markdown-it'
+import type { MarkdownIt, RendererRule, Token } from 'markdown-it'
 
 /**
  * The nine tags GFM's `tagfilter` extension neutralises. They are singled out
@@ -133,7 +133,108 @@ function chainFilter(md: MarkdownIt, name: 'html_block' | 'html_inline'): void {
     filterDisallowedTags(prev(tokens, idx, opts, env, self))
 }
 
+/** The core rule's name, exported so a test can count its registrations. */
+export const TAGFILTER_CORE_RULE = 'readit_tagfilter'
+
+/**
+ * Instances that already carry the core rule.
+ *
+ * `createEngine` calls `applyTagfilter` twice on purpose (see the long note
+ * above), and the RENDERER half is free to run twice — `filterDisallowedTags`
+ * is idempotent. The CORE half is not merely redundant on a second pass, it is
+ * misplaced: the second `applyTagfilter(md)` happens after `applyRawShape`, so
+ * a second core rule would run readit's OWN generated markup — the raw shapes
+ * C3(a) sanctions precisely because the sanitizer can no longer see them —
+ * through a filter written for author HTML. Registering once keeps the core
+ * rule where the extension belongs, on the author's raw chunks.
+ *
+ * A `WeakSet` rather than a flag on `md`: it is keyed by instance (two engines
+ * are independent), it holds no strong reference, and it is registration-time
+ * bookkeeping only — it is not read during rendering and cannot make one
+ * `render()` differ from another. Phase A's determinism is untouched.
+ */
+const CORE_RULE_REGISTERED = new WeakSet<MarkdownIt>()
+
+/**
+ * Apply the filter to raw-HTML `token.content`, as a core rule.
+ *
+ * ## Why the renderer chain is not enough, and why THIS runs first
+ *
+ * GFM's `tagfilter` is specified as an ESCAPE, not a delete: cmark-gfm rewrites
+ * the leading `<` of the nine tags and emits everything else verbatim. GitHub's
+ * pipeline then sanitizes cmark-gfm's OUTPUT, by which point those nine are
+ * already inert text and there is nothing for a whitelist to reject.
+ *
+ * readit had that order inverted. `applyRawHtmlPolicy(false)` -> `applySanitize`
+ * is a CORE-rule token transform (`applyRawHtmlTransform` in rules/clobber.ts)
+ * that rewrites `token.content`, and every core rule runs before any renderer.
+ * `hast-util-sanitize`'s `defaultSchema` lists none of `title`, `textarea`,
+ * `style`, `xmp`, `iframe`, `noembed`, `noframes`, `script` or `plaintext` in
+ * `tagNames`, so it unwrapped eight of them and stripped `script` with its body
+ * — and the renderer-level filter arrived to find nothing left to escape.
+ * Measured on `test/corpus/gfm/tagfilter.md`, readit emitted
+ * `x y z a c&#x3C;/plaintext>` where GitHub emits all nine elements intact.
+ *
+ * So this pass is registered as a core rule EARLIER than the sanitizer's, which
+ * with `md.core.ruler.push` simply means registered earlier — `createEngine`
+ * runs `SEMANTIC_RULES` (this rule's slot) before `applyRawHtmlPolicy`. That
+ * single ordering fact is what the whole fix is. It is not a second filter and
+ * not a weakening of the sanitizer: the nine names are turned into text, and
+ * everything else in the chunk reaches `sanitizeTree` exactly as before.
+ *
+ * ## Both modes, and what changes in each
+ *
+ * Registered unconditionally, because the fix is an ORDER and the order is the
+ * same one GitHub uses in both cases. Under `allowDangerousHtml: true` the
+ * escaping was already visible (nothing deleted the tags), so the change there
+ * is only that it happens before `prefixUserContentTree` instead of after. Two
+ * consequences, both improvements:
+ *
+ *  - the escape is re-serialised by hast, so it reads `&#x3C;` rather than
+ *    `&lt;`. Same character; normalisation collapses them.
+ *  - `<plaintext>` stops corrupting the document. parse5 switches to PLAINTEXT
+ *    mode on a real `<plaintext>` tag and swallows the rest of the input as raw
+ *    text, which used to produce a doubly-escaped `&#x26;#x3C;/plaintext>` and a
+ *    duplicated closing tag. Defusing it first means parse5 never sees a tag.
+ *
+ * ## Why not a `renderer.rules` fix, or a change to the sanitizer's schema
+ *
+ * Adding the nine to `SCHEMA.tagNames` would make the sanitizer KEEP them as
+ * live elements — a real `<script>` in the output — which is the opposite of
+ * what tagfilter is for. Doing it in the renderer cannot work at all: the
+ * content is already gone by then. The only place that reproduces GitHub is
+ * before the sanitizer's transform, which is where this sits.
+ *
+ * ## Deliberately NOT exported
+ *
+ * This is one half of `applyTagfilter`, not a rule in its own right. The rule
+ * registry in test/integration.test.ts requires every EXPORTED `applyXxx` in
+ * `src/` to be wired at one of `createEngine`'s three sites, and rightly so —
+ * an exported rule nothing calls is a rule that silently does not run. Half a
+ * rule has no business claiming one of those slots, so it stays private and
+ * `applyTagfilter` remains the single public entry point.
+ */
+function registerRawContentFilter(md: MarkdownIt): void {
+  if (CORE_RULE_REGISTERED.has(md)) return
+  CORE_RULE_REGISTERED.add(md)
+  md.core.ruler.push(TAGFILTER_CORE_RULE, (state) => {
+    const filter = (token: Token): void => {
+      token.content = filterDisallowedTags(token.content)
+    }
+    for (const token of state.tokens) {
+      if (token.type === 'html_block') filter(token)
+      else if (token.type === 'inline' && token.children) {
+        for (const child of token.children) {
+          if (child.type === 'html_inline') filter(child)
+        }
+      }
+    }
+    return true
+  })
+}
+
 export function applyTagfilter(md: MarkdownIt): void {
+  registerRawContentFilter(md)
   chainFilter(md, 'html_block')
   chainFilter(md, 'html_inline')
 }

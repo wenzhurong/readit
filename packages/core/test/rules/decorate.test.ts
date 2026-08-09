@@ -207,7 +207,8 @@ describe('applyDecorate', () => {
       applyDecorate(m)
       const html = m.render(':shipit: ![a](x.png)\n')
       expect(html).toBe(
-        '<p><img class="emoji" title=":shipit:" alt=":shipit:" src="emoji/shipit.png" ' +
+        '<p><img class="emoji" title=":shipit:" alt=":shipit:" ' +
+          'src="https://github.githubassets.com/images/icons/emoji/shipit.png" ' +
           'height="20" width="20" align="absmiddle"> ' +
           '<a target="_blank" rel="noopener noreferrer" href="x.png">' +
           '<img src="x.png" alt="a" style="max-width: 100%;"></a></p>\n',
