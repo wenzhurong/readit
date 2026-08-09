@@ -56,9 +56,9 @@ import knownMismatchesJson from './known-mismatches.json' with { type: 'json' }
  *     into a comment is a number nobody re-derives. (The 109 this comment used to state was
  *     `sum(max(1, removed))`, which credits a pure-insertion hunk with a readit line that does
  *     not exist; the honest count is the removed side alone.) It is bounded and disclosed, not
- *     total. But on four entries it IS total: `frontend/mermaid-{large,syntax-error,valid}` and
- *     `gfm/tagfilter` share no line at all with their oracle, which leaves `hunks` stuck at 1 and
- *     `edits` equal to the two line counts. Those four (16 lines) pin `output` verbatim instead —
+ *     total. But on three entries it IS total: `frontend/mermaid-{large,syntax-error,valid}`
+ *     share no line at all with their oracle, which leaves `hunks` stuck at 1 and
+ *     `edits` equal to the two line counts. Those three (15 lines) pin `output` verbatim instead —
  *     see `shapeCarriesNoSignal`, and direction 3b in the assertion below, which requires the pin
  *     exactly when the magnitude degenerates and forbids it otherwise.
  */
@@ -124,7 +124,7 @@ describe('corpus vs committed GitHub oracle fixtures (zero network)', () => {
       lines += result.actualLines.length
       if (name === 'real-world/mermaid') mermaid = removed
     }
-    expect({ blind, lines, mermaid }).toEqual({ blind: 95, lines: 5234, mermaid: 52 })
+    expect({ blind, lines, mermaid }).toEqual({ blind: 94, lines: 5233, mermaid: 52 })
   })
 
   it.each(NAMES)('%s', (name) => {
@@ -198,8 +198,8 @@ describe('corpus vs committed GitHub oracle fixtures (zero network)', () => {
     // `{ hunks, edits }` measures how a file's mismatch is SHAPED, which only says something about
     // content while some of the file still matches. When nothing matches — no shared line at all —
     // `hunks` is stuck at 1 and `edits` is just the two line counts, so any rewrite that preserves
-    // the line count is completely invisible. Four entries are in that state (the three
-    // `frontend/mermaid-*` files and `gfm/tagfilter`, 16 lines in total), and for them the honest
+    // the line count is completely invisible. Three entries are in that state (the
+    // `frontend/mermaid-*` files, 15 lines in total), and for them the honest
     // pin is not a magnitude at all but the output itself. The rule is enforced in both directions
     // so it maintains itself: an entry that becomes fully blind is forced to add `output`, and one
     // that stops being blind is told to drop it rather than carry a second thing to re-pin.

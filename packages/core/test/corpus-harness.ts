@@ -155,8 +155,8 @@ export interface DiffHunk {
  * already inside a hunk leaves both numbers untouched, so the pin's blind surface on any file is
  * exactly the removed side of its hunks — the lines of readit's output that already fail to match.
  * The size of that surface across the ledger is not quoted here; `corpus.test.ts` recomputes it
- * every run ("the magnitude pin's blind surface is measured and pinned"). Four entries
- * (`frontend/mermaid-large`, `-syntax-error`, `-valid`, `gfm/tagfilter`) share no line at all with
+ * every run ("the magnitude pin's blind surface is measured and pinned"). Three entries
+ * (`frontend/mermaid-large`, `-syntax-error`, `-valid`) share no line at all with
  * their oracle and are therefore 100% blind — `shapeCarriesNoSignal` detects exactly that case,
  * and `corpus.test.ts` requires those entries to pin their `output` verbatim instead.
  */
@@ -252,11 +252,14 @@ export function diffShape(actualLines: readonly string[], expectedLines: readonl
  * and `edits` degenerates into the two line counts — so any change that rewrites a line without
  * changing how many lines there are is completely invisible to the pin.
  *
- * Four ledger entries are in this state today (the three `frontend/mermaid-*` files, whose
- * `div.highlight` wrapper shares nothing with GitHub's `<section data-type="mermaid">`, and
- * `gfm/tagfilter`, whose entire normalized output is one line). For those, `corpus.test.ts`
- * requires the entry to pin `output` verbatim — a magnitude cannot protect a file whose
- * magnitude is a constant.
+ * Three ledger entries are in this state today: the `frontend/mermaid-*` files, whose
+ * `div.highlight` wrapper shares nothing with GitHub's `<section data-type="mermaid">`. For
+ * those, `corpus.test.ts` requires the entry to pin `output` verbatim — a magnitude cannot
+ * protect a file whose magnitude is a constant.
+ *
+ * There was a fourth, `gfm/tagfilter`, whose entire normalized output was one line. It is gone
+ * because the file now MATCHES its oracle (the tagfilter-vs-sanitizer ordering fix) and its entry
+ * was deleted, `output` pin included — direction 2 doing its job, not the pin being retired.
  */
 export function shapeCarriesNoSignal(
   shape: DiffShape,

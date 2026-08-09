@@ -346,39 +346,48 @@ describe('KNOWN LIMITATION: the raw-HTML run split, and everything that breaks i
   })
 
   /**
-   * `<script>`, the trigger every previous comment omitted and the one that
-   * makes the original crash reachable from an ordinary document. No
-   * `<template>` anywhere: `defaultSchema.strip` deletes the element WITH its
-   * content, so the separator goes exactly as it does for `<template>`.
+   * `<script>` is STILL a trigger of this mechanism — the sweep above finds it
+   * for `sanitizeTree`, derived from `defaultSchema.strip`, and that has not
+   * changed. What changed is that `render()` can no longer REACH it.
    *
-   * The output shape is surprising and is pinned for that reason: the script
-   * BODY comes out as visible text. It is not the sanitizer failing to strip
-   * it — markdown-it never handed it over. `a <script>q</script> b` is two
-   * `html_inline` tokens with the ordinary Markdown text `q` between them, so
-   * `q` was never part of a raw chunk and no sanitizer stage ever sees it. This
-   * is true on the JOINED path too, and is a property of readit's token-level
-   * seam rather than of the degradation.
+   * `script` is one of GFM tagfilter's nine tags, and since the tagfilter fix
+   * those nine are escaped in `token.content` by a core rule that runs before
+   * the sanitizer's (see src/rules/tagfilter.ts). By the time `sanitizeTree`
+   * sees this chunk it is ordinary text, so no element is deleted, the
+   * separator survives, and the split succeeds. The two tests below pin that
+   * the sanitizer-strip mechanism is now reachable through `render()` only via
+   * `<template>` — which is not one of the nine — and via `<col>`.
+   *
+   * This is why the sweep is run against the TRANSFORM rather than through
+   * `render()`: the transform's trigger set is a property of the schema, and it
+   * must stay visible even when a stage in front of the transform happens to
+   * shield it.
    */
-  it('inline <script>: degrades without any <template>, surfacing the body as text', () => {
+  it('inline <script>: tagfilter defuses it first, so the run no longer degrades', () => {
     expect(() => render('a <script>q</script> b\n')).not.toThrow()
-    expect(render('a <script>q</script> b\n')).toBe('<p dir="auto" data-line="0">a q b</p>\n')
+    expect(render('a <script>q</script> b\n')).toBe(
+      '<p dir="auto" data-line="0">a &#x3C;script>q&#x3C;/script> b</p>\n',
+    )
+    // Still a trigger one level down, where the schema decides:
+    expect(STRIPPED_WITH_CONTENT).toContain('script')
   })
 
   /**
-   * Block position does NOT degrade, and the asymmetry is worth pinning
-   * alongside the inline case so nobody "fixes" one to match the other.
-   * CommonMark HTML block type 1 swallows everything up to `</script>`, so the
-   * whole element arrives as ONE `html_block` chunk. One chunk in, one part
-   * out — the split cannot fail, and the sanitizer simply deletes the element,
-   * body included. The visible-body wart is specific to the inline case, where
-   * markdown-it hands over two tokens with Markdown text between them.
+   * Block position, pinned alongside the inline case so nobody "fixes" one to
+   * match the other. CommonMark HTML block type 1 swallows everything up to
+   * `</script>`, so the whole element arrives as ONE `html_block` chunk.
+   *
+   * The body used to disappear here (one chunk in, one part out, and the
+   * sanitizer deleted the element with its content, rendering `'\n'`). GFM says
+   * tagfilter ESCAPES, and GitHub's oracle for `test/corpus/gfm/tagfilter.md`
+   * keeps the body, so it is kept — as inert escaped text, which is exactly
+   * what the extension is for.
    */
-  it('block <script>: one chunk, so no degradation and the body goes too', () => {
+  it('block <script>: defused into escaped text, body and all', () => {
     const html = render('<script>alert(1)</script>\n')
+    expect(html).toBe('&#x3C;script>alert(1)&#x3C;/script>\n')
+    // Text, not markup: nothing here can execute.
     expect(html).not.toContain('<script')
-    expect(html).not.toContain('&lt;script')
-    expect(html).not.toContain('alert(1)')
-    expect(html).toBe('\n')
   })
 
   /**
@@ -437,12 +446,16 @@ describe('KNOWN LIMITATION: the raw-HTML run split, and everything that breaks i
     expect(render('<template>t</template>\n\n<div id="dup">d</div>\n')).toBe(
       '<p dir="auto" data-line="0">t</p>\n<div id="user-content-dup">d</div>\n',
     )
-    // Same for the two triggers the old comments never mentioned.
-    expect(render('a <script>q</script> b\n\n<div id="dup">d</div>\n')).toBe(
-      '<p dir="auto" data-line="0">a q b</p>\n<div id="user-content-dup">d</div>\n',
-    )
     expect(render('a <col> b\n\n<div id="dup">d</div>\n')).toBe(
       '<p dir="auto" data-line="0">a  b</p>\n<div id="user-content-dup">d</div>\n',
+    )
+    // `<script>` used to belong in this list. It no longer degrades through
+    // `render()` — tagfilter defuses it before the sanitizer can delete it —
+    // so the unrelated `<div>` here goes down the NORMAL joined path, and the
+    // assertion is that the two paths agree about it.
+    expect(render('a <script>q</script> b\n\n<div id="dup">d</div>\n')).toBe(
+      '<p dir="auto" data-line="0">a &#x3C;script>q&#x3C;/script> b</p>\n' +
+        '<div id="user-content-dup">d</div>\n',
     )
   })
 
@@ -454,13 +467,19 @@ describe('KNOWN LIMITATION: the raw-HTML run split, and everything that breaks i
    *
    * `<col>` is the exception, because its trigger is the parser rather than the
    * transform; test/rules/clobber.test.ts owns that case.
+   *
+   * `<script>` is still escaped here, as it always was in this mode — GFM's
+   * tagfilter is a SEMANTIC rule and runs regardless of `allowDangerousHtml`.
+   * The SPELLING moved from `&lt;` to `&#x3C;` when the escaping moved ahead of
+   * `applyClobber`: it is the same character, re-serialised by hast rather than
+   * written by the renderer-level filter.
    */
-  it('allowDangerousHtml keeps <template> and <script> intact and never degraded', () => {
+  it('allowDangerousHtml keeps <template> intact, and still escapes <script>', () => {
     expect(render('<template><p>x</p></template>\n', { allowDangerousHtml: true })).toContain(
       '<template><p>x</p></template>',
     )
     expect(render('a <script>q</script> b\n', { allowDangerousHtml: true })).toBe(
-      '<p dir="auto" data-line="0">a &lt;script>q&lt;/script> b</p>\n',
+      '<p dir="auto" data-line="0">a &#x3C;script>q&#x3C;/script> b</p>\n',
     )
   })
 })

@@ -53,16 +53,21 @@ describe('core skeleton', () => {
     expect(explain[0]).toMatchObject({ ruleId: expect.any(String) })
   })
 
-  it('sanitizes raw HTML against the GitHub whitelist by default; passes it through (tagfilter-escaped) with allowDangerousHtml', () => {
-    // <script> is not on hast-util-sanitize's default schema, so the default
-    // path drops the whole disallowed element (and its content) rather than
-    // escaping it — sanitizeTree(), not a blanket text escape. See sanitize.ts.
-    expect(render('<script>x</script>')).toBe('')
-    // allowDangerousHtml disables the sanitizer, but applyTagfilter is a
-    // SEMANTIC rule (always on, matches GFM spec) and still escapes the
-    // leading '<' of the 9 filtered tag names — script included.
+  it('sanitizes raw HTML against the GitHub whitelist by default; tagfilter escapes its nine in both modes', () => {
+    // `applyTagfilter` is a SEMANTIC rule (always on, matches GFM spec) and it
+    // now runs BEFORE the sanitizer, so `<script>` is escaped into inert text
+    // rather than deleted with its body — GFM's tagfilter is specified as an
+    // escape, and this is what GitHub's oracle shows. Same in both modes; see
+    // src/rules/tagfilter.ts.
+    expect(render('<script>x</script>')).toBe('&#x3C;script>x&#x3C;/script>')
     expect(render('<script>x</script>', { allowDangerousHtml: true })).toBe(
-      '&lt;script>x&lt;/script>',
+      '&#x3C;script>x&#x3C;/script>',
+    )
+    // Anything OUTSIDE the nine still meets the whitelist, unchanged: <video>
+    // is absent from hast-util-sanitize's defaultSchema.tagNames and is
+    // unwrapped, while its `onerror` never survives at all.
+    expect(render('<video src="v.mp4" onerror="alert(1)"></video>')).toBe(
+      '<p dir="auto" data-line="0"></p>\n',
     )
   })
 

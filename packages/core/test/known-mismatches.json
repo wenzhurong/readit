@@ -72,22 +72,6 @@
       }
     ]
   },
-  "gfm/tagfilter": {
-    "diff": {
-      "hunks": 1,
-      "edits": 2
-    },
-    "output": [
-      "x y z a c&#x3C;/plaintext> "
-    ],
-    "causes": [
-      {
-        "category": "readit-bug",
-        "explanation": "The 9 GFM-tagfilter tag names (title, textarea, style, xmp, iframe, noembed, noframes, script, plaintext) are stripped outright, not defused, because applyRawHtmlPolicy -> applySanitize (hast-util-sanitize's defaultSchema, which doesn't list those tag names) runs as a core-rule token transform before applyTagfilter's renderer-level wrapper ever sees the content. GitHub keeps all of it and only escapes the leading '<' of those 9 tags. Verified: readit's actual output is 'x y z a c&#x3C;/plaintext> ' (most tag content silently gone) vs GitHub's '&#x3C;title>x&#x3C;/title> &#x3C;textarea>y&#x3C;/textarea> ... &#x3C;plaintext>c&#x3C;/plaintext> ' (everything preserved, just the '<' escaped).",
-        "source": "task-24-report.md readit-bug #7 (sanitize.ts vs rules/tagfilter.ts ordering); re-verified against the live diff in task-36"
-      }
-    ]
-  },
   "github-only/anchor-emoji": {
     "diff": {
       "hunks": 1,
