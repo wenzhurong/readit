@@ -143,15 +143,27 @@ const POSITIVE_WHOLE_PIXELS = /^[1-9][0-9]*$/
  * neither `{height=150}` nor `=150x`), so this branch is unreachable from
  * `decorate.ts`'s side and its unconditional plain form is correct.
  *
- * STILL UNMEASURED, and now failing SAFE rather than silently: a height with
- * surrounding whitespace, a leading zero (`"0150"`), a decimal, a negative, and
- * a value past 2^53. All take the plain branch here. That is the 46-instance
- * majority branch and it can never emit invalid CSS, but it is a guess in the
- * same sense the old one was — it just guesses toward the measured-dominant
- * side. Note also that hast rewrites the attribute itself for several of those
- * (`height="0150"` serialises back as `height="150"`), so such a document
- * already diverges from GitHub before `style` is considered; that is a
- * serialiser question, not this function's.
+ * STILL UNMEASURED, with the branch each one actually takes — this list said
+ * "all take the plain branch" and was wrong for three of them. hast coerces
+ * `height` to a NUMBER before this function sees it, so `String()` re-renders
+ * it as bare digits and the regex matches:
+ *
+ *   " 150 "            -> 150   -> EXTENDED, max-height: 150px
+ *   "0150"             -> 150   -> EXTENDED, max-height: 150px
+ *   9007199254740993   -> 2^53  -> EXTENDED (precision lost in the coercion)
+ *   "+150" / "1e3" / "0x10"     -> EXTENDED as 150 / 1000 / 16
+ *   "1.5" / "-5"                -> plain
+ *   >= 1e21            -> "1e+21" -> plain (exponential stringification)
+ *
+ * What IS guaranteed, and is the reason none of this can emit invalid CSS:
+ * the regex runs on the same string the serialiser writes into the attribute,
+ * so `height="N"` and `max-height: Npx` always carry the same N by
+ * construction. HTML's own non-negative-integer parsing would also give 150
+ * for `" 150 "` and `"0150"`, so the behaviour may well match GitHub — but
+ * that is unmeasured, and this comment's job is to say which is which.
+ *
+ * The mirror hazard is closed: no positive-whole-number height can reach the
+ * plain branch, so readit never under-decorates where GitHub decorates.
  */
 function imageStyle(el: Element): string {
   const height = el.properties.height

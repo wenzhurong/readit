@@ -70,7 +70,7 @@ const PROVENANCE = readProvenance()
 const KNOWN_MISMATCHES: KnownMismatches = knownMismatchesJson as KnownMismatches
 
 describe('corpus vs committed GitHub oracle fixtures (zero network)', () => {
-  // Pinned to the exact count, not to SPEC 13.3's 45-60 band. A band lets the corpus shrink
+  // Pinned to the exact count, not to SPEC 13.3's 45-70 band. A band lets the corpus shrink
   // silently: deleting five files turns "45 of 60" into "40 of 55" with the suite still green,
   // and the headline fidelity number is computed over whatever survived. Deleting or adding a
   // corpus file is a deliberate act and should have to say so here.
