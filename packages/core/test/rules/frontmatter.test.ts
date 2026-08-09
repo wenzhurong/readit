@@ -97,10 +97,98 @@ describe('frontmatter', () => {
     expect(md().render('> ---\n> title: T\n> ---\n')).not.toContain('markdown-accessiblity-table')
   })
 
-  it('leaves malformed YAML to CommonMark instead of consuming it', () => {
-    const out = md().render('---\na: [1,\n---\n')
-    expect(out).not.toContain('markdown-accessiblity-table')
-    expect(out).toContain('<hr>')
+  /**
+   * ## Malformed YAML: GitHub's error banner, not a fall-through to CommonMark
+   *
+   * This used to assert `<hr>` — readit had no fallback, so `---` became a rule and
+   * `title: [unclosed` became an `<h2>` with its own anchor. GitHub instead prints a
+   * `flash flash-error` banner and re-shows the whole block as a
+   * `highlight-source-yaml` snippet. Shape taken verbatim from the committed oracle
+   * `test/fixtures/github-only/frontmatter-malformed.html`.
+   *
+   * ### The banner TEXT is not fully reproducible, and that is recorded here
+   *
+   * GitHub parses YAML with Psych/libyaml. For `title: [unclosed` it says
+   *
+   *     (<unknown>): did not find expected ',' or ']' while parsing a flow sequence
+   *     at line 1 column 8
+   *
+   * where line/column point at the `[` that OPENED the flow sequence. js-yaml, which
+   * readit uses, diagnoses the same input as
+   *
+   *     unexpected end of the stream within a flow collection   (mark 1:0, 0-based)
+   *
+   * — a different problem string, a different context, and a different mark (the end
+   * of the stream rather than the opening bracket). No formatting of js-yaml's output
+   * can produce libyaml's, so readit reproduces GitHub's FRAME
+   * (`(<unknown>): <problem> at line L column C`, 1-based) and fills it with its own
+   * parser's diagnosis. The residual is one line of the corpus diff and stays on the
+   * ledger, named.
+   */
+  describe('malformed YAML', () => {
+    const MALFORMED = '---\ntitle: [unclosed\n---\n\nBody text.\n'
+
+    it('emits the flash-error banner and the raw block, not <hr> plus a heading', () => {
+      const out = md().render(MALFORMED)
+      expect(out).not.toContain('<hr>')
+      expect(out).not.toContain('markdown-accessiblity-table')
+      expect(out).toBe(
+        '<div class="flash flash-error mb-3">Error in user YAML: (&lt;unknown&gt;): ' +
+          'unexpected end of the stream within a flow collection at line 2 column 1</div>' +
+          '<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto"' +
+          ' dir="auto" data-snippet-clipboard-copy-content="\n---\ntitle: [unclosed\n---\n">' +
+          '<pre>---\ntitle: [unclosed\n---\n</pre></div>\n' +
+          '<p>Body text.</p>\n',
+      )
+    })
+
+    /** The two halves GitHub's oracle pins, isolated so a shape change is legible. */
+    it('reproduces the oracle wrapper exactly: banner class, snippet class, dir, copy content', () => {
+      const out = md().render(MALFORMED)
+      expect(out).toContain('<div class="flash flash-error mb-3">Error in user YAML: ')
+      expect(out).toContain(
+        '<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto"' +
+          ' dir="auto" data-snippet-clipboard-copy-content="',
+      )
+      // The clipboard payload carries a LEADING newline the <pre> does not. Measured,
+      // not inferred: it is in the oracle fixture and nowhere else in readit.
+      expect(out).toContain('data-snippet-clipboard-copy-content="\n---\ntitle: [unclosed\n---\n"')
+      expect(out).toContain('<pre>---\ntitle: [unclosed\n---\n</pre>')
+    })
+
+    it('escapes the banner text and the block the way GitHub does', () => {
+      const out = md().render('---\na: "<b> & </b>\nx: [1,\n---\n')
+      expect(out).toContain('Error in user YAML: (&lt;unknown&gt;): ')
+      // Text position escapes &, < and > and leaves the quote alone — the same rule
+      // codeblock.ts verified against the oracle for a fenced block's <pre>.
+      expect(out).toContain('<pre>---\na: "&lt;b&gt; &amp; &lt;/b&gt;\nx: [1,\n---\n</pre>')
+      // Attribute position additionally escapes the double quote.
+      expect(out).toContain(
+        'data-snippet-clipboard-copy-content="\n---\na: &quot;&lt;b&gt; &amp; &lt;/b&gt;\nx: [1,\n---\n"',
+      )
+      expect(out).not.toContain('<b>')
+    })
+
+    /**
+     * The banner is for a PARSE failure only. YAML that parses cleanly but is not a
+     * mapping (a sequence, a bare scalar) is not an error, and readit's behaviour
+     * there is unchanged: fall through to CommonMark. No oracle covers it, so it is
+     * deliberately left alone rather than folded into the error path.
+     */
+    it('does not fire for valid YAML that simply is not a mapping', () => {
+      for (const src of ['---\n- a\n- b\n---\n', '---\njust a scalar\n---\n']) {
+        const out = md().render(src)
+        expect(out, src).not.toContain('flash-error')
+        expect(out, src).not.toContain('markdown-accessiblity-table')
+        expect(out, src).toContain('<hr>')
+      }
+    })
+
+    /** Still a block rule: it only fires on line 0, error path included. */
+    it('does not fire on a malformed block that is not at the top of the document', () => {
+      const out = md().render('x\n\n---\ntitle: [unclosed\n---\n')
+      expect(out).not.toContain('flash-error')
+    })
   })
 
   it('renders booleans and nulls as their YAML core-schema text', () => {

@@ -101,13 +101,13 @@
   "github-only/frontmatter-malformed": {
     "diff": {
       "hunks": 1,
-      "edits": 18
+      "edits": 2
     },
     "causes": [
       {
-        "category": "readit-bug",
-        "explanation": "Malformed-YAML-frontmatter fallback isn't implemented. Source `---\\ntitle: [unclosed\\n---\\n\\nBody text.` should render GitHub's `<div class=\"flash flash-error mb-3\">Error in user YAML: ...</div>` banner followed by the raw block as a highlight-source-yaml snippet; readit instead falls through to parsing it as ordinary CommonMark (first `---` becomes <hr>, `title: [unclosed` becomes an <h2> heading with its own anchor). Verified against the full un-truncated actual/expected strings: readit's actual output has no flash-error div and no yaml code block at all -- it is a structurally different document (hr + heading + anchor vs error banner + code fence), not a small attribute diff.",
-        "source": "task-24-report.md readit-bug #10 (rules/frontmatter.ts); re-verified against the live diff in task-36"
+        "category": "deviation",
+        "explanation": "D-YAML-DIAGNOSIS: the malformed-frontmatter fallback is now implemented (rules/frontmatter.ts renderFrontmatterError) and every structural byte matches -- the flash-error banner, the highlight-source-yaml wrapper with its dir=\"auto\" and its leading-newline data-snippet-clipboard-copy-content, the <pre> block, and the following <p>Body text.</p>. The ONE remaining diff line is the error TEXT inside the banner, and it is not reproducible: GitHub parses YAML with Psych/libyaml, which reports `did not find expected ',' or ']' while parsing a flow sequence at line 1 column 8` (blaming the '[' that opened the flow sequence), while readit parses with js-yaml, which reports `unexpected end of the stream within a flow collection` with a 0-based mark of 1:0 (blaming the point where the stream ran out). Different problem string, different context clause, different mark -- a difference in DIAGNOSIS, not in formatting, so no reformatting of js-yaml's output can produce libyaml's. readit reproduces GitHub's message FRAME exactly (`(<unknown>): <problem> at line L column C`, 1-based) and fills it with its own parser's reason and mark. Closing this would mean shipping a libyaml-compatible YAML parser or a hand-written table of libyaml error strings, neither of which is a bug fix. Verified: exactly 1 diff line out of 11, and it is the banner text.",
+        "source": "visible-bugs-report.md bug 4; measured directly against js-yaml 4.x for the corpus body `title: [unclosed` and against the committed oracle fixture"
       }
     ]
   },
