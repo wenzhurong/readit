@@ -1,7 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-export const KARLCOW_DIR = new URL('./corpus/adversarial/karlcow/', import.meta.url).pathname
+// fileURLToPath, not `.pathname` — see the note in corpus-harness.ts.
+export const KARLCOW_DIR = fileURLToPath(new URL('./corpus/adversarial/karlcow/', import.meta.url))
 
 /** Input file names of the vendored karlcow/markdown-testsuite (MIT). Outputs are not vendored. */
 export function discoverKarlcow(dir: string = KARLCOW_DIR): string[] {

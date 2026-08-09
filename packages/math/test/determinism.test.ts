@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { createMathRenderer } from '@readit/math'
 import { README_CONSTRUCTS } from './constructs.js'
+import { fileURLToPath } from 'node:url'
 
 /** Includes a \newcommand definition on purpose: that is the construct that leaks across convert(). */
 const CORPUS: readonly string[] = Object.freeze([
@@ -58,7 +59,9 @@ describe('math renderer determinism', () => {
   })
 
   it('(c) two independent node processes agree on the SHA-256 of their output', () => {
-    const worker = new URL('./worker/render-hash.ts', import.meta.url).pathname
+    // fileURLToPath, not `.pathname`: `.pathname` gives `/D:/...` on Windows and
+    // execFileSync then resolves it to `D:\D:\...`. Measured on windows-latest CI.
+    const worker = fileURLToPath(new URL('./worker/render-hash.ts', import.meta.url))
     const a = execFileSync(process.execPath, [worker], { encoding: 'utf8' })
     const b = execFileSync(process.execPath, [worker], { encoding: 'utf8' })
     expect(a).toMatch(/^[0-9a-f]{64}$/)

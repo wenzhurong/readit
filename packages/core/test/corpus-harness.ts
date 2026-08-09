@@ -1,10 +1,15 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, posix, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { OracleProvenance } from '../scripts/oracle-refresh.js'
 import { normalize, toDiffLines } from './normalize.js'
 
-export const CORPUS_DIR = new URL('./corpus/', import.meta.url).pathname
-export const FIXTURES_DIR = new URL('./fixtures/', import.meta.url).pathname
+// fileURLToPath, never `.pathname`: on Windows `new URL(...).pathname` yields
+// `/D:/a/readit/...` — a leading slash before the drive letter — and joining that
+// produces `D:\D:\a\...`. Measured on windows-latest CI 2026-08-08, where it took
+// out four test files with ENOENT before anyone had run the suite on Windows.
+export const CORPUS_DIR = fileURLToPath(new URL('./corpus/', import.meta.url))
+export const FIXTURES_DIR = fileURLToPath(new URL('./fixtures/', import.meta.url))
 
 /**
  * Directories directly under CORPUS_DIR that carry no oracle fixture and must not be discovered
