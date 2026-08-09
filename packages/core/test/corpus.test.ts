@@ -74,8 +74,8 @@ describe('corpus vs committed GitHub oracle fixtures (zero network)', () => {
   // silently: deleting five files turns "45 of 60" into "40 of 55" with the suite still green,
   // and the headline fidelity number is computed over whatever survived. Deleting or adding a
   // corpus file is a deliberate act and should have to say so here.
-  it('has exactly 60 corpus files (SPEC 13.3 mandates 45-60; 60 is what is committed)', () => {
-    expect(NAMES.length).toBe(60)
+  it('has exactly 68 corpus files (SPEC 13.3 mandates 45-70; 68 is what is committed)', () => {
+    expect(NAMES.length).toBe(68)
   })
 
   it('covers the four snapshotted SPEC 13.3 categories', () => {
