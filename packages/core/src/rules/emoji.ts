@@ -1,5 +1,9 @@
 import type { MarkdownIt, Token } from 'markdown-it'
 import emojiData from '../../data/emoji.json' with { type: 'json' }
+import { GITHUB_EMOJI_BASE } from '../types.js'
+import type { ReaditEnv } from './math-inline.js'
+
+export { GITHUB_EMOJI_BASE }
 
 const UNICODE: Record<string, string> = emojiData.unicode
 const CUSTOM = new Set<string>(emojiData.custom)
@@ -77,17 +81,22 @@ export function replaceEmoji(s: string, customBase: string): string[] {
  * also copying `packages/core/data/emoji/` next to its own bundle — i.e. all of
  * them, since `engine.ts` never passed an override.
  */
-export const GITHUB_EMOJI_BASE = 'https://github.githubassets.com/images/icons/emoji/'
-
 /**
- * `customBase` is prefixed to the PNG file name for the 23 custom shortcodes.
- * It defaults to `GITHUB_EMOJI_BASE`, which is what `engine.ts` gets.
+ * Prefix written before the PNG file name for the 23 custom shortcodes.
  *
- * The parameter stays as the seam for a host that would rather serve the PNGs
- * itself: the 23 files are committed under `packages/core/data/emoji/` and
- * SPEC §5.1 budgets copying them to `dist/emoji/` at build time. Such a host
- * assembles its own engine and passes its own base; nothing is ever fetched at
- * runtime by this rule either way — it only writes a URL into an attribute.
+ * Two seams, deliberately, because they serve different callers:
+ *
+ *  - `state.env.readit.emojiBase` — the REAL one. `render(src, {emojiBase})`
+ *    reaches it (contract C3(c): rules take no options, config arrives through
+ *    env at render time). This is what an offline host uses, and it is the
+ *    documented escape from the SPEC §6 rule 10 conflict described on
+ *    `RenderOptions.emojiBase`.
+ *  - `customBase` — the registration-time default, for standalone unit tests
+ *    that build a bare `MarkdownIt` with no env. `engine.ts` passes nothing,
+ *    so the constant below is what an env-less call produces.
+ *
+ * env wins when present. Nothing here ever fetches anything: the rule only
+ * writes a string into a `src` attribute.
  */
 export function applyEmoji(md: MarkdownIt, customBase = GITHUB_EMOJI_BASE): void {
   // `??=` so this rule still works standalone in tests without clobbering the
@@ -102,6 +111,7 @@ export function applyEmoji(md: MarkdownIt, customBase = GITHUB_EMOJI_BASE): void
   // `text_special` still separate. See engine.ts coupling #6, and
   // test/rules/emoji.test.ts's "fires on a backslash-escaped colon".
   md.core.ruler.after('text_join', 'readit_emoji', (state) => {
+    const base = (state.env as ReaditEnv | undefined)?.readit?.emojiBase ?? customBase
     for (const token of state.tokens) {
       if (token.type !== 'inline' || !token.children) continue
       const next: Token[] = []
@@ -110,7 +120,7 @@ export function applyEmoji(md: MarkdownIt, customBase = GITHUB_EMOJI_BASE): void
           next.push(child)
           continue
         }
-        const parts = replaceEmoji(child.content, customBase)
+        const parts = replaceEmoji(child.content, base)
         if (parts.length === 1) {
           child.content = parts[0] ?? ''
           next.push(child)

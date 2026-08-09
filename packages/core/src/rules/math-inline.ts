@@ -7,6 +7,7 @@ export interface ReaditEnv extends Env {
     inlineMath?: InlineMathMode
     math?: MathRenderer | null
     explain?: boolean
+    emojiBase?: string
   }
   /** Filled in by the guard when `readit.explain` is true. */
   readitExplain?: ExplainEntry[]

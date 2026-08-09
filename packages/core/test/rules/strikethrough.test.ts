@@ -105,7 +105,7 @@ describe('applyStrikethrough', () => {
      * a mixed-length pair — so this records the behaviour readit now has and why, rather
      * than claiming GitHub was consulted.
      */
-    it('pairs a mixed-length run the way cmark-gfm\'s generic delimiter matcher does', () => {
+    it('UNMEASURED: pairs a mixed-length run — follows from the ported algorithm, not from an oracle', () => {
       expect(p('\\~~not~~')).toBe('~<del>not</del>')
       expect(p('a ~x~~ b')).toBe('a <del>x</del> b')
     })
