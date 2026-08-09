@@ -59,19 +59,6 @@
       }
     ]
   },
-  "gfm/emoji": {
-    "diff": {
-      "hunks": 1,
-      "edits": 2
-    },
-    "causes": [
-      {
-        "category": "readit-bug",
-        "explanation": "Custom-emoji <img src> is a local relative path (src=\"emoji/shipit.png\", then x-readit-rel:... after normalization) because applyEmoji's customBase default ('emoji/') is never overridden from engine.ts. GitHub's real src is the absolute https://github.githubassets.com/images/icons/emoji/shipit.png. Verified: the only diff line is this one src attribute; everything else in the 5-line output matches.",
-        "source": "task-24-report.md readit-bug #4 (rules/emoji.ts); re-verified against the live diff in task-36"
-      }
-    ]
-  },
   "gfm/footnotes": {
     "diff": {
       "hunks": 2,

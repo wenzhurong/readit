@@ -155,7 +155,7 @@ export interface DiffHunk {
  * already inside a hunk leaves both numbers untouched, so the pin's blind surface on any file is
  * exactly the removed side of its hunks — the lines of readit's output that already fail to match.
  * The size of that surface across the ledger is not quoted here; `corpus.test.ts` recomputes it
- * every run ("the magnitude pin's blind surface is 99 of 5249 lines"). Four entries
+ * every run ("the magnitude pin's blind surface is measured and pinned"). Four entries
  * (`frontend/mermaid-large`, `-syntax-error`, `-valid`, `gfm/tagfilter`) share no line at all with
  * their oracle and are therefore 100% blind — `shapeCarriesNoSignal` detects exactly that case,
  * and `corpus.test.ts` requires those entries to pin their `output` verbatim instead.
@@ -359,7 +359,7 @@ export function formatDiffHunks(
  *
  * A third direction closes the over-match hole: "still failing" is not enough, because it made a
  * listed file exempt from ALL regression detection — a new, unrelated bug could land inside one of
- * the 15 listed files and nothing would notice. Each entry therefore also pins the *magnitude* of
+ * the listed files and nothing would notice. Each entry therefore also pins the *magnitude* of
  * its mismatch (`diff`), so the ratchet asserts "still failing, and still failing exactly this
  * much". A ledger entry excuses only the causes it names, not the whole file.
  *
@@ -508,7 +508,7 @@ export function shapeMismatchMessage(
     'Only once you have confirmed the change genuinely belongs to a cause already listed — or ' +
     'you are adding a new, named, explained cause alongside it — should you re-pin `diff` in ' +
     'test/known-mismatches.json. Re-pinning reflexively to get back to green throws away the ' +
-    'only protection these 15 files have.'
+    'only protection the ledgered files have.'
   )
 }
 
@@ -548,7 +548,7 @@ export interface MismatchValidationError {
  * KNOWN LIMIT of the `>= 1` floor: a file whose ONLY divergence from its oracle is invisible to
  * `toDiffLines` (say, whitespace inside a `<pre>` that survives normalization but not the line
  * split) would mismatch with a measured shape of `{ hunks: 0, edits: 0 }` and could therefore
- * never be legally pinned here. No corpus file is in that state today — all 15 pins are >= 1 —
+ * never be legally pinned here. No corpus file is in that state today — every pin is >= 1 —
  * and the floor is worth keeping, because relaxing it to allow a zero magnitude would also let a
  * genuinely-matching file be pinned as debt, which is direction 2's whole job to prevent. If it
  * ever happens, `corpus.test.ts` catches it by name with a dedicated message rather than letting

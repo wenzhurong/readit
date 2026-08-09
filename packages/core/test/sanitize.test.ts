@@ -145,7 +145,8 @@ describe('sanitize', () => {
     applyEmoji(m)
     applyRawHtmlPolicy(m, false)
     expect(m.renderInline(':shipit:')).toBe(
-      '<img class="emoji" title=":shipit:" alt=":shipit:" src="emoji/shipit.png" ' +
+      '<img class="emoji" title=":shipit:" alt=":shipit:" ' +
+        'src="https://github.githubassets.com/images/icons/emoji/shipit.png" ' +
         'height="20" width="20" align="absmiddle">',
     )
   })

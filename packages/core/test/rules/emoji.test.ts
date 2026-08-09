@@ -30,12 +30,29 @@ describe('emoji', () => {
     expect(p(':jp:')).toBe('🇯🇵')
   })
 
-  it('emits a bundled local PNG for custom emoji', () => {
+  // The default base is GitHub's own CDN, not a relative `emoji/` directory: readit's
+  // central claim is byte-equality with GitHub's blob view, and GitHub serves every one
+  // of the 23 custom shortcodes from this absolute host. A relative default rendered as
+  // a BROKEN IMAGE for every consumer that did not happen to copy data/emoji/ next to
+  // its own bundle, which is every consumer that only ever calls render().
+  it('emits GitHub\'s CDN URL for custom emoji', () => {
     expect(p(':shipit:')).toBe(
-      '<img class="emoji" title=":shipit:" alt=":shipit:" src="emoji/shipit.png" ' +
+      '<img class="emoji" title=":shipit:" alt=":shipit:" ' +
+        'src="https://github.githubassets.com/images/icons/emoji/shipit.png" ' +
         'height="20" width="20" align="absmiddle">',
     )
+    expect(p(':octocat:')).toContain(
+      'src="https://github.githubassets.com/images/icons/emoji/octocat.png"',
+    )
+  })
+
+  // The seam survives the corrected default: a host that ships data/emoji/ itself (see
+  // SPEC §5.1, which budgets the 23 PNGs into dist/emoji/) still gets a local base by
+  // composing applyEmoji directly. Nothing in engine.ts overrides it — see the rule's
+  // own doc comment for why that is deliberate rather than an unfinished wiring.
+  it('still honours an explicit base for a host serving the bundled PNGs', () => {
     expect(md('/assets/').renderInline(':octocat:')).toContain('src="/assets/octocat.png"')
+    expect(md('emoji/').renderInline(':shipit:')).toContain('src="emoji/shipit.png"')
   })
 
   it('leaves unknown shortcodes as literal text', () => {

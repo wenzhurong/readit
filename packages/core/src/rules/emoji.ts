@@ -63,11 +63,33 @@ export function replaceEmoji(s: string, customBase: string): string[] {
 }
 
 /**
- * `customBase` is prefixed to the bundled PNG file name for the 23 custom
- * shortcodes. The 23 files live in `packages/core/data/emoji/` and must be
- * copied next to the bundle at build time; they are never fetched at runtime.
+ * Where GitHub serves the 23 custom-shortcode PNGs from. Measured against the
+ * blob-view oracle for `test/corpus/gfm/emoji.md`, whose fixture carries
+ * `src="https://github.githubassets.com/images/icons/emoji/shipit.png"`.
+ *
+ * This is a constant of GitHub's, not a readit deployment choice, which is why
+ * it is the DEFAULT rather than a `RenderOptions` field threaded through
+ * `state.env.readit` (C3(c)). readit's claim is byte-equality with GitHub, and
+ * there is exactly one string that satisfies it; a host that wants something
+ * else is departing from the oracle deliberately and can say so at the seam
+ * below. The previous default was the relative `emoji/`, which made every
+ * custom emoji a BROKEN IMAGE for any consumer that called `render()` without
+ * also copying `packages/core/data/emoji/` next to its own bundle — i.e. all of
+ * them, since `engine.ts` never passed an override.
  */
-export function applyEmoji(md: MarkdownIt, customBase = 'emoji/'): void {
+export const GITHUB_EMOJI_BASE = 'https://github.githubassets.com/images/icons/emoji/'
+
+/**
+ * `customBase` is prefixed to the PNG file name for the 23 custom shortcodes.
+ * It defaults to `GITHUB_EMOJI_BASE`, which is what `engine.ts` gets.
+ *
+ * The parameter stays as the seam for a host that would rather serve the PNGs
+ * itself: the 23 files are committed under `packages/core/data/emoji/` and
+ * SPEC §5.1 budgets copying them to `dist/emoji/` at build time. Such a host
+ * assembles its own engine and passes its own base; nothing is ever fetched at
+ * runtime by this rule either way — it only writes a URL into an attribute.
+ */
+export function applyEmoji(md: MarkdownIt, customBase = GITHUB_EMOJI_BASE): void {
   // `??=` so this rule still works standalone in tests without clobbering the
   // central registration a later task adds in engine.ts (see tasklist.ts).
   md.renderer.rules.readit_raw ??= (tokens, idx) => tokens[idx]!.content
