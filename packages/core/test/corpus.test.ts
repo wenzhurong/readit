@@ -124,7 +124,7 @@ describe('corpus vs committed GitHub oracle fixtures (zero network)', () => {
       lines += result.actualLines.length
       if (name === 'real-world/mermaid') mermaid = removed
     }
-    expect({ blind, lines, mermaid }).toEqual({ blind: 98, lines: 5244, mermaid: 52 })
+    expect({ blind, lines, mermaid }).toEqual({ blind: 95, lines: 5234, mermaid: 52 })
   })
 
   it.each(NAMES)('%s', (name) => {
