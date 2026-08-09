@@ -18,7 +18,7 @@ export const FIXTURES_DIR = fileURLToPath(new URL('./fixtures/', import.meta.url
  *  - `inline-math`: listed defensively. The 159-case dollar-guard corpus (SPEC §13.3) lives at
  *    `test/inline-math/corpus.json`, outside CORPUS_DIR entirely, so it is never actually reached
  *    by the walk below — it is asserted by a separate mechanism (see smoke.test.ts) and would blow
- *    through the 45-60 file band if it were ever folded in here. The entry stays so that co-locating
+ *    through the 45-70 file band if it were ever folded in here. The entry stays so that co-locating
  *    it under `test/corpus/inline-math/` in the future does not silently re-enable discovery.
  */
 export const NON_SNAPSHOT_DIRS = ['adversarial', 'inline-math']

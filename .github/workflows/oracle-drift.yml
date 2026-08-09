@@ -31,7 +31,7 @@ jobs:
       - run: npm ci
 
       # PAT is mandatory (SPEC 13.4). GITHUB_TOKEN gives 1000 req/hour/repo, which is
-      # enough for this 60-file corpus, but the secret must be a fine-grained PAT with
+      # enough for this 68-file corpus, but the secret must be a fine-grained PAT with
       # public read access — ORACLE_PAT — set by a repo admin; GITHUB_TOKEN is only the
       # fallback so this workflow does not silently no-op on a repo without the PAT set.
       - name: Refresh fixtures from the oracle
@@ -39,14 +39,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.ORACLE_PAT || secrets.GITHUB_TOKEN }}
         run: npm run oracle:refresh
 
+      # NOT `git diff --exit-code`. GitHub re-rolls data-run-id, data-identity and the
+      # footnote -<32hex> salt on every request, so a raw diff is non-empty on EVERY
+      # run and this alarm fired unconditionally from the day it was built — real drift
+      # would have arrived as *more* changed files inside a --stat that was never empty.
+      # detect-drift.ts masks exactly those three tokens and exits 1 only on a change
+      # GitHub actually renders. See scripts/salt-mask.ts for why masked and not
+      # normalized (normalization would also silence Linguist and mermaid-markup drift,
+      # which is drift worth waking up for).
       - name: Detect drift
         id: drift
         run: |
-          if git diff --exit-code -- packages/core/test/fixtures/; then
+          if npx tsx packages/core/scripts/detect-drift.ts > drift.txt; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
+            cat drift.txt
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
-            git diff --stat -- packages/core/test/fixtures/ > drift.txt
+            cat drift.txt
           fi
 
       # The refreshed fixtures are the new truth. If they no longer match our renderer, the

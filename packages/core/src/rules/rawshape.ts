@@ -97,22 +97,80 @@ function textOf(node: Nodes): string {
   return ''
 }
 
+const PLAIN_IMAGE_STYLE = 'max-width: 100%;'
+
+/**
+ * The extended form fires on a POSITIVE WHOLE NUMBER of pixels, and on nothing
+ * else. Not "has a `height` attribute", and not merely "the value is numeric":
+ * `height="0"` is measured to take the plain branch.
+ *
+ * Deliberately tested against the SERIALISED spelling (`String(height)`) rather
+ * than against a hast type. hast's property-information table coerces some
+ * `height` values to `number` and leaves others as `string`, and that split is
+ * a parser detail, not something GitHub can see. Keying on the same string that
+ * gets written into the `height` attribute also guarantees the two agree: the
+ * emitted `max-height: Npx` always quotes the emitted `height="N"`.
+ */
+const POSITIVE_WHOLE_PIXELS = /^[1-9][0-9]*$/
+
 /**
  * GitHub's image filter emits `max-width: 100%;` for a plain image and the
- * three-declaration form for one carrying a `height` attribute (measured
- * against `<img height="150">` in test/fixtures/real-world/mermaid.html — the
- * sole instance in the fixture set, against 46 plain ones; three `width`-only
- * images take the plain branch and agree).
+ * three-declaration form only for one whose `height` is a positive whole number.
  *
- * UNVERIFIED variants: a percentage height (`height="50%"`), a height with a
- * CSS unit, and `width` and `height` together. No fixture exercises any of
- * them, so they follow the same "has a height attribute" branch by default
- * rather than by measurement.
+ * MEASURED 2026-08-09 against the live oracle (`contents` +
+ * `Accept: application/vnd.github.html`, self-repo ref c764d959), eight
+ * single-purpose corpus files, one `<img>` shape each. `style` as returned:
+ *
+ *     height          fixture (test/fixtures/github-only/)   style
+ *     --------------  -------------------------------------  ----------------------
+ *     (absent)        image-height-none                      max-width: 100%;
+ *     "150"           image-height-numeric                   max-width: 100%; height: auto; max-height: 150px;
+ *     "50" (+ width)  image-width-and-height                 max-width: 100%; height: auto; max-height: 50px;
+ *     "50%"           image-height-percent                   max-width: 100%;
+ *     "10em"          image-height-css-unit                  max-width: 100%;
+ *     "0"             image-height-zero                      max-width: 100%;
+ *     "abc"           image-height-junk                      max-width: 100%;
+ *
+ * This REPLACES the previous "has a `height` attribute" branch, which was
+ * generalised from the single `<img height="150">` in real-world/mermaid and
+ * was wrong on four of these seven shapes — it emitted the syntactically
+ * invalid `max-height: 50%px;`, `max-height: 10empx;`, `max-height: abcpx;`
+ * and a spurious `max-height: 0px;`. Three of the four were flagged UNVERIFIED
+ * in this comment while the code took the height branch anyway.
+ *
+ * `image-height-markdown` closes the last question the debt entry asked:
+ * Markdown image syntax cannot express a height at all (GitHub supports
+ * neither `{height=150}` nor `=150x`), so this branch is unreachable from
+ * `decorate.ts`'s side and its unconditional plain form is correct.
+ *
+ * STILL UNMEASURED, with the branch each one actually takes — this list said
+ * "all take the plain branch" and was wrong for three of them. hast coerces
+ * `height` to a NUMBER before this function sees it, so `String()` re-renders
+ * it as bare digits and the regex matches:
+ *
+ *   " 150 "            -> 150   -> EXTENDED, max-height: 150px
+ *   "0150"             -> 150   -> EXTENDED, max-height: 150px
+ *   9007199254740993   -> 2^53  -> EXTENDED (precision lost in the coercion)
+ *   "+150" / "1e3" / "0x10"     -> EXTENDED as 150 / 1000 / 16
+ *   "1.5" / "-5"                -> plain
+ *   >= 1e21            -> "1e+21" -> plain (exponential stringification)
+ *
+ * What IS guaranteed, and is the reason none of this can emit invalid CSS:
+ * the regex runs on the same string the serialiser writes into the attribute,
+ * so `height="N"` and `max-height: Npx` always carry the same N by
+ * construction. HTML's own non-negative-integer parsing would also give 150
+ * for `" 150 "` and `"0150"`, so the behaviour may well match GitHub — but
+ * that is unmeasured, and this comment's job is to say which is which.
+ *
+ * The mirror hazard is closed: no positive-whole-number height can reach the
+ * plain branch, so readit never under-decorates where GitHub decorates.
  */
 function imageStyle(el: Element): string {
   const height = el.properties.height
-  if (height === undefined || height === null || height === '') return 'max-width: 100%;'
-  return `max-width: 100%; height: auto; max-height: ${String(height)}px;`
+  if (height === undefined || height === null) return PLAIN_IMAGE_STYLE
+  const value = String(height)
+  if (!POSITIVE_WHOLE_PIXELS.test(value)) return PLAIN_IMAGE_STYLE
+  return `max-width: 100%; height: auto; max-height: ${value}px;`
 }
 
 /** `rel` for the synthetic wrapper, matching `decorate.ts`'s markdown-side twin. */

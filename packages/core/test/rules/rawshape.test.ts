@@ -214,13 +214,72 @@ describe('applyRawShape', () => {
       )
     })
 
-    it('uses the extended style form when the image carries a height attribute', () => {
-      // Oracle bytes, from test/fixtures/real-world/mermaid.html: `<img height="150">`
-      // comes back `style="max-width: 100%; height: auto; max-height: 150px;"`.
-      // Sole instance in the whole fixture set against 46 plain ones — see the
-      // unverified variants listed in rawshape.ts.
+    /**
+     * The measured `imageStyle` predicate (D2-1).
+     *
+     * The three-declaration form used to fire on "has a `height` attribute at
+     * all", which was generalised from ONE instance (`real-world/mermaid`'s
+     * `<img height="150">`) against 46 plain ones. Eight single-purpose corpus
+     * files were captured against the live oracle on 2026-08-09 (ref
+     * c764d959, `contents` + `Accept: application/vnd.github.html`) and the
+     * generalisation was WRONG in four of the seven `height` shapes:
+     *
+     *   height           oracle style
+     *   ---------------  ------------------------------------------------------
+     *   (absent)         max-width: 100%;
+     *   "150"            max-width: 100%; height: auto; max-height: 150px;
+     *   "50" (+ width)   max-width: 100%; height: auto; max-height: 50px;
+     *   "50%"            max-width: 100%;
+     *   "10em"           max-width: 100%;
+     *   "0"              max-width: 100%;
+     *   "abc"            max-width: 100%;
+     *
+     * The fixtures are `test/fixtures/github-only/image-height-*.html` and
+     * `image-width-and-height.html`; each assertion below names the one it
+     * comes from, so none of these numbers is a remembered claim.
+     */
+    it('uses the extended form for a positive whole-number height (image-height-numeric)', () => {
       expect(md().render('<img src="a.png" height="150">\n')).toContain(
         '<img src="a.png" height="150" style="max-width: 100%; height: auto; max-height: 150px;">',
+      )
+    })
+
+    it('keys the extended form on height, ignoring width (image-width-and-height)', () => {
+      // The third of the three shapes that used to be UNMEASURED. Here the old
+      // "has a height" branch happened to be right — width does not disturb it.
+      expect(md().render('<img src="a.png" width="100" height="50">\n')).toContain(
+        '<img src="a.png" width="100" height="50" style="max-width: 100%; height: auto; max-height: 50px;">',
+      )
+    })
+
+    it('keeps the plain form for a percentage height (image-height-percent)', () => {
+      // UNMEASURED shape #1, and the old branch was wrong: it emitted the
+      // syntactically invalid `max-height: 50%px;`.
+      expect(md().render('<img src="a.png" height="50%">\n')).toContain(
+        '<img src="a.png" height="50%" style="max-width: 100%;">',
+      )
+    })
+
+    it('keeps the plain form for a CSS-unit height (image-height-css-unit)', () => {
+      // UNMEASURED shape #2, also wrong: the old branch emitted `max-height: 10empx;`.
+      expect(md().render('<img src="a.png" height="10em">\n')).toContain(
+        '<img src="a.png" height="10em" style="max-width: 100%;">',
+      )
+    })
+
+    it('keeps the plain form for height="0" — zero is not a positive height (image-height-zero)', () => {
+      // The finding nobody predicted. "has a height attribute" and "the value
+      // parses as a number" both say extended here; the oracle says plain. This
+      // is what pins the predicate to *positive*, not merely numeric.
+      expect(md().render('<img src="a.png" height="0">\n')).toContain(
+        '<img src="a.png" height="0" style="max-width: 100%;">',
+      )
+    })
+
+    it('keeps the plain form for a non-numeric height (image-height-junk)', () => {
+      // The old branch emitted `max-height: abcpx;`.
+      expect(md().render('<img src="a.png" height="abc">\n')).toContain(
+        '<img src="a.png" height="abc" style="max-width: 100%;">',
       )
     })
 
@@ -230,6 +289,31 @@ describe('applyRawShape', () => {
       expect(md().render('<img src="a.png" width="283">\n')).toContain(
         '<img src="a.png" width="283" style="max-width: 100%;">',
       )
+    })
+
+    it('keeps the plain style form for an image with no dimensions at all (image-height-none)', () => {
+      expect(md().render('<img src="a.png">\n')).toContain('<img src="a.png" style="max-width: 100%;">')
+    })
+
+    /**
+     * Confirmed rather than assumed (`github-only/image-height-markdown`):
+     * Markdown image syntax has no way to express a height, so the extended
+     * form is unreachable from the Markdown side and `decorate.ts`'s
+     * unconditional `max-width: 100%;` is not a gap. GitHub supports neither
+     * the kramdown/Pandoc `{height=150}` attribute block (it stays literal
+     * text after the image) nor the `=150x` size suffix (the whole construct
+     * fails to parse as an image and stays literal).
+     *
+     * Uses `render()`, not this file's `md()`: the Markdown image path is
+     * `decorate.ts`'s, and `md()` deliberately loads only `applyRawShape`.
+     */
+    it('cannot reach the extended form from Markdown image syntax', () => {
+      const opts = { math: null, highlighter: null }
+      const attrBlock = render('![logo](a.png){height=150}\n', opts)
+      expect(attrBlock).toContain('<img src="a.png" alt="logo" style="max-width: 100%;">')
+      expect(attrBlock).toContain('{height=150}')
+      expect(attrBlock).not.toContain('max-height')
+      expect(render('![logo](a.png =150x)\n', opts)).toContain('![logo](a.png =150x)')
     })
   })
 

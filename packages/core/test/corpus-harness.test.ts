@@ -26,8 +26,8 @@ describe('corpus inventory', () => {
 
   // Exact, not the SPEC 13.3 band — see the matching assertion in corpus.test.ts for why a band
   // lets the corpus silently shrink underneath the fidelity number.
-  it('holds exactly the 60 committed files (SPEC 13.3 mandates 45-60)', () => {
-    expect(names.length).toBe(60)
+  it('holds exactly the 68 committed files (SPEC 13.3 mandates 45-70)', () => {
+    expect(names.length).toBe(68)
   })
 
   it('covers the four snapshotted categories and excludes adversarial', () => {
