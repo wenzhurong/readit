@@ -5,20 +5,43 @@
   "type": "module",
   "license": "MIT",
   "description": "GitHub-shaped Markdown renderer and embeddable viewer",
-  "sideEffects": ["*.css"],
-  "engines": { "node": ">=22" },
-  "files": ["dist"],
+  "sideEffects": [
+    "*.css"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
-      "types": "./dist/core.d.ts",
       "module-sync": "./dist/core.js",
-      "import": "./dist/core.js",
-      "require": { "types": "./dist/cjs/core.d.ts", "default": "./dist/core.cjs" }
+      "import": {
+        "types": "./dist/core.d.ts",
+        "default": "./dist/core.js"
+      },
+      "require": {
+        "types": "./dist/cjs/core.d.ts",
+        "default": "./dist/core.cjs"
+      }
     },
-    "./element": { "types": "./dist/element.d.ts", "import": "./dist/element.js" },
-    "./editor": { "types": "./dist/editor.d.ts", "import": "./dist/editor.js" },
-    "./plugins/math": { "types": "./dist/plugins/math.d.ts", "import": "./dist/plugins/math.js" },
-    "./plugins/highlight": { "types": "./dist/plugins/highlight.d.ts", "import": "./dist/plugins/highlight.js" },
+    "./element": {
+      "types": "./dist/element.d.ts",
+      "import": "./dist/element.js"
+    },
+    "./editor": {
+      "types": "./dist/editor.d.ts",
+      "import": "./dist/editor.js"
+    },
+    "./plugins/math": {
+      "types": "./dist/plugins/math.d.ts",
+      "import": "./dist/plugins/math.js"
+    },
+    "./plugins/highlight": {
+      "types": "./dist/plugins/highlight.d.ts",
+      "import": "./dist/plugins/highlight.js"
+    },
     "./styles.css": "./dist/readit.css",
     "./package.json": "./package.json"
   },
@@ -27,6 +50,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
     "@readit/core": "0.0.0",
     "@readit/editor": "0.0.0",
     "@readit/element": "0.0.0",
@@ -34,6 +58,7 @@
     "@readit/math": "0.0.0",
     "@types/node": "24.10.1",
     "esbuild": "0.25.12",
+    "publint": "0.3.23",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   }

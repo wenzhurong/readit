@@ -67,11 +67,22 @@ function bundleClosure(entryRel: string): string {
 
 describe('exports 映射就是 SPEC §9.3 的那张表', () => {
   it('逐字段等于契约形状', () => {
+    // '.' 的形状比任务书 Step 1 字面给的多一层嵌套：任务书原样把 "types" 写成
+    // import/require 的同级兄弟键（`{ types, "module-sync", import, require: {...} }`）。
+    // 那个写法在 Task 10 的 attw 门上是真的红——不是任务书笔误，是 Node/TS 条件导出
+    // 解析的一个不直观规则：exports 对象里条件键按书写顺序逐个尝试是否在「当前活跃条件
+    // 集合」里，第一个命中的就用，不看哪个更具体。CJS 解析的活跃集合是
+    // ['require','types','node']；顶层 "types" 键排在 "require" 前面，于是
+    // "require" 分支下专门为 CJS 准备的 dist/cjs/core.d.ts 从未被走到——CJS 侧解析出的
+    // 类型仍是 ESM 那份 dist/core.d.ts，attw 因此判它 "node16 (from CJS): Masquerading
+    // as ESM"（用 `attw --format json` 的 resolution trace 实测确认，见 batch-4-report）。
+    // 把 "types" 分别嵌进 import/require 各自分支（各自查自己的），这条歧义连产生的
+    // 机会都没有——这是官方文档里「同一个包要给 import 和 require 各自不同类型声明」
+    // 场景的标准写法，不是我们发明的新形状。
     expect(manifest.exports).toEqual({
       '.': {
-        types: './dist/core.d.ts',
         'module-sync': './dist/core.js',
-        import: './dist/core.js',
+        import: { types: './dist/core.d.ts', default: './dist/core.js' },
         require: { types: './dist/cjs/core.d.ts', default: './dist/core.cjs' },
       },
       './element': { types: './dist/element.d.ts', import: './dist/element.js' },
