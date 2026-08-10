@@ -5,3 +5,4 @@
 // 本文件的最终形态是三行：Task 7 追加 createShikiHighlighter，Task 8 追加
 // createStarryNightHighlighter，两次都是追加而非替换。
 export type { Highlighter } from '@readit/core/types'
+export { createShikiHighlighter, type ShikiOptions } from './shiki.js'

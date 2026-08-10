@@ -229,7 +229,10 @@ describe('未知选项值', () => {
   it('渲染选项照单全收，不猜——kernel 不额外调用 highlighter.supports，只把它原样交给 render()', () => {
     const highlight = { highlight: vi.fn(() => null), supports: vi.fn(() => false) }
     createKernel(makeHost(), resolveMountOptions({ value: DOC, highlighter: highlight }))
-    expect(highlight.highlight).toHaveBeenCalledWith('var a = 1\n', 'js')
+    // 批次 3（Task 7）起，codeblock.ts 交给 highlight() 的正文改为去掉围栏尾换行的
+    // trimmed，与 data-snippet-clipboard-copy-content 及无高亮回落路径对齐——见
+    // packages/core/src/rules/codeblock.ts 与它的提交说明。
+    expect(highlight.highlight).toHaveBeenCalledWith('var a = 1', 'js')
     expect(highlight.supports).not.toHaveBeenCalled()
   })
 })

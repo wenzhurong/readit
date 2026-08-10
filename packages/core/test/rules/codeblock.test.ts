@@ -89,10 +89,12 @@ describe('codeblock', () => {
       supports: (lang) => lang === 'js',
       highlight: (code, lang) => (lang === 'js' ? `<span class="pl-k">${code}</span>` : null),
     }
+    // 交给 highlight() 的正文不带尾换行，与 data-snippet-clipboard-copy-content
+    // 以及无高亮回落路径用的是同一个字符串。
     expect(md(hl).render('```js\nconst\n```\n')).toBe(
       '<div class="highlight highlight-source-js notranslate position-relative overflow-auto"' +
         ' dir="auto" data-snippet-clipboard-copy-content="const">' +
-        '<pre><span class="pl-k">const\n</span></pre></div>\n',
+        '<pre><span class="pl-k">const</span></pre></div>\n',
     )
   })
 
