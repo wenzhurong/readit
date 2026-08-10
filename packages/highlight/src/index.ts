@@ -6,4 +6,4 @@
 // createStarryNightHighlighter，两次都是追加而非替换。
 export type { Highlighter } from '@readit/core/types'
 export { createShikiHighlighter, type ShikiOptions } from './shiki.js'
-export { createStarryNightHighlighter } from './starry-night.js'
+export { createStarryNightHighlighter, type StarryNightOptions } from './starry-night.js'

@@ -50,13 +50,17 @@ export async function createShikiHighlighter(opts: ShikiOptions = {}): Promise<H
 
   const loaded = new Set(core.getLoadedLanguages())
 
+  // 唯一的判定来源：highlight() 通过调它而不是重算 loaded.has(...) 来决定要不要
+  // 返回 null，这样「highlight() 返回 null 当且仅当 !supports()」由构造保证。
+  function supports(lang: string): boolean {
+    return loaded.has(lang.toLowerCase())
+  }
+
   return {
-    supports(lang: string): boolean {
-      return loaded.has(lang.toLowerCase())
-    },
+    supports,
     highlight(code: string, lang: string): string | null {
+      if (!supports(lang)) return null
       const key = lang.toLowerCase()
-      if (!loaded.has(key)) return null
       const hast = core.codeToHast(code, {
         lang: key,
         themes: { light: 'github-light', dark: 'github-dark' },

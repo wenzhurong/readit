@@ -9,6 +9,14 @@ const committed = JSON.parse(
 /** SPEC §5.1：首次遇到 `$` 时无条件加载的数学包，~677 KB gzip，没有任何闸门。 */
 const MATH_PAYLOAD_GZIP = 677 * 1024
 
+/**
+ * 设计 §5.4.1 的论断是「最坏语法包比数学包小 3.5 倍」，不是「小于数学包」——
+ * 直接拿 `< MATH_PAYLOAD_GZIP` 当刻度太松：一个 500 KB 的语法包也能通过，那时论断
+ * 早已名存实亡，测试却仍然绿。刻度收紧到三分之一，让断言守住的是那句话本身，
+ * 而不是一个宽松得多、谁都能满足的命题。
+ */
+const NO_GATE_MARGIN_GZIP = MATH_PAYLOAD_GZIP / 3
+
 describe('语言包体积台账', () => {
   const fresh = measureAll()
 
@@ -33,11 +41,11 @@ describe('语言包体积台账', () => {
     )
   })
 
-  it('支撑「不建闸」的那条实测事实仍然成立：最大的语法包仍小于无闸门的数学包', () => {
-    // 这条断言就是决策本身。哪天 shiki 出了一个比数学包还大的语法包，它先红，
-    // 决策就必须重新做一次——而不是靠谁记得回来看这张表。
-    expect(fresh.shiki.gzip.max).toBeLessThan(MATH_PAYLOAD_GZIP)
-    expect(fresh.starryNight.gzip.max).toBeLessThan(MATH_PAYLOAD_GZIP)
+  it('支撑「不建闸」的那条实测事实仍然成立：最大的语法包比无闸门的数学包至少小 3 倍', () => {
+    // 这条断言就是决策本身。哪天某个语法包越过这条线（哪怕还没真的超过数学包本身），
+    // 它先红，决策就必须重新做一次——而不是靠谁记得回来看这张表。
+    expect(fresh.shiki.gzip.max).toBeLessThan(NO_GATE_MARGIN_GZIP)
+    expect(fresh.starryNight.gzip.max).toBeLessThan(NO_GATE_MARGIN_GZIP)
   })
 
   it('分布仍然是极度右偏的：中位数是个位数 KB，超 50 KB 的是个位数个', () => {

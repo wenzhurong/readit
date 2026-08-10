@@ -7,6 +7,19 @@ export interface OnigurumaOptions {
   getOnigurumaUrlFs?: () => URL
 }
 
+export interface StarryNightOptions {
+  /**
+   * onig.wasm 的绝对地址。**必填、无默认值**（P3）。
+   *
+   * starry-night 的默认浏览器路径硬编码 fetch('https://esm.sh/vscode-oniguruma@2
+   * /release/onig.wasm')，必填是防这条覆写被忘记的结构手段。打包器场景传
+   * `new URL('onig.wasm', import.meta.url).href`；Node 场景传
+   * `pathToFileURL(...).href`。必须是绝对 URL，相对路径会在 `onigurumaOptions()`
+   * 里当场抛出。
+   */
+  onigWasmUrl: string
+}
+
 /**
  * 把一个 onig.wasm 地址翻成 starry-night 的 Options。
  *
@@ -42,14 +55,21 @@ export function onigurumaOptions(onigWasmUrl: string): OnigurumaOptions {
  * 不做按需注册：register() 是 async，而 P3 要求 highlight() 纯同步，所以语法集只能
  * 在工厂期定死。要更大的集合是 M6 的事，见「新增契约提案」。
  */
-export async function createStarryNightHighlighter(opts: { onigWasmUrl: string }): Promise<Highlighter> {
+export async function createStarryNightHighlighter(opts: StarryNightOptions): Promise<Highlighter> {
   const starryNight = await createStarryNight(common, onigurumaOptions(opts.onigWasmUrl))
+
+  // 唯一的判定来源：highlight() 通过调它而不是重算 flagToScope() 来决定要不要
+  // 返回 null，这样「highlight() 返回 null 当且仅当 !supports()」由构造保证。
+  function scopeFor(lang: string): string | undefined {
+    return starryNight.flagToScope(lang)
+  }
+
   return {
     supports(lang: string): boolean {
-      return starryNight.flagToScope(lang) !== undefined
+      return scopeFor(lang) !== undefined
     },
     highlight(code: string, lang: string): string | null {
-      const scope = starryNight.flagToScope(lang)
+      const scope = scopeFor(lang)
       if (scope === undefined) return null
       return serializeFragment(starryNight.highlight(code, scope).children)
     },

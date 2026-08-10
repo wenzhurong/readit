@@ -9,6 +9,7 @@
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { gzipSync } from 'node:zlib'
 
 const require_ = createRequire(import.meta.url)
@@ -96,22 +97,36 @@ export function measureAll(): Pick<Report, 'shiki' | 'starryNight'> {
   }
 }
 
-const report: Report = {
-  measuredAt: '2026-08-10',
-  ...measureAll(),
-  gate: {
-    built: false,
-    copyIfEverBuilt: '这个代码块的语言包较大（<N> KB），已跳过高亮。[仍要加载]',
-    rationale:
-      '本项目对懒加载载荷的既定容忍度是数学包 ~677 KB gzip 与 mermaid 1–1.5 MB，两者都没有闸门。' +
-      '最坏的单个语法包（shiki emacs-lisp 194.2 KB gzip）比其中较小的那个还小 3.5 倍。' +
-      '只给三个懒加载大件里最小的那个建闸不自洽。完整论证见设计文档 §5.4.1。',
-  },
+function buildReport(): Report {
+  return {
+    measuredAt: '2026-08-10',
+    ...measureAll(),
+    gate: {
+      built: false,
+      copyIfEverBuilt: '这个代码块的语言包较大（<N> KB），已跳过高亮。[仍要加载]',
+      rationale:
+        '本项目对懒加载载荷的既定容忍度是数学包 ~677 KB gzip 与 mermaid 1–1.5 MB，两者都没有闸门。' +
+        '最坏的单个语法包（shiki emacs-lisp 194.2 KB gzip）比其中较小的那个还小 3.5 倍。' +
+        '只给三个懒加载大件里最小的那个建闸不自洽。完整论证见设计文档 §5.4.1。',
+    },
+  }
 }
 
-const out = new URL('../data/lang-pack-sizes.json', import.meta.url)
-writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`)
-console.error(
-  `shiki: ${report.shiki.count} packs, max ${(report.shiki.gzip.max / 1024).toFixed(1)} KB gzip; ` +
-    `starry-night: ${report.starryNight.count} packs, max ${(report.starryNight.gzip.max / 1024).toFixed(1)} KB gzip`,
-)
+function main(): void {
+  const report = buildReport()
+  const out = new URL('../data/lang-pack-sizes.json', import.meta.url)
+  writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`)
+  console.error(
+    `shiki: ${report.shiki.count} packs, max ${(report.shiki.gzip.max / 1024).toFixed(1)} KB gzip; ` +
+      `starry-night: ${report.starryNight.count} packs, max ${(report.starryNight.gzip.max / 1024).toFixed(1)} KB gzip`,
+  )
+}
+
+// 只在直接执行本脚本时才写文件。test/lang-pack-sizes.test.ts 只 import `measureAll`
+// 这个纯函数——ESM 的模块体在 import 时无条件求值一次，之前把 writeFileSync 放在顶层
+// 等于每次跑测试套件都在读文件*之前*先用同一次测量把它重写一遍，两条「表还是当前实测值」
+// 断言因此在跟自己刚写的输出比对，永远不可能红。这里用 import.meta.url 与
+// process.argv[1] 的比较把「被 import」和「被当脚本执行」分开。
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  main()
+}
