@@ -253,8 +253,10 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
     destroy(): void {
       if (destroyed) return
       destroyed = true
+      // 先断内容再拆监听：反过来的话最后一次事件可能打到半拆的状态上。
       content.textContent = ''
       sourcePane.textContent = ''
+      clearError()
       afterRender.length = 0
       disposers.disposeAll()
     },
