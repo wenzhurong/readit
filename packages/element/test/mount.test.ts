@@ -106,6 +106,17 @@ describe('模式状态机', () => {
     expect(kernel.root.root.getAttribute('data-mode')).toBe('read')
   })
 
+  /**
+   * §0 A8 命名表：sourcePane 的 class 必须含 .readit-source，content 必须含
+   * .markdown-body——Task 17 的 createPanes() 接收这两个节点而不自己
+   * createElement，命名对不上它就接不上。
+   */
+  it('sourcePane 与 content 的 class 满足 §0 A8 的命名表', () => {
+    const kernel = createKernel(makeHost(), resolveMountOptions({ value: DOC }))
+    expect(kernel.sourcePane.classList.contains('readit-source')).toBe(true)
+    expect(kernel.content.classList.contains('markdown-body')).toBe(true)
+  })
+
   it.each([['source'], ['plain']] as const)('%s 只显示源码窗格', (mode) => {
     const kernel = createKernel(makeHost(), resolveMountOptions({ value: DOC, mode }))
     expect(kernel.content.hidden).toBe(true)

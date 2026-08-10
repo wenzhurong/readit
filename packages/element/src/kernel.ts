@@ -88,7 +88,13 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
   const root = createRoot(host, opts.shadow, disposers)
 
   const sourcePane = doc.createElement('div')
-  sourcePane.className = 'readit-pane readit-pane-source'
+  // §0 A8 定的类名是 .readit-source（Task 17 的 createPanes() 接收这个节点，
+  // 不自己 createElement，task-17-brief.md 的测试直接查 .readit-source /
+  // .readit-source textarea）。保留 readit-pane 是给 BASE_CSS 共享的窗格布局
+  // 规则（min-width/overflow/[hidden]）用的，跟 content 保留 readit-pane 是
+  // 同一个理由——A8 给的是「必须包含」的类，不是「只能有」的类，content 自己
+  // 也在 .markdown-body 之外多带了 readit-pane。
+  sourcePane.className = 'readit-pane readit-source'
 
   const content = doc.createElement('div')
   content.className = 'readit-pane readit-pane-content markdown-body'

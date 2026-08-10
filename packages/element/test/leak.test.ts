@@ -53,6 +53,28 @@ describe('探针自检', () => {
     ro.disconnect()
     expect(probe.counts()).toEqual(ZERO)
   })
+
+  /**
+   * 评审 Important 4：window 自己是第三层，既不是 DOM 节点共享的那层也不是
+   * MediaQueryList 那层——window.addEventListener 是它自己的 own property。
+   * 现在 addListener() 没有任何调用点把 view 自己当 target（不是活洞），但
+   * Task 13–17 的滚动同步一旦挂 window 的 resize，漏了这层会是假绿，先补上
+   * 覆盖再补运行时代码，不倒过来。
+   */
+  it('也抓得到挂在 window 自己身上的监听器', () => {
+    probe = installLeakProbe(window)
+    const handler = (): void => {}
+    window.addEventListener('resize', handler)
+    expect(probe.counts().listeners).toBe(1)
+    // window 在这个 happy-dom/vitest 组合下 constructor.name 读作 'Object'（不是
+    // 'Window'）——populateGlobal 把 happy-dom 的 window 属性直接铺到 Node 的
+    // globalThis 上，globalThis 自身的构造器没有被换成 Window，这是同一个已经
+    // 记录过的环境识别问题（navigate.ts 顶部注释、Important 4 报告）的又一处
+    // 表现，不是探针的新缺陷。
+    expect(probe.describe()).toEqual(['Object#resize'])
+    window.removeEventListener('resize', handler)
+    expect(probe.counts()).toEqual(ZERO)
+  })
 })
 
 describe('挂载/销毁 50 次', () => {

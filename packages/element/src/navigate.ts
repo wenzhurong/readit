@@ -42,6 +42,14 @@ export function classifyHref(href: string): LinkKind {
  * 按字符串切分处理，不关心 scheme/authority 是否存在——整个 baseUrl 被当成
  * 「最后一个 / 之前是目录，之后是文件名」，这对 'docs/x.md'、'/docs/x.md'、
  * 'file:///U/docs/x.md' 三种形态都成立，不需要为 scheme 开特殊分支。
+ *
+ * 例外是 §5.3 明写的一条分支，之前这里漏了：**参照路径本身以 `/` 开头时，
+ * 它不与 base 的目录合并，直接就是目标路径**——只有 base 的 scheme+authority
+ * 前缀（`file://` 这一段）要保留，`file://` 之后那部分整个被参照路径替换掉。
+ * 漏掉这条分支时 `resolveRelative('docs/README.md', '/img/a.md')` 会算成
+ * `'docs//img/a.md'`（把根绝对路径当成了普通相对段去拼接），而
+ * `classifyHref('/abs/x.md')` 恰好把这类 href 分类成 'relative'（见
+ * `classifyHref` 的 it.each 用例），会直接喂进这个函数——路径可达，不是纸面问题。
  */
 export function resolveRelative(baseUrl: string, href: string): { path: string; hash: string } {
   const hashIndex = href.indexOf('#')
@@ -49,8 +57,24 @@ export function resolveRelative(baseUrl: string, href: string): { path: string; 
   const hash = hashIndex === -1 ? '' : href.slice(hashIndex)
   const decodedPath = decodePathSafely(rawPath)
 
+  if (decodedPath.startsWith('/')) {
+    return { path: authorityPrefixOf(baseUrl) + removeDotSegments(decodedPath), hash }
+  }
+
   const baseDir = baseUrl.slice(0, baseUrl.lastIndexOf('/') + 1)
   return { path: removeDotSegments(baseDir + decodedPath), hash }
+}
+
+/**
+ * `baseUrl` 的 `scheme://` 前缀（含裸协议相对的 `//`），没有则是空串。
+ * 'docs/README.md' 与 '/docs/README.md' 都没有——它们不是带 scheme 的 URL，
+ * 只是路径，根绝对参照路径替换掉它们的全部内容，无需保留任何前缀。
+ * 'file:///U/docs/README.md' 有——'file://'，根绝对参照路径只替换 authority
+ * 之后的部分，scheme+authority 本身保留。
+ */
+function authorityPrefixOf(baseUrl: string): string {
+  const match = /^(?:[a-zA-Z][a-zA-Z0-9+.-]*:)?\/\//.exec(baseUrl)
+  return match === null ? '' : match[0]
 }
 
 function decodePathSafely(path: string): string {
@@ -178,12 +202,20 @@ export function createNavigation(hooks: NavigationHooks, disposers: Disposers): 
       stack.push(entry)
       cursor = stack.length - 1
     }
+    // 评审 Important/M5：这一行必须在下面的「同路径早退」分支之前跑，不能像
+    // 原来那样放在它之后。onNavigate === null 那条失败路径会在更新 loadedPath
+    // 之前就 return（下面有注释解释原因），于是失败之后按后退键回到的那个
+    // entry 会命中「entry.path === loadedPath」的早退分支——如果 clearError()
+    // 还留在那个分支之后，错误角标会永远清不掉，卡死在屏幕上。同步抛出/
+    // 异步拒绝那两条路径也有同一个隐患：失败一次后 loadedPath 会变成失败的那个
+    // path，再点同一个链接会命中同一个早退分支。unconditional 地放在最前面，
+    // 三条失败路径 + 正常路径都覆盖到，而不是逐个补丁。
+    hooks.clearError()
     if (entry.path === loadedPath) {
       // 同一个文件内部的锚点跳转，不惊动宿主。
       if (entry.hash !== '') applyHash(entry.hash)
       return
     }
-    hooks.clearError()
     const onNavigate = hooks.onNavigate
     if (onNavigate === null) {
       fail2(entry.path, '挂载时没有给 onNavigate 回调，元素自己拿不到文件内容。')

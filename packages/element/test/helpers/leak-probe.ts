@@ -26,9 +26,21 @@
  * 所以这里不信任任何全局标识符，一律从真实实例采样、往上走原型链找到
  * 「自己拥有 addEventListener」的那一层再打补丁；ShadowRoot 与普通 Element
  * 实测共享同一层（用 `document.createElement('div')` 采样已经够），
- * `MediaQueryList` 单独采样一次。这两个正是本包 `addListener()` 实际调用过的
- * 全部具体类型（navigate.ts 的 host 点击/键盘/鼠标事件、theme.ts 的
- * matchMedia change 事件）。
+ * `MediaQueryList` 单独采样一次。
+ *
+ * 第三层是 `view`（window/globalThis）自己：实测它既不是 DOM 节点共享的那层，
+ * 也不是 `MediaQueryList` 那层——`window.addEventListener` 是 window 自己的
+ * own property（`Object.prototype.hasOwnProperty.call(window,
+ * 'addEventListener')` 为真），不经过任何共享原型，需要单独采样打补丁。
+ * 现在本包代码没有任何 `addListener(disposers, view, …)` 的调用点（不是活洞），
+ * 但 Task 13–17 的滚动同步一旦挂 window 的 resize/scroll，漏了这一层会让探针
+ * 在真正该报警的时候保持假绿，所以这一批就把它补齐，不等出问题才发现。
+ *
+ * 这三层是本包 `addListener()` 实际调用过、以及可预见会调用的全部具体类型
+ * （navigate.ts 的 host 点击/键盘/鼠标事件、theme.ts 的 matchMedia change
+ * 事件、Task 13–17 可能挂的 window 事件）。若以后出现第四类 EventTarget 实现
+ * （比如某个第三方库自己的事件总线），需要在这里再加一次 `patchOwnerOf` 采样
+ * ——这不是自动泛化的，见文件末尾「已知局限」。
  */
 export interface LeakCounts {
   listeners: number
@@ -125,6 +137,13 @@ export function installLeakProbe(view: Window & typeof globalThis): LeakProbe {
   if (typeof view.matchMedia === 'function') {
     patchOwnerOf(view.matchMedia('(prefers-color-scheme: dark)') as unknown as EventTarget)
   }
+  // `view` 自己（window/globalThis）也要采样：实测它跟 DOM 节点共享的那层、跟
+  // MediaQueryList 那层都不是同一个对象——`window.addEventListener` 是 window
+  // 自己的实例属性（own property），不经过任何原型。现在本包代码没有任何
+  // `addListener(disposers, view, …)` 的调用点，所以不是活洞，但 Task 13–17
+  // 的滚动同步一旦挂 window 的 resize/scroll，漏了这一层会让探针在真正该报警
+  // 的时候保持假绿——不能等到那时才发现。
+  patchOwnerOf(view)
 
   let resizeObservers = 0
   let mutationObservers = 0

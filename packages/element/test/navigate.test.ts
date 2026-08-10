@@ -86,6 +86,12 @@ describe('resolveRelative', () => {
     ['file:///U/docs/README.md', './other.md', 'file:///U/docs/other.md', ''],
     ['file:///U/docs/README.md', '../x.md#a', 'file:///U/x.md', '#a'],
     ['docs/README.md', 'a%20b.md', 'docs/a b.md', ''],
+    // RFC 3986 §5.3：参照路径本身以 '/' 开头时不与 base 目录合并，直接就是目标路径。
+    // classifyHref('/abs/x.md') 把这类 href 分类成 'relative'，会真的喂进这个函数
+    // （见下面「链接拦截」一节，不是只在这里测个纸面上的角落）。
+    ['docs/README.md', '/img/a.md', '/img/a.md', ''],
+    ['/docs/README.md', '/img/a.md', '/img/a.md', ''],
+    ['file:///U/docs/README.md', '/img/a.md', 'file:///img/a.md', ''],
   ])('%s + %s → %s %s', (base, href, path, hash) => {
     expect(resolveRelative(base, href)).toEqual({ path, hash })
   })
@@ -264,11 +270,39 @@ describe('相对跳转失败的错误态（设计文档 §8）', () => {
     expect(kernel.root.root.querySelector('.readit-error-detail')?.textContent).toContain('onNavigate')
   })
 
-  it('下一次成功的跳转清掉错误态', () => {
+  /**
+   * 评审 Important/M5 的回归用例。onNavigate === null 那条失败路径在更新
+   * loadedPath 之前就 return（元素没法知道该失败的「文件」该被当成加载成功
+   * 过，所以有意不改 loadedPath），这意味着失败之后按后退键会精确落在
+   * entry.path === loadedPath 的早退分支上——这正是最容易漏掉 clearError()
+   * 的那个分支，之前确实漏了：错误角标在按了后退键、回到之前显示正常的内容
+   * 之后仍然卡在屏幕上不消失。
+   */
+  it('onNavigate 为 null 失败后，后退键回到之前的内容会清掉错误角标', () => {
     const kernel = makeKernel({ onNavigate: null })
     click(kernel, 'rel')
-    const kernel2 = makeKernel()
-    click(kernel2, 'rel')
-    expect(kernel2.root.root.querySelector('.readit-error')?.hasAttribute('hidden')).toBe(true)
+    expect(kernel.root.root.querySelector('.readit-error')?.hasAttribute('hidden')).toBe(false)
+    expect(key(kernel, { key: 'ArrowLeft', altKey: true }).defaultPrevented).toBe(true)
+    expect(kernel.root.root.querySelector('.readit-error')?.hasAttribute('hidden')).toBe(true)
+  })
+
+  /**
+   * 原版这条测的是另一个全新 kernel2 的错误面板——那本来就是隐藏的，跟
+   * kernel 上真的发生过的失败/成功毫无关系，是一条空断言（评审 M6）。改成在
+   * 同一个 kernel 上先失败、再对一个不同的路径成功导航，检查错误面板真的
+   * 从「显示」变回「隐藏」。
+   */
+  it('下一次成功的跳转清掉错误态', () => {
+    const onNavigate = vi.fn((path: string) => {
+      if (path === 'docs/other.md') throw new Error('boom')
+    })
+    const kernel = makeKernel({ onNavigate })
+    click(kernel, 'rel')
+    expect(kernel.root.root.querySelector('.readit-error')?.hasAttribute('hidden')).toBe(false)
+
+    kernel.setValue('# other\n\n[up](../up.md)\n')
+    click(kernel, 'up')
+    expect(onNavigate).toHaveBeenLastCalledWith('up.md')
+    expect(kernel.root.root.querySelector('.readit-error')?.hasAttribute('hidden')).toBe(true)
   })
 })
