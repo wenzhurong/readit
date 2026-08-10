@@ -47,6 +47,10 @@ describe('npm pack 出的 tarball 能装进一个隔离宿主并跑起来（决�
     expect(out.cjsHtml).toBe(out.esmHtml)
     expect(out.scanned).toEqual({ needsMath: false, needsMermaid: false, needsHighlight: false, languages: [] })
     expect(out.stylesBytes).toBeGreaterThan(0)
+    // §0.2：'readit/editor' 这里只验证「宿主能把这条路径解析到一个文件」（run.mjs 的
+    // subpaths 探针是 import.meta.resolve，故意不执行）。dist/editor.js 此刻是个空壳
+    // （@readit/editor 的 createEditor() 要到 Task 13 才有），所以这条断言证明不了
+    // '导出的东西真的可用'，只证明得了 exports 映射没错。Task 17 之后要重跑本文件。
     expect(out.subpaths).toEqual([
       { subpath: 'readit/element', resolved: true },
       { subpath: 'readit/editor', resolved: true },

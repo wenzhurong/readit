@@ -42,6 +42,13 @@ describe('@arethetypeswrong', () => {
     // 它们没有 require 条件，这是有意的：把 element/editor 也双发一份，等于让宿主
     // 白白多下一整份浏览器代码。所以这一跑用 esm-only profile，并把「哪些入口是双模的」
     // 这件事写成两次调用，而不是一次调用加一条 ignore-rules。
+    //
+    // §0.2：'./editor' 此刻是空壳——@readit/editor/src/index.ts 只有类型再导出，
+    // createEditor() 要到 Task 13 才落地，dist/editor.js 没有任何运行时绑定。
+    // 这条断言此刻是「假绿」：它只验证 exports 映射与类型味道自洽，验证不了
+    // '@readit/editor' 有没有实际内容。Task 17 交付 createEditor() 之后必须重跑
+    // 这条门（连同 publint 与 tarball-host 门）——那时它才第一次在真实意义上
+    // 覆盖 './editor'。
     const { status, output } = attw([
       inject('readitTarball'),
       '--profile', 'esm-only',
