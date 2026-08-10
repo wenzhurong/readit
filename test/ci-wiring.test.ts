@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 /**
@@ -71,10 +71,21 @@ describe('typecheck actually covers the whole repo', () => {
     expect(tsconfig.include).toContain('tools/**/*.ts')
   })
 
+  // 名单从磁盘读，不手写。手写的那份在计划二加进三个工作区包时会静默继续通过 ——
+  // 三个新包一个都不检查，而测试名还写着 "everywhere"。
+  const packageTsconfigs = readdirSync(new URL('../packages', import.meta.url), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `packages/${entry.name}/tsconfig.json`)
+    .sort()
+
+  it('sees every workspace under packages/', () => {
+    expect(packageTsconfigs.length).toBeGreaterThanOrEqual(5)
+  })
+
   it.each(['strict', 'noUncheckedIndexedAccess', 'verbatimModuleSyntax'])(
-    'enables %s everywhere, root and both packages alike',
+    'enables %s everywhere, root and every package alike',
     (flag) => {
-      for (const path of ['tsconfig.json', 'packages/core/tsconfig.json', 'packages/math/tsconfig.json']) {
+      for (const path of ['tsconfig.json', ...packageTsconfigs]) {
         const cfg = JSON.parse(read(path)) as { compilerOptions: Record<string, unknown> }
         expect(cfg.compilerOptions[flag], `${path} · ${flag}`).toBe(true)
       }
