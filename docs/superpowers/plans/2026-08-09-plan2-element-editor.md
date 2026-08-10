@@ -240,9 +240,14 @@ Task 10 的类型注解漏了 `needsMermaid`，补上。
 - Create: `/Users/mac08/Desktop/robot/readit/packages/element/vitest.config.ts`
 - Create: `/Users/mac08/Desktop/robot/readit/packages/element/src/types.ts`
 - Create: `/Users/mac08/Desktop/robot/readit/packages/element/src/index.ts`
-- Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/package.json`
-- Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/tsconfig.json`
-- Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/vitest.config.ts`
+> ⚠️ **§0 A1：这三个文件由 Task 1 建，本任务一律 Modify，且按字符串定位不用行号。**
+> Task 1 已写全 `shiki@4.4.2` / `@wooorm/starry-night@3.10.0` / `hast-util-to-html@9.0.5`
+> 与 `refresh:shiki-golden` script，tsconfig 的 `include` 已与 `packages/core/tsconfig.json`
+> 逐字同构。**不要重建，会覆盖掉更全的版本。**
+
+- Modify: `/Users/mac08/Desktop/robot/readit/packages/highlight/package.json`（按需追加，Task 1 已写全依赖）
+- Modify: `/Users/mac08/Desktop/robot/readit/packages/highlight/tsconfig.json`（Task 1 已写对，通常无需改）
+- Modify: `/Users/mac08/Desktop/robot/readit/packages/highlight/vitest.config.ts`（Task 1 已设 `environment: 'node'`，§0 A2 要求保持）
 - Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/src/index.ts`
 - Create: `/Users/mac08/Desktop/robot/readit/packages/editor/package.json`
 - Create: `/Users/mac08/Desktop/robot/readit/packages/editor/tsconfig.json`
@@ -752,6 +757,8 @@ export default defineConfig({
     // 本包的浏览器行为归 Playwright（P5：browser/**/*.spec.ts）。留在 vitest 里的
     // 是能用桩在 Node 里判定的部分，所以 environment 是 node，不是 jsdom ——
     // 装一个半吊子 DOM 只会让「这条测试到底证明了什么」变模糊。
+    // ⚠️ §0 A2：element 与 editor 一律 happy-dom@20.11.2，不是 node。
+    // Task 1 已写对（commit 57d8993）；此处草稿文本过时，勿照抄。
     environment: 'node',
     setupFiles: ['../../test/setup/no-network.ts'],
     chaiConfig: {
@@ -936,6 +943,8 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],
+    // ⚠️ §0 A2：element 与 editor 一律 happy-dom@20.11.2，不是 node。
+    // Task 1 已写对（commit 57d8993）；此处草稿文本过时，勿照抄。
     environment: 'node',
     setupFiles: ['../../test/setup/no-network.ts'],
     chaiConfig: {
@@ -1583,11 +1592,16 @@ export default defineConfig({
 })
 ```
 
-装依赖（`--save-exact`：本仓库全部依赖钉死版本，不用 caret；happy-dom 用 `@latest` 是为了不把一个没核实过的版本号写死进计划，`--save-exact` 会把解析到的确切版本写回 package.json）：
+> ⚠️ **§0 A1 + A3 已让这一步成为空操作。** Task 1 已经把 `happy-dom` 钉在 **20.11.2**
+> 写进 `packages/element/package.json` 的 devDependencies（A1：Task 1 一次建齐全部 manifest）。
+> 下面这条命令**不要执行**——`@latest` 违反 A3（全部依赖钉死版本，不许 `@latest`）。
+> 保留原文只为说明当初的推理；实际依赖状态以已提交的 package.json 为准。
+
+~~装依赖：~~
 
 ```bash
 cd /Users/mac08/Desktop/robot/readit
-npm i -w @readit/element -D --save-exact happy-dom@latest
+# 不要执行：Task 1 已装 happy-dom@20.11.2（§0 A1/A3）
 npm i
 ```
 
@@ -4403,7 +4417,8 @@ EOF
 - Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/test/fixtures/shiki/{js,ts,python,rust,diff}.html`（Step 4 由脚本生成后提交）
 - Modify: `/Users/mac08/Desktop/robot/readit/packages/core/src/rules/codeblock.ts:53`
 - Modify: `/Users/mac08/Desktop/robot/readit/packages/core/test/rules/codeblock.test.ts:87-97`
-- Modify: `/Users/mac08/Desktop/robot/readit/test/ci-wiring.test.ts:77`
+> ⚠️ **§0 A5：`test/ci-wiring.test.ts` 归 Task 1，本任务删掉这条 Modify。**
+> Task 1 已整块改过 `:74-82` 并新增「覆盖 packages/ 下每个工作区」的断言，行号已漂移。
 - Test: `/Users/mac08/Desktop/robot/readit/packages/highlight/test/shiki.test.ts`
 
 **Interfaces:**
@@ -5599,7 +5614,8 @@ EOF
 - Create: `/Users/mac08/Desktop/robot/readit/packages/readit/src/plugins/highlight.ts`
 - Create: `/Users/mac08/Desktop/robot/readit/packages/readit/test/global-setup.ts`
 - Modify: `/Users/mac08/Desktop/robot/readit/package.json:7-20`（加 `build` 脚本）
-- Modify: `/Users/mac08/Desktop/robot/readit/packages/math/package.json:17-26`（D2-9：`@readit/core` 从 `dependencies` 移进 `devDependencies`）
+> ⚠️ **§0 A4：D2-9 归 Task 1，已于 commit `57d8993` 落地，本任务删掉这条 Modify。**
+> **保留** `test/build-output.test.ts` 里那条 D2-9 断言——那是有价值的第二道锁。
 - Test: `/Users/mac08/Desktop/robot/readit/packages/readit/test/build-output.test.ts`
 
 **Interfaces:**
