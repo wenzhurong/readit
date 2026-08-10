@@ -59,6 +59,45 @@ test('setTheme 换的是自己的调色板，不是文档的', async ({ page }) 
   expect(dark.doc).toBeNull()
 })
 
+/**
+ * Task 18（批次 5 返工，见 batch-5-report.md）端到端验证：SPEC §9.2 说对外
+ * 只开两个覆写通道之一是 `--readit-*`。这条不是 css-bridge.test.ts 那种字符串层
+ * 断言（"桥接代码里出现了 var(--readit-x, ...)"）——它要的是「宿主在 :host 之外
+ * 设一个 `--readit-*` 变量，真的会改变真实浏览器里渲染出来的颜色」这条完整链路：
+ * :host([data-theme=...]) 声明 → 继承进 shadow 树 → RULES 用 var(--fgColor-default)
+ * 消费 → 最终 computed style。任何一环接错都会让这条测试红，而不会让
+ * css-bridge.test.ts 的字符串断言有反应。
+ */
+test('宿主用 --readit-* 变量能覆写颜色，不设时保持上游默认值', async ({ page }) => {
+  await page.goto('/host.html')
+  await page.evaluate(() => {
+    const host = document.getElementById('a')
+    if (host === null) throw new Error('no #a')
+    // 覆写点在宿主元素自己身上，跟 :host([data-theme="light"]) 同一层——
+    // 不是往 document.documentElement 或某个全局 :root 上写。
+    host.style.setProperty('--readit-fg-color-default', 'rgb(255, 0, 0)')
+  })
+  await mountDoc(page, 'a', { value: DOC, mode: 'read', theme: 'light' })
+  const overridden = await page.evaluate(() => {
+    const h1 = document.getElementById('a')?.shadowRoot?.querySelector('h1')
+    if (h1 === null || h1 === undefined) throw new Error('no rendered heading')
+    return getComputedStyle(h1).color
+  })
+  expect(overridden).toBe('rgb(255, 0, 0)')
+
+  // 反空对照：另一个没有设置 --readit-fg-color-default 的实例必须落回上游默认值
+  // （github-markdown-css 5.9.0 浅色主题的 --fgColor-default: #1f2328 = rgb(31, 35, 40)），
+  // 不是碰巧也变红——否则上面那条断言可能只是「颜色反正总会变」的假阳性。
+  await mountDoc(page, 'b', { value: DOC, mode: 'read', theme: 'light' })
+  const notOverridden = await page.evaluate(() => {
+    const h1 = document.getElementById('b')?.shadowRoot?.querySelector('h1')
+    if (h1 === null || h1 === undefined) throw new Error('no rendered heading')
+    return getComputedStyle(h1).color
+  })
+  expect(notOverridden).toBe('rgb(31, 35, 40)')
+  expect(notOverridden).not.toBe(overridden)
+})
+
 test('同页两个实例互不干扰（同源样式表隔离的行为断言，不是像素）', async ({ page }) => {
   await page.goto('/host.html')
   const a = await mountDoc(page, 'a', { value: '# A\n\nalpha text\n', mode: 'read', theme: 'light' })
