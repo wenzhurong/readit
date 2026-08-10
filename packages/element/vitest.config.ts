@@ -12,5 +12,18 @@ export default defineConfig({
     chaiConfig: {
       truncateThreshold: 0,
     },
+    // Task 5（navigate.ts）故意不对外链/mailto 调 preventDefault()——那是设计要求
+    // （交给系统浏览器处理）。happy-dom 对未阻止的 <a> 点击会忠实地尝试一次真实
+    // 「导航」（fetch/socket connect），被离线门拦下但会在 stderr 刷一堆吓人的
+    // 堆栈（对 mailto: 这种非 http(s) scheme 它自己内部还会再抛一次 Invalid URL）。
+    // 这不是测试断言关心的行为——没有一条测试依赖「真的导航发生了」，只关心
+    // defaultPrevented——关掉主 frame 导航即可让噪音消失，不改变任何断言结果。
+    environmentOptions: {
+      happyDOM: {
+        settings: {
+          navigation: { disableMainFrameNavigation: true },
+        },
+      },
+    },
   },
 })

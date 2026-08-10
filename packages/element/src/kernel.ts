@@ -1,6 +1,7 @@
 import { GITHUB_EMOJI_BASE, render } from '@readit/core'
 import { createDisposers, type Disposers } from './disposers.js'
 import { createRoot, ownerView, type RootContext } from './shadow.js'
+import { createNavigation, type NavigationController } from './navigate.js'
 import { setHtml } from './set-html.js'
 import { BASE_CSS } from './styles/base-css.js'
 import { DARK_CSS, LIGHT_CSS } from './styles/theme-css.js'
@@ -63,6 +64,10 @@ export interface Kernel {
   readonly content: HTMLDivElement
   /** 源码窗格。Task 13–17 把 createEditor() 接进这里。 */
   readonly sourcePane: HTMLDivElement
+  readonly navigation: NavigationController
+  /** 窗口内错误态。path 显示的是解析后的完整路径（设计文档 §8）。 */
+  showError(title: string, path: string, detail: string): void
+  clearError(): void
   readonly destroyed: boolean
   /** 注册一个「每次预览重渲之后」的回调，按注册顺序跑。 */
   onAfterRender(fn: () => void): void
@@ -89,7 +94,32 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
   content.className = 'readit-pane readit-pane-content markdown-body'
   content.setAttribute('part', 'content')
 
-  root.root.append(sourcePane, content)
+  const errorPane = doc.createElement('div')
+  errorPane.className = 'readit-error'
+  errorPane.setAttribute('role', 'alert')
+  errorPane.hidden = true
+  const errorTitle = doc.createElement('p')
+  errorTitle.className = 'readit-error-title'
+  const errorPath = doc.createElement('p')
+  errorPath.className = 'readit-error-path'
+  const errorDetail = doc.createElement('p')
+  errorDetail.className = 'readit-error-detail'
+  errorPane.append(errorTitle, errorPath, errorDetail)
+
+  root.root.append(errorPane, sourcePane, content)
+
+  const showError = (title: string, path: string, detail: string): void => {
+    errorTitle.textContent = title
+    errorPath.textContent = path
+    errorDetail.textContent = detail
+    errorPane.hidden = false
+  }
+  const clearError = (): void => {
+    errorPane.hidden = true
+    errorTitle.textContent = ''
+    errorPath.textContent = ''
+    errorDetail.textContent = ''
+  }
 
   let value = opts.value
   let mode: Mode = opts.mode
@@ -164,6 +194,23 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
     else content.textContent = ''
   }
 
+  const navigation = createNavigation(
+    {
+      view,
+      host,
+      content,
+      baseUrl: opts.baseUrl,
+      onNavigate: opts.onNavigate,
+      showError,
+      clearError,
+    },
+    disposers,
+  )
+  // 装饰外链与应用挂起的 #hash 都要等 HTML 进了 DOM 才有意义。
+  afterRender.push(() => {
+    navigation.afterRender()
+  })
+
   rerender()
 
   const kernel: Kernel = {
@@ -173,6 +220,9 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
     disposers,
     content,
     sourcePane,
+    navigation,
+    showError,
+    clearError,
     get destroyed(): boolean {
       return destroyed
     },
