@@ -12,7 +12,8 @@
   },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gen:theme-css": "vite-node scripts/gen-theme-css.ts"
   },
   "dependencies": {
     "@readit/core": "0.0.0",
