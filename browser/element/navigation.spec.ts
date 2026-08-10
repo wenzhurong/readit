@@ -21,19 +21,17 @@ test('相对 .md 链接被拦下并通过 onNavigate 上报', async ({ page }) =
   expect(page.url()).toBe(before)
 })
 
-test('#slug 由元素自己搭桥，不动 document 的 fragment', async ({ page, browserName }) => {
-  // 已知缺陷（L3b-element 发现，非本任务范围，见 batch-5-report.md「Trusted Types /
-  // Sanitizer 发现」一节）：packages/element/src/set-html.ts 的第 1 级把 HTML 交给
-  // 浏览器原生 Element.setHTML()，但没有传 sanitizer 配置——浏览器落到自己的默认
-  // Sanitizer 允许名单，那份名单**不认识 `id` 属性**（也不认识 `class`/`data-*`/
-  // `<img>`/`<input>` 等 Phase A 的 hast-util-sanitize 明确放行的东西）。于是标题旁
-  // GitHub 形状的 `id="user-content-…"` 铆点在写入真实 DOM 的这一步被剥掉，#slug 桥接
-  // 拿不到目标元素。实测（本文件撰写时）Chromium 151 与 Firefox 153 都已实现原生
-  // setHTML()，只有 WebKit 还没有——WebKit 落到第 2 级 Trusted Types/DOMPurify，
-  // 默认允许名单宽松得多，不受影响。这也是为什么 packages/element/test/navigate.test.ts
-  // （happy-dom，三个引擎都没有 setHTML）测不出来：happy-dom 走的是第 3 级 innerHTML。
-  test.fail(browserName !== 'webkit', '已知缺陷：Chromium/Firefox 的 Element.setHTML() 默认 Sanitizer 剥掉了 id 属性，需要 element 一侧显式传 sanitizer 配置修复，不在本批范围内')
-
+test('#slug 由元素自己搭桥，不动 document 的 fragment', async ({ page }) => {
+  // 曾经的已知缺陷，已在本批修复：packages/element/src/set-html.ts 第 1 级原来
+  // 把 HTML 交给浏览器原生 Element.setHTML() 却不传 sanitizer 配置，落到浏览器
+  // 自己的默认允许名单——那份名单不认识 id 属性，标题旁 GitHub 形状的
+  // `id="user-content-…"` 铆点会在写入真实 DOM 这一步被剥掉，Chromium/Firefox 上
+  // #slug 桥接直接失效（WebKit 走第 2 级 Trusted Types/DOMPurify，默认名单宽松
+  // 得多，从未受影响）。set-html.ts 现在给第 1 级配了一份「浏览器默认 + Phase A
+  // 实测需要的补丁」的 Sanitizer（buildTier1Sanitizer()）。「修复前会红」不是
+  // 推测：批次 5 报告记录了两次真实运行——固定这份测试代码不变，只把
+  // set-html.ts 换成修复前的版本重跑，Chromium/Firefox 上真的红（缺 #user-content-
+  // hello-world 这个锚点）；换回修复后的版本，同一份测试代码三个引擎都真的绿。
   await page.goto('/host.html')
   await mountDoc(page, 'a', { value: DOC, mode: 'read' })
 
@@ -62,15 +60,13 @@ test('#slug 由元素自己搭桥，不动 document 的 fragment', async ({ page
   expect(await page.evaluate(() => window.readitFixture.navigations)).toEqual([])
 })
 
-test('外部 http(s) 链接不被拦截，且带 GitHub 形状的 rel 与 target=_blank', async ({ page, browserName }) => {
-  // 同上一条测试的已知缺陷：core 的 rawshape.ts 在 sanitize 之后把 rel="nofollow" 重新
-  // 写回了 HTML 字符串，但原生 setHTML() 的默认 Sanitizer 不认识 <a> 的 rel 属性
-  // （只放行 href/hreflang/type），把它连同 id 一起剥掉。navigate.ts 的 decorateLinks()
-  // 是在 DOM 节点上事后 setAttribute('rel', …)，只能在「剥剩的」rel 基础上追加
-  // noopener/noreferrer，补不回已经丢失的 nofollow。target=_blank 同样是 decorateLinks()
-  // 事后写的，不受影响，所以只有 rel 这一条会红。WebKit 没有原生 setHTML()，不受影响。
-  test.fail(browserName !== 'webkit', '已知缺陷：Chromium/Firefox 的 Element.setHTML() 默认 Sanitizer 剥掉了 <a> 的 rel 属性，需要 element 一侧显式传 sanitizer 配置修复，不在本批范围内')
-
+test('外部 http(s) 链接不被拦截，且带 GitHub 形状的 rel 与 target=_blank', async ({ page }) => {
+  // 同上一条测试，曾经的已知缺陷、已在本批修复：core 的 rawshape.ts 在 sanitize
+  // 之后把 rel="nofollow" 重新写回了 HTML 字符串，但原来第 1 级的默认 Sanitizer
+  // 不认识 <a> 的 rel 属性（只放行 href/hreflang/type），把它连同 id 一起剥掉。
+  // navigate.ts 的 decorateLinks() 是在 DOM 节点上事后 setAttribute('rel', …)，
+  // 曾经只能在「剥剩的」rel 基础上追加 noopener/noreferrer，补不回已经丢失的
+  // nofollow。set-html.ts 的 EXTRA_ATTRIBUTES 现在显式放行了 rel，三个引擎都验证过。
   await page.goto('/host.html')
   await mountDoc(page, 'a', { value: '[ext](https://example.com/)\n', mode: 'read' })
 
