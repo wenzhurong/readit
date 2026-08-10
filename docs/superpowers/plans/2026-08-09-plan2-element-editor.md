@@ -3582,150 +3582,6 @@ Test Files  1 failed (1)
 `packages/element/src/navigate.ts`：
 
 ```ts
-import { addListener, type Disposers } from './disposers.js'
-
-export type LinkKind = 'hash' | 'relative' | 'external' | 'ignore'
-
-/**
- * 至少两个字符的 scheme。写成 `+` 而不是 `*` 是为了 Windows 盘符：
- * `C:\docs\a.md` 会被 `^[a-z][a-z0-9+.-]*:` 判成外链，然后 new URL() 抛异常。
- * 单字母 scheme 实际上不存在，所以这一刀不误伤。
- */
-const SCHEME = /^[a-z][a-z0-9+.-]+:/i
-
-/** 相对路径解析用的哨兵源，只为借 URL 的路径归一化，不出现在任何输出里。 */
-const SENTINEL_ORIGIN = 'readit-relative:///'
-
-/** GitHub 的防冲突前缀，与 @readit/core 的 CLOBBER_PREFIX 同一个值。 */
-const CLOBBER_PREFIX = 'user-content-'
-
-export function classifyHref(href: string): LinkKind {
-  if (href === '') return 'ignore'
-  if (href.startsWith('#')) return 'hash'
-  if (href.startsWith('//')) return 'external'
-  if (SCHEME.test(href)) return 'external'
-  return 'relative'
-}
-
-function isAbsoluteUrl(value: string): boolean {
-  return SCHEME.test(value)
-}
-
-export interface ResolvedTarget {
-  readonly path: string
-  readonly hash: string
-}
-
-export function resolveRelative(baseUrl: string, href: string): ResolvedTarget {
-  if (isAbsoluteUrl(baseUrl)) {
-    const url = new URL(href, baseUrl)
-    const hash = url.hash
-    return { path: hash === '' ? url.href : url.href.slice(0, url.href.length - hash.length), hash }
-  }
-  // 宿主给的是路径而不是 URL。挂到哨兵源下借 URL 的 ../ 归一化，再把加上去的
-  // 前导斜杠还原成宿主原来的形状——它可能拿这个字符串直接去读盘。
-  const rooted = baseUrl.startsWith('/')
-  const base = new URL(rooted || baseUrl === '' ? (baseUrl === '' ? '/' : baseUrl) : `/${baseUrl}`, SENTINEL_ORIGIN)
-  const url = new URL(href, base)
-  const path = decodeURIComponent(url.pathname) + url.search
-  return { path: rooted ? path : path.replace(/^\//, ''), hash: url.hash }
-}
-
-/**
- * GitHub 把 id 放在兄弟 <a id="user-content-<slug>"> 上、href 却是不带前缀的
- * #<slug>（SPEC §11.2）。照抄它的 DOM 保①档，桥接自己写保可用。
- *
- * 用遍历比较而不是 querySelector('#' + slug)：slug 里可以有点号、冒号、emoji，
- * 而 CSS.escape 在 WebKit 上不是处处都有，转义规则也不等于 id 的合法字符集。
- */
-export function findAnchorTarget(scope: ParentNode, slug: string): Element | null {
-  const prefixed = CLOBBER_PREFIX + slug
-  const withId = scope.querySelectorAll('[id]')
-  for (const el of withId) if (el.id === prefixed) return el
-  for (const el of withId) if (el.id === slug) return el
-  for (const el of scope.querySelectorAll('a[name]')) {
-    if (el.getAttribute('name') === slug) return el
-  }
-  return null
-}
-
-export interface HistoryEntry {
-  readonly path: string
-  readonly hash: string
-}
-
-export interface NavigationHooks {
-  readonly view: Window
-  readonly host: HTMLElement
-  readonly content: HTMLElement
-  readonly baseUrl: string
-  readonly onNavigate: ((path: string) => void) | null
-  showError(title: string, path: string, detail: string): void
-  clearError(): void
-}
-
-export interface NavigationController {
-  entries(): readonly HistoryEntry[]
-  index(): number
-  canBack(): boolean
-  canForward(): boolean
-  back(): boolean
-  forward(): boolean
-  /** 内核每次重渲预览之后调用：装饰外链、应用挂起的 #hash。 */
-  afterRender(): void
-}
-
-function isAnchor(node: unknown): node is HTMLAnchorElement {
-  return typeof node === 'object' && node !== null && (node as Node).nodeName === 'A'
-}
-
-/** composedPath 才能穿过 shadow 边界拿到真正被点的 <a>；event.target 会被重定向到宿主。 */
-function closestAnchor(event: Event): HTMLAnchorElement | null {
-  if (typeof event.composedPath === 'function') {
-    for (const node of event.composedPath()) if (isAnchor(node)) return node
-  }
-  return isAnchor(event.target) ? event.target : null
-}
-
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return typeof value === 'object' && value !== null && typeof (value as PromiseLike<unknown>).then === 'function'
-}
-
-function describeError(error: unknown): string {
-  if (error instanceof Error) return error.message
-  return String(error)
-}
-
-export function createNavigation(hooks: NavigationHooks, disposers: Disposers): NavigationController {
-  const stack: HistoryEntry[] = [{ path: hooks.baseUrl, hash: '' }]
-  let cursor = 0
-  /** 当前显示的是哪个路径的内容。跳转失败时它已经改了，所以后退会重新请求。 */
-  let loadedPath = hooks.baseUrl
-  let pendingHash = ''
-
-  const applyHash = (hash: string): void => {
-    const slug = decodeURIComponent(hash.replace(/^#/, ''))
-    if (slug === '') return
-    const target = findAnchorTarget(hooks.content, slug)
-    if (target === null) return
-    const scrollTarget = target.closest('.markdown-heading') ?? target
-    if (typeof scrollTarget.scrollIntoView === 'function') scrollTarget.scrollIntoView({ block: 'start' })
-    // 键盘用户跳过去之后焦点得跟着走，否则下一个 Tab 从文档开头重来。
-    target.setAttribute('tabindex', '-1')
-    const focusable = target as Element & { focus?: (options?: FocusOptions) => void }
-    if (typeof focusable.focus === 'function') focusable.focus({ preventScroll: true })
-  }
-
-  const fail = (path: string, detail: string): void => {
-    hooks.showError('打不开这个文件', path, detail)
-  }
-
-  const go = (entry: HistoryEntry, push: boolean): void => {
-    if (push) {
-      stack.length = cursor + 1
-      stack.push(entry)
-      cursor = st
-```ts
   const go = (entry: HistoryEntry, push: boolean): void => {
     if (push) {
       stack.length = cursor + 1
@@ -8000,8 +7856,6 @@ npx playwright test browser/visual --project=chromium
 装依赖并改根 `package.json`（`Modify: package.json:7-25`，`scripts` 尾部加两行、`devDependencies` 加四行）：
 
 ```bash
-npm i -D @fontsource/inter@5.3.0 @fontsource/jetbrains-mono@5.3.0 bootst
-```bash
 npm i -D @fontsource/inter@5.3.0 @fontsource/jetbrains-mono@5.3.0 bootstrap@5.3.8 tailwindcss@4.3.3
 ```
 
@@ -10930,40 +10784,6 @@ test.describe('L3b-editor：两个实现在同一个 shadow root 里跑同一张
 
 `browser/editor/scroll-sync.spec.ts`：
 
-```ts
-import { expect, test } from '@playwright/test'
-
-/**
- * 在真排版下重跑滚动同步。离线那层（packages/element/test/scroll-sync.test.ts）
- * 注入了假的 measure；只有这里的 offsetTop 是真的。
- */
-test.describe('L3b-editor：滚动同步', () => {
-  test('把编辑器滚到 mermaid README 的中段，预览跟到同一个块', async ({ page }) => {
-    await page.goto('/index.html?mode=split&doc=mermaid')
-    await page.waitForSelector('readit-view >>> .cm-content')
-
-    const targetLine = 200
-    await page.evaluate((line) => window.readitFixture.scrollEditorToLine(line), targetLine)
-    await page.waitForTimeout(120)
-
-    const reported = await page.evaluate(() => window.readitFixture.previewTopLine())
-    // 块级粒度：允许落在目标块内，不允许落到别的块去。
-    expect(Math.abs(reported - targetLine)).toBeLessThanOrEqual(12)
-  })
-
-  test('原生 HTML 区段也跟得动——那正是 Phase A 没有锚点的地方', async ({ page }) => {
-    await page.goto('/index.html?mode=split&doc=mermaid')
-    await page.waitForSelector('readit-view >>> .cm-content')
-    await page.evaluate(() => window.readitFixture.scrollEditorToLine(13))
-    await page.waitForTimeout(120)
-    const top = await page.evaluate(() => window.readitFixture.previewScrollTop())
-    expect(top).toBeGreaterThan(0)
-  })
-
-  test('滚预览会回推编辑器，且不自激', async ({ page }) => {
-    await page.goto('/index.html?mode=split&doc=mermaid')
-    await page.waitForSelector('readit-view >>> .cm-content')
-    await page.evalu
 ```ts
     await page.evaluate(() => window.readitFixture.scrollPreviewTo(1200))
     await page.waitForTimeout(120)
