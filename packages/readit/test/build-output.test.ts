@@ -79,9 +79,16 @@ describe('exports 映射就是 SPEC §9.3 的那张表', () => {
     // 把 "types" 分别嵌进 import/require 各自分支（各自查自己的），这条歧义连产生的
     // 机会都没有——这是官方文档里「同一个包要给 import 和 require 各自不同类型声明」
     // 场景的标准写法，不是我们发明的新形状。
+    //
+    // "module-sync" 同样嵌了一份 types（即便当前 typescript@5.9.3 与 attw 的内置
+    // typescript@5.6.1-rc 都还不认识这个条件键——两处都 grep 过，零命中）：这正是刚修掉
+    // 那个 bug 的同构形状，"module-sync" 与 "import"/"require" 同级、且值若是裸字符串
+    // 而非嵌套对象，一旦某个未来的 TypeScript/attw 版本开始识别 "module-sync" 并把它纳入
+    // CJS 侧的活跃条件集合，裸字符串会重新变成没有 types 的黑洞。嵌套一份类型是免疫，不是
+    // 当前必需——留着这条注释是因为"不需要"和"以后也不需要"是两件事。
     expect(manifest.exports).toEqual({
       '.': {
-        'module-sync': './dist/core.js',
+        'module-sync': { types: './dist/core.d.ts', default: './dist/core.js' },
         import: { types: './dist/core.d.ts', default: './dist/core.js' },
         require: { types: './dist/cjs/core.d.ts', default: './dist/core.cjs' },
       },

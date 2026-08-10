@@ -16,7 +16,10 @@
   ],
   "exports": {
     ".": {
-      "module-sync": "./dist/core.js",
+      "module-sync": {
+        "types": "./dist/core.d.ts",
+        "default": "./dist/core.js"
+      },
       "import": {
         "types": "./dist/core.d.ts",
         "default": "./dist/core.js"

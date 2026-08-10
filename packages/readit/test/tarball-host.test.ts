@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { cpSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, inject, it } from 'vitest'
 
@@ -32,16 +32,31 @@ describe('npm pack 出的 tarball 能装进一个隔离宿主并跑起来（决�
     )
     expect(install.status, `${install.stdout ?? ''}\n${install.stderr ?? ''}`).toBe(0)
 
-    const run = spawnSync(process.execPath, ['run.mjs'], { cwd: host, encoding: 'utf8' })
+    // --no-experimental-require-module 逼 require('readit') 走真正的 'require' 条件
+    // （命中 dist/core.cjs），而不是 Node 22.12+ 默认打开的 require(esm) 同步加载路径——
+    // 那条路径会命中 exports['.']的 "module-sync" 条件，加载的其实是 dist/core.js（ESM
+    // 那份，与上面 esmHtml 拿到的是同一个模块实例），esmHtml/cjsHtml 的比对会变成
+    // 自我比较，永远不可能红，也就测不出 exports.require 那个分支——Task 9 那次真实的
+    // "Masquerading as ESM" bug 正好就藏在那个分支里。
+    const run = spawnSync(process.execPath, ['--no-experimental-require-module', 'run.mjs'], {
+      cwd: host,
+      encoding: 'utf8',
+    })
     expect(run.status, `${run.stdout ?? ''}\n${run.stderr ?? ''}`).toBe(0)
 
     const out = JSON.parse(run.stdout) as {
       esmHtml: string
       cjsHtml: string
+      resolvedTo: string
       scanned: { needsMath: boolean; needsMermaid: boolean; needsHighlight: boolean; languages: string[] }
       stylesBytes: number
       subpaths: { subpath: string; resolved: boolean }[]
     }
+
+    // 结构面的证据：require('readit') 真的解析到了 dist/core.cjs，不是靠 --no-experimental-
+    // require-module 生效与否去赌。这条断言本身就能在这个 flag 失效时（比如未来 Node 版本
+    // 移除它）第一时间说清楚"没测到该测的东西"，而不是安静地退化回自我比较。
+    expect(out.resolvedTo.split(sep).slice(-3).join('/')).toBe('readit/dist/core.cjs')
 
     expect(out.esmHtml).toBe('<p dir="auto" data-line="0">hello <strong>world</strong></p>\n')
     expect(out.cjsHtml).toBe(out.esmHtml)

@@ -75,6 +75,40 @@ function rewriteWorkspaceSpecifiers(typesRoot: string): void {
 }
 
 /**
+ * 从可达的 .d.ts 里删掉「纯副作用、非相对路径」的 import 语句——`import '@pkg/x';`
+ * 这种没有绑定名字的形态。tsc 对副作用 import 一律原样保留在声明输出里（它没法判断
+ * 这类语句"没用"，因为它的意义就是副作用本身），但一条**类型声明文件**里的副作用
+ * import 不携带任何类型信息：删掉它不改变任何消费方看到的类型，唯一的效果是去掉一个
+ * 装包方原本不需要也解析不了的说明符。
+ *
+ * 典型来源：packages/math/src/index.ts 顶部 5 条 `import '@mathjax/src/js/input/tex/
+ * .../XxxConfiguration.js'`，纯粹为了触发 MathJax 的 TeX 子系统注册（真实运行时行为，
+ * esbuild 打包时已经内联进 dist/plugins/math.js，那条路径没有问题）；问题只在 tsc 的
+ * 声明发射把这 5 行原样誊进了 dist/types/packages/math/src/index.d.ts，而这份 .d.ts
+ * 确实在五个发布入口的可达闭包里（`plugins/math.d.ts` → `.../plugins/math.d.ts` →
+ * `.../math/src/index.d.ts`）——不是孤儿文件，是宿主 `import 'readit/plugins/math'`
+ * 时类型检查器真的会加载到的文件。@mathjax/src 不在发布包 dependencies 里，装包方
+ * 解析这条 import 会失败。
+ *
+ * 必须放在 `rewriteWorkspaceSpecifiers()` 之后跑：那一步先把所有 `@readit/*` 说明符
+ * （不论是不是副作用 import 形态）改写成相对路径，跑完之后**还剩下的裸说明符**
+ * 才能保证一定是第三方包，不会有把自家包的副作用 import 误删的风险。
+ *
+ * 只匹配"整行只有一个裸 import 语句、没有花括号/默认绑定/命名空间"的形态——
+ * `import type {...} from`、`import X from`、`import {...} from`、`import * as X from`
+ * 在 "import" 后面紧跟的都不是引号（分别是 "type"/标识符/"{"/"*"），regex 要求
+ * "import" 后（可选空白）直接是引号，天然不会匹配到这些携带类型信息的形态。
+ */
+function stripThirdPartySideEffectImports(typesRoot: string): void {
+  for (const file of walk(typesRoot)) {
+    if (!file.endsWith('.d.ts')) continue
+    const before = readFileSync(file, 'utf8')
+    const after = before.replace(/^[ \t]*import\s*["']([^"'.][^"']*)["'];?[ \t]*\r?\n/gm, '')
+    if (after !== before) writeFileSync(file, after, 'utf8')
+  }
+}
+
+/**
  * 从 esbuild 的 metafile 里收集它自己判定为「外部、没有内联」的说明符——这是权威来源，
  * 不是从产物文本里猜。`bundle:true` 且没有传 `external`，esbuild 在解析不了一个说明符时
  * 会直接让 build() 抛错；它能走到 metafile 里、还被标 external:true 的，只有一种情况：
@@ -91,14 +125,34 @@ function collectExternalImports(metafile: esbuild.Metafile): string[] {
   return [...out]
 }
 
-/** .d.ts 里 `from "..."` 系列引用的目标说明符，仅取相对路径那些（用于往下爬闭包）。 */
+/**
+ * .d.ts 里引用目标说明符的三种语法——`from "x"`（具名/`export *`）、裸 `import "x"`
+ * （副作用 import）、`import("x")`（内联动态类型 import）——仅取相对路径那些
+ * （用于往下爬闭包）。
+ *
+ * 早先的版本只认 `from`，理由是"跟 bundleClosure() 的静态/动态边界对齐"，但那个边界
+ * 只对 build.ts 自己产出的 JS/CJS 有意义（那边确实要把懒加载排除在急加载图外）；对
+ * .d.ts 侧的可达性判定不成立——`import 'x'`（无绑定的副作用 import）不是"懒加载"，
+ * 是 tsc 对源码里副作用 import 语句的原样保留，一旦源文件在可达闭包里，这类语句就是
+ * 真实的解析义务，砍掉这个分支会让 packages/math/src/index.ts 的 5 条
+ * `import '@mathjax/src/...'` 从检查范围里消失——它们确实在可达闭包里
+ * （评审用相同算法独立复核过），且发布包 dependencies 为空，装包方解析不了。
+ */
 function relativeSpecifiers(text: string): string[] {
-  return [...text.matchAll(/\bfrom\s+["'](\.[^"']+)["']/g)].map((m) => m[1]!)
+  return [
+    ...text.matchAll(/\bfrom\s+["'](\.[^"']+)["']/g),
+    ...text.matchAll(/\bimport\s*\(?\s*["'](\.[^"']+)["']/g),
+    ...text.matchAll(/\brequire\s*\(\s*["'](\.[^"']+)["']/g),
+  ].map((m) => m[1]!)
 }
 
-/** 同一路正则，但只要非相对（裸）说明符——那些才是「装包方解析不了」的候选。 */
+/** 同一路语法面，但只要非相对（裸）说明符——那些才是「装包方解析不了」的候选。 */
 function bareSpecifiers(text: string): string[] {
-  return [...text.matchAll(/\bfrom\s+["']([^"'.][^"']*)["']/g)].map((m) => m[1]!)
+  return [
+    ...text.matchAll(/\bfrom\s+["']([^"'.][^"']*)["']/g),
+    ...text.matchAll(/\bimport\s*\(?\s*["']([^"'.][^"']*)["']/g),
+    ...text.matchAll(/\brequire\s*\(\s*["']([^"'.][^"']*)["']/g),
+  ].map((m) => m[1]!)
 }
 
 /**
@@ -201,6 +255,7 @@ export async function buildDist(): Promise<void> {
     { stdio: 'inherit' },
   )
   rewriteWorkspaceSpecifiers(join(DIST, 'types'))
+  stripThirdPartySideEffectImports(join(DIST, 'types'))
 
   // 5. 入口 .d.ts 指向 facade 自己那份声明，而不是各包的 index——JS 入口与类型入口
   //    因此永远源自同一个文件，不可能分叉。
