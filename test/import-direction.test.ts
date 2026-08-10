@@ -69,10 +69,16 @@ const ALLOWED: Record<PackageName, Partial<Record<PackageName, readonly ImportKi
     '@readit/highlight': ['type'],
     '@readit/editor': ['type', 'dynamic'],
   },
-  // Task 9 落地时补真实的出边。此刻只占位，满足 Record<PackageName, …> 要求每个键
-  // 都有条目——一个空表示「尚未有任何允许的边」，不代表「禁止」以外的语义变化，
-  // 因为 inspect() 对未命中的 `to` 一律按「完全禁止」处理，跟其他包一致。
-  readit: {},
+  // Task 9 落地：readit 是发布外观包，src/{core,element,editor,plugins/math,
+  // plugins/highlight}.ts 各自对应一个 `export * from '@readit/…'`，是静态值导出
+  // （esbuild 在构建期整体内联，不是运行时的裸 import），所以五条边都记 'value'。
+  readit: {
+    '@readit/core': ['value'],
+    '@readit/element': ['value'],
+    '@readit/editor': ['value'],
+    '@readit/highlight': ['value'],
+    '@readit/math': ['value'],
+  },
 }
 
 interface ImportRef {

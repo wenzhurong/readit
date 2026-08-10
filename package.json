@@ -6,6 +6,7 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "test": "vitest run",
+    "build": "vite-node packages/readit/build.ts",
     "typecheck": "tsc --noEmit && npm run typecheck --workspaces --if-present",
     "corpus:diff": "tsx packages/core/scripts/corpus-diff.ts",
     "oracle:refresh": "tsx packages/core/scripts/oracle-refresh.ts",
