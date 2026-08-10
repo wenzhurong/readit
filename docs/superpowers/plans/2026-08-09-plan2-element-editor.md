@@ -240,14 +240,9 @@ Task 10 的类型注解漏了 `needsMermaid`，补上。
 - Create: `/Users/mac08/Desktop/robot/readit/packages/element/vitest.config.ts`
 - Create: `/Users/mac08/Desktop/robot/readit/packages/element/src/types.ts`
 - Create: `/Users/mac08/Desktop/robot/readit/packages/element/src/index.ts`
-> ⚠️ **§0 A1：这三个文件由 Task 1 建，本任务一律 Modify，且按字符串定位不用行号。**
-> Task 1 已写全 `shiki@4.4.2` / `@wooorm/starry-night@3.10.0` / `hast-util-to-html@9.0.5`
-> 与 `refresh:shiki-golden` script，tsconfig 的 `include` 已与 `packages/core/tsconfig.json`
-> 逐字同构。**不要重建，会覆盖掉更全的版本。**
-
-- Modify: `/Users/mac08/Desktop/robot/readit/packages/highlight/package.json`（按需追加，Task 1 已写全依赖）
-- Modify: `/Users/mac08/Desktop/robot/readit/packages/highlight/tsconfig.json`（Task 1 已写对，通常无需改）
-- Modify: `/Users/mac08/Desktop/robot/readit/packages/highlight/vitest.config.ts`（Task 1 已设 `environment: 'node'`，§0 A2 要求保持）
+- Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/package.json`
+- Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/tsconfig.json`
+- Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/vitest.config.ts`
 - Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/src/index.ts`
 - Create: `/Users/mac08/Desktop/robot/readit/packages/editor/package.json`
 - Create: `/Users/mac08/Desktop/robot/readit/packages/editor/tsconfig.json`
@@ -4261,9 +4256,14 @@ EOF
 ### Task 7: `@readit/highlight` 包骨架 + Shiki 实现（嵌入默认，JS 正则引擎，零 WASM）
 
 **Files:**
-- Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/package.json`
-- Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/tsconfig.json`
-- Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/vitest.config.ts`
+> ⚠️ **§0 A1：这三个文件由 Task 1 建，本任务一律 Modify，且按字符串定位不用行号。**
+> Task 1 已写全 `shiki@4.4.2` / `@wooorm/starry-night@3.10.0` / `hast-util-to-html@9.0.5`
+> 与 `refresh:shiki-golden` script，tsconfig 的 `include` 已与 `packages/core/tsconfig.json`
+> 逐字同构。**不要重建，会覆盖掉更全的版本。**
+
+- Modify: `/Users/mac08/Desktop/robot/readit/packages/highlight/package.json`（按需追加，Task 1 已写全依赖）
+- Modify: `/Users/mac08/Desktop/robot/readit/packages/highlight/tsconfig.json`（Task 1 已写对，通常无需改）
+- Modify: `/Users/mac08/Desktop/robot/readit/packages/highlight/vitest.config.ts`（Task 1 已设 `environment: 'node'`，§0 A2 要求保持）
 - Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/src/serialize.ts`
 - Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/src/shiki.ts`
 - Create: `/Users/mac08/Desktop/robot/readit/packages/highlight/src/index.ts`
