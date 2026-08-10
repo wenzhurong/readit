@@ -56,10 +56,23 @@ describe('typecheck is wired into CI', () => {
 describe('typecheck actually covers the whole repo', () => {
   const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string> }
 
-  it('the root script checks the root tsconfig AND both workspaces', () => {
+  it('the root script checks the root tsconfig, browser/ AND both workspaces', () => {
     // Workspace delegation alone left test/, tools/ and vitest.config.ts checked by nothing —
     // the offline gate itself did not even compile until the root tsconfig was added.
-    expect(pkg.scripts.typecheck).toBe('tsc --noEmit && npm run typecheck --workspaces --if-present')
+    // browser/ is a fourth island: not a workspace, and it needs the DOM lib, so it carries its
+    // own tsconfig and its own invocation. Without this line nothing would check it either.
+    expect(pkg.scripts.typecheck).toBe(
+      'tsc --noEmit && tsc -p browser --noEmit && npm run typecheck --workspaces --if-present',
+    )
+  })
+
+  it('keeps the DOM lib inside browser/tsconfig.json and out of the root one', () => {
+    // Phase A purity is a type-level claim too: if the root `lib` gained "DOM", a stray
+    // `document.` in test/ or tools/ would compile clean.
+    const rootCfg = JSON.parse(read('tsconfig.json')) as { compilerOptions: { lib: string[] } }
+    const browserCfg = JSON.parse(read('browser/tsconfig.json')) as { compilerOptions: { lib: string[] } }
+    expect(rootCfg.compilerOptions.lib).toEqual(['ES2023'])
+    expect(browserCfg.compilerOptions.lib).toContain('DOM')
   })
 
   it('the root tsconfig includes the root TypeScript that belongs to no workspace', () => {
