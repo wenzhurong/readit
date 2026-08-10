@@ -51,7 +51,7 @@
 
 **分期：M3 先行**（见设计文档 §9.5）
 - **第一段 M3 = Task 1–12 + 18**：结束时 `readit` 是可被外部宿主安装使用的只读渲染器，六条验收线里五条可判
-- **第二段 M4 = Task 13–17**：编辑器、`plain` 档、滚动同步、IME
+- **第二段 M4 = Task 13–17，收尾 Task 19**：编辑器、`plain` 档、滚动同步、IME
 - 若需在第一段结束时停下，停在那里得到的是一个完整的东西
 
 ---
@@ -214,8 +214,8 @@ Task 10 的类型注解漏了 `needsMermaid`，补上。
 
 | # | 缺口 | 归属 |
 |---|---|---|
-| **G1** | **设计 §9 的四条 SPEC 修订全部无人认领**：§9.4 `mode` 补 `'plain'` 并定义；`find` 标注属 M6；`::part()` 名单只开三个、`mermaid` 推迟 M5；§5 包表 `@readit/find` 标 M6 | **新增 Task 18「SPEC 同步」**，收尾时一次改完，连同各组提案的 §9 修订 5–9 一并落地 |
-| **G2** | **`--readit-*` 自定义属性通道未实现。** SPEC §9.2 说对外只开两个覆写通道（`--readit-*` 与 `::part()`），现在只有后者。它比看上去贵：github-markdown-css 把变量声明在 `.markdown-body` 自己身上，需要给每个主题生成约 60 个变量的桥接表 | **并进 Task 3**（它已在做主题接线）。若实测桥接表规模超出该任务合理体量，**上报并单列**，不要硬塞 |
+| **G1** | **设计 §9 的四条 SPEC 修订全部无人认领**：§9.4 `mode` 补 `'plain'` 并定义；`find` 标注属 M6；`::part()` 名单只开三个、`mermaid` 推迟 M5；§5 包表 `@readit/find` 标 M6 | **新增 Task 19「SPEC 同步」**，收尾时一次改完，连同各组提案的 §9 修订 5–9 一并落地 |
+| **G2** | **`--readit-*` 自定义属性通道未实现。** SPEC §9.2 说对外只开两个覆写通道（`--readit-*` 与 `::part()`），现在只有后者。它比看上去贵：github-markdown-css 把变量声明在 `.markdown-body` **自己身上**，宿主在 `:host` 上设同名变量会被盖掉 | **新增 Task 18**。原本裁决「并进 Task 3」，但自审发现 Task 3 的正文里没有对应步骤——那等于「加上适当的 X」，正是 writing-plans 明令禁止的占位符。且它够独立：评审员可以否掉这个通道而批准 Task 3 的主题实现 |
 | **G3** | **Trusted Types 的 Playwright 场景两组互相指望，谁都没做。** 设计 §7 把它列在 L3b-element | **加进 Task 11**：用 `page.route` 注入 `Content-Security-Policy: require-trusted-types-for 'script'` 响应头的 fixture 页，断言组件仍能渲染。单元层那两份桩测保留，但它们证明不了真 CSP 下的行为 |
 | **G4** | **降级可见性只有一半。** `data-readit-pending` 属性由 Task 15 定义，但它的可见样式（角标）属主题任务，而 Task 3 的产出里没有 | 属性归 Task 15，**样式并进 Task 3 的 `ELEMENT_CSS`**。两半必须同一批落地，否则「降级必须可见」是空话 |
 | **G5** | **防抖 p95 断言在交付文本里看不到。** 设计 §4.2 特意写了「把这次测量提交成一条会随代码变慢而失败的断言」 | **Task 15 必须有它**。实施者若在 Task 15 的正文里找不到，那是漏了，补上——设计文档专门为它写了「这个项目已因猜数字栽过两次」 |
@@ -11504,7 +11504,293 @@ EOF
 
 ---
 
-### Task 18: SPEC 同步 —— 把设计期发现的矛盾与偏离改回上位契约
+### Task 18: `--readit-*` 覆写通道 —— SPEC 只开两个通道，现在只有一个
+
+> **为什么单列而不是并进 Task 3。** 一致性核查发现这条设计要求**无人认领**：
+> SPEC §9.2 说对外只开两个覆写通道（`--readit-*` 自定义属性与 `::part()`），
+> 而六组起草的产出里只有后者。Task 3 的起草者自己写明「只实现了 `::part()` 与
+> `data-theme`，**没有实现 `--readit-*`**」并建议单列——理由是它比看上去贵：
+> github-markdown-css 把变量声明在 `.markdown-body` **自己身上**，
+> 要让宿主能覆写就得给每个主题生成一张桥接表。
+>
+> 按 writing-plans 的右尺寸判据，它够独立：**评审员可以否掉这个通道而批准 Task 3 的主题实现。**
+
+**Files:**
+- Create: `/Users/mac08/Desktop/robot/readit/packages/element/scripts/build-css-bridge.ts`
+- Create: `/Users/mac08/Desktop/robot/readit/packages/element/src/css-bridge.ts`（**生成产物，提交进仓库**）
+- Modify: `/Users/mac08/Desktop/robot/readit/packages/element/src/styles.ts`（Task 3 建；在 `ELEMENT_CSS` 与 `LIGHT_DOM_CSS` 里拼进桥接层）
+- Modify: `/Users/mac08/Desktop/robot/readit/packages/element/package.json`（追加 `"build:css-bridge"` script）
+- Test: `/Users/mac08/Desktop/robot/readit/packages/element/test/css-bridge.test.ts`
+
+**Interfaces:**
+- Consumes: Task 3 的 `packages/element/src/styles.ts` 导出的 `ELEMENT_CSS: string` 与
+  `LIGHT_DOM_CSS: string`（§0 A6）；`github-markdown-css@5.9.0` 的
+  `github-markdown-light.css` / `github-markdown-dark.css`（Task 1 已装，§0 A1）
+- Produces: `packages/element/src/css-bridge.ts` 导出
+  `export const CSS_BRIDGE_LIGHT: string` / `export const CSS_BRIDGE_DARK: string`
+  与 `export const BRIDGED_VARIABLES: readonly string[]`（供测试与文档核对）。
+  Task 3 的 `ELEMENT_CSS` 把它们拼在 github-markdown-css **之后**、自定义规则**之前**
+
+**桥接的形状。** github-markdown-css 长这样：
+
+```css
+.markdown-body { --fgColor-default: #1f2328; --bgColor-default: #ffffff; /* … */ }
+```
+
+宿主没法覆写它——`--fgColor-default` 是 GitHub 的内部名，且声明在元素自己身上，
+宿主在 `:host` 上设同名变量会被这条更具体的声明盖掉。桥接层把每个变量重写成：
+
+```css
+.markdown-body { --fgColor-default: var(--readit-fg-default, #1f2328); }
+```
+
+于是宿主 `readit-view { --readit-fg-default: red }` 就生效了，而不设时行为逐字不变。
+
+**命名映射规则**（`--fgColor-default` → `--readit-fg-default`）：去掉 `--`，
+驼峰转连字符小写，加 `--readit-` 前缀。`--color-prettylights-syntax-comment` →
+`--readit-color-prettylights-syntax-comment`（本来就是连字符，只加前缀）。
+
+---
+
+- [ ] **Step 1: 写会失败的测试**
+
+新建 `/Users/mac08/Desktop/robot/readit/packages/element/test/css-bridge.test.ts`：
+
+```ts
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { describe, expect, it } from 'vitest'
+import { BRIDGED_VARIABLES, CSS_BRIDGE_DARK, CSS_BRIDGE_LIGHT } from '../src/css-bridge.js'
+import { ELEMENT_CSS } from '../src/styles.js'
+
+const require_ = createRequire(import.meta.url)
+const readUpstream = (name: string): string =>
+  readFileSync(require_.resolve(`github-markdown-css/${name}`), 'utf8')
+
+/**
+ * SPEC §9.2：「对外只开两个覆写通道——`--readit-*` 自定义属性与 `::part()`。」
+ *
+ * 这一层守的是第一个通道**真的存在且完整**。完整性是要紧的：漏掉一个变量，
+ * 宿主就会遇到「其他颜色都能改，唯独这一个改不动」，而那种半通的 API 比没有更难用。
+ * 所以断言是「上游声明的每一个变量都有桥」，不是「有一些桥」。
+ */
+describe('--readit-* 覆写通道', () => {
+  it('上游 .markdown-body 声明的每个自定义属性都有桥，一个不漏', () => {
+    for (const [file, bridge] of [
+      ['github-markdown-light.css', CSS_BRIDGE_LIGHT],
+      ['github-markdown-dark.css', CSS_BRIDGE_DARK],
+    ] as const) {
+      const upstream = readUpstream(file)
+      const declared = new Set(
+        [...upstream.matchAll(/^\s*(--[a-zA-Z][\w-]*)\s*:/gm)].map((m) => m[1]!),
+      )
+      expect(declared.size, `${file} 应声明大量变量`).toBeGreaterThan(20)
+      const missing = [...declared].filter((v) => !bridge.includes(`${v}:`))
+      expect(missing, `${file} 有变量没有桥`).toEqual([])
+    }
+  })
+
+  it('每个桥都是 var(--readit-X, 原值) 的形式，不改默认行为', () => {
+    // 抽查三个有代表性的：前景色、背景色、语法高亮色
+    expect(CSS_BRIDGE_LIGHT).toMatch(/--fgColor-default:\s*var\(--readit-fg-color-default,\s*#[0-9a-f]{3,8}\)/i)
+    expect(CSS_BRIDGE_LIGHT).toMatch(/--bgColor-default:\s*var\(--readit-bg-color-default,\s*#[0-9a-f]{3,8}\)/i)
+    expect(CSS_BRIDGE_DARK).toMatch(/--color-prettylights-syntax-comment:\s*var\(--readit-color-prettylights-syntax-comment,/)
+  })
+
+  it('不设 --readit-* 时，解析出的值与上游逐字相同', () => {
+    // 桥接不得改变默认外观。对每个变量比对 fallback 与上游原值。
+    const upstream = readUpstream('github-markdown-light.css')
+    const original = new Map(
+      [...upstream.matchAll(/^\s*(--[a-zA-Z][\w-]*)\s*:\s*([^;]+);/gm)].map(
+        (m) => [m[1]!, m[2]!.trim()] as const,
+      ),
+    )
+    const bridged = [...CSS_BRIDGE_LIGHT.matchAll(/(--[\w-]+):\s*var\(--readit-[\w-]+,\s*([^)]+)\)/g)]
+    expect(bridged.length).toBe(original.size)
+    for (const [, name, fallback] of bridged) {
+      expect(fallback!.trim(), `${name} 的 fallback 与上游不一致`).toBe(original.get(name!))
+    }
+  })
+
+  it('BRIDGED_VARIABLES 与桥接表一致，可用于文档与宿主自查', () => {
+    expect(BRIDGED_VARIABLES.length).toBeGreaterThan(20)
+    for (const v of BRIDGED_VARIABLES) {
+      expect(v.startsWith('--readit-'), `${v} 应以 --readit- 开头`).toBe(true)
+    }
+    expect(new Set(BRIDGED_VARIABLES).size, '不得有重复').toBe(BRIDGED_VARIABLES.length)
+  })
+
+  it('桥接层已拼进 ELEMENT_CSS，且在 github-markdown-css 之后', () => {
+    expect(ELEMENT_CSS).toContain('var(--readit-fg-color-default,')
+    const upstreamMark = ELEMENT_CSS.indexOf('.markdown-body')
+    const bridgeMark = ELEMENT_CSS.indexOf('var(--readit-fg-color-default,')
+    expect(upstreamMark, 'ELEMENT_CSS 应含上游样式').toBeGreaterThanOrEqual(0)
+    expect(bridgeMark, '桥接必须在上游之后，否则会被上游盖掉').toBeGreaterThan(upstreamMark)
+  })
+})
+```
+
+- [ ] **Step 2: 跑它确认失败**
+
+```bash
+cd /Users/mac08/Desktop/robot/readit && npx vitest run packages/element/test/css-bridge.test.ts
+```
+
+预期：**全红**，首个错误是 `Cannot find module '../src/css-bridge.js'`。
+
+- [ ] **Step 3: 写生成脚本**
+
+新建 `/Users/mac08/Desktop/robot/readit/packages/element/scripts/build-css-bridge.ts`：
+
+```ts
+/**
+ * 从 github-markdown-css 生成 --readit-* 覆写桥接层。
+ *
+ * 为什么生成而不是手写：上游有几十个变量，且会随版本变化。手写一张表意味着
+ * 升级 github-markdown-css 时要人肉比对，而漏掉一个的症状是「宿主发现某个颜色
+ * 改不动」——一个不会报错、只会让人困惑的失败。生成 + 一条「一个不漏」的断言
+ * 把它变成构建期就能发现的事。
+ *
+ * 产物提交进仓库（与 packages/core/data/ 的先例一致）：src/ 里不跑构建脚本，
+ * 测试与打包都直接读生成好的 .ts。
+ */
+import { readFileSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
+
+const require_ = createRequire(import.meta.url)
+const OUT = fileURLToPath(new URL('../src/css-bridge.ts', import.meta.url))
+
+/** `--fgColor-default` → `--readit-fg-color-default` */
+function readitName(cssVar: string): string {
+  const bare = cssVar.slice(2)
+  const kebab = bare.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()
+  return `--readit-${kebab}`
+}
+
+interface Declaration { name: string; value: string }
+
+function declarations(css: string): Declaration[] {
+  const out: Declaration[] = []
+  const seen = new Set<string>()
+  for (const m of css.matchAll(/^\s*(--[a-zA-Z][\w-]*)\s*:\s*([^;]+);/gm)) {
+    const name = m[1]!
+    if (seen.has(name)) continue   // 上游若重复声明，取首次（与 CSS 层叠无关，我们只是重写它）
+    seen.add(name)
+    out.push({ name, value: m[2]!.trim() })
+  }
+  return out
+}
+
+function bridge(decls: readonly Declaration[]): string {
+  const body = decls
+    .map((d) => `  ${d.name}: var(${readitName(d.name)}, ${d.value});`)
+    .join('\n')
+  return `.markdown-body {\n${body}\n}`
+}
+
+const light = declarations(readFileSync(require_.resolve('github-markdown-css/github-markdown-light.css'), 'utf8'))
+const dark = declarations(readFileSync(require_.resolve('github-markdown-css/github-markdown-dark.css'), 'utf8'))
+
+const names = [...new Set([...light, ...dark].map((d) => readitName(d.name)))].sort()
+
+const file = `// 由 scripts/build-css-bridge.ts 生成，不要手改。
+// 重新生成：npm run build:css-bridge --workspace @readit/element
+//
+// SPEC §9.2 说对外只开两个覆写通道，这是其中之一。上游 github-markdown-css 把变量
+// 声明在 .markdown-body 自己身上，宿主在 :host 上设同名变量会被盖掉——所以要把每个
+// 声明重写成 var(--readit-X, 原值)，宿主才有覆写点，而不设时行为逐字不变。
+
+export const CSS_BRIDGE_LIGHT = ${JSON.stringify(bridge(light))}
+
+export const CSS_BRIDGE_DARK = ${JSON.stringify(bridge(dark))}
+
+/** 宿主可覆写的全部变量名，供文档与自查使用。 */
+export const BRIDGED_VARIABLES: readonly string[] = Object.freeze(${JSON.stringify(names, null, 2)})
+`
+
+writeFileSync(OUT, file, 'utf8')
+process.stdout.write(`wrote ${names.length} bridged variables to ${OUT}\n`)
+```
+
+`packages/element/package.json` 的 `scripts` 追加（**追加，不替换整块**，§0 A1）：
+
+```json
+"build:css-bridge": "tsx scripts/build-css-bridge.ts"
+```
+
+跑一次生成：
+
+```bash
+cd /Users/mac08/Desktop/robot/readit && npm run build:css-bridge --workspace @readit/element
+```
+
+- [ ] **Step 4: 把桥接层拼进 styles.ts**
+
+在 `packages/element/src/styles.ts` 里（Task 3 建的），把 `ELEMENT_CSS` 与 `LIGHT_DOM_CSS`
+的拼接顺序改成 **上游 → 桥接 → readit 自己的规则**。按字符串定位，不用行号（§0 A1）：
+
+```ts
+import { CSS_BRIDGE_DARK, CSS_BRIDGE_LIGHT } from './css-bridge.js'
+
+// 桥接必须在上游之后：它重写的是上游声明的同名变量，放在前面会被上游盖掉。
+// 放在 readit 自己的规则之前：那些规则要能消费桥接后的值。
+export const ELEMENT_CSS = [
+  GITHUB_MARKDOWN_LIGHT,
+  GITHUB_MARKDOWN_DARK,
+  CSS_BRIDGE_LIGHT,
+  CSS_BRIDGE_DARK,
+  READIT_RULES,
+].join('\n')
+```
+
+（`GITHUB_MARKDOWN_LIGHT` / `GITHUB_MARKDOWN_DARK` / `READIT_RULES` 是 Task 3 已有的常量名；
+若 Task 3 用了别的名字，以 Task 3 的实际产出为准，只保证**顺序**是上游 → 桥接 → 自有规则。）
+
+- [ ] **Step 5: 跑测试确认通过**
+
+```bash
+cd /Users/mac08/Desktop/robot/readit && npx vitest run packages/element/test/css-bridge.test.ts
+```
+
+预期：**5 passed**。
+
+再跑全量与类型：
+
+```bash
+cd /Users/mac08/Desktop/robot/readit && npm test && npm run typecheck
+```
+
+预期：2318 条既有测试全绿 + 前序任务新增的若干条 + 本任务新增 5 条，0 失败；
+typecheck exit 0。四条不变量逐条核（语料 56/68、CommonMark 649+3、GFM 658+14、TEMPORARY 0），
+**任何一个变了都是回归，上报不要重钉**（§0 A11）。
+
+- [ ] **Step 6: 提交**
+
+```bash
+cd /Users/mac08/Desktop/robot/readit
+git add packages/element/scripts/build-css-bridge.ts packages/element/src/css-bridge.ts \
+        packages/element/src/styles.ts packages/element/package.json \
+        packages/element/test/css-bridge.test.ts
+git commit -m "feat(element): --readit-* 覆写通道，SPEC 只开两个通道而此前只有一个
+
+SPEC §9.2 说对外只开两个覆写通道（--readit-* 与 ::part()），但六组起草的产出
+里只有后者——一致性核查抓到的一条真缺口。
+
+上游 github-markdown-css 把变量声明在 .markdown-body 自己身上，宿主在 :host 上
+设同名变量会被这条更具体的声明盖掉。桥接层把每个声明重写成
+var(--readit-X, 原值)：宿主有了覆写点，不设时行为逐字不变。
+
+生成而不手写。上游几十个变量且随版本变化，手写表意味着升级时要人肉比对，
+而漏掉一个的症状是「宿主发现某个颜色改不动」——不报错、只让人困惑的失败。
+配一条「上游声明的每个变量都有桥，一个不漏」的断言，把它变成构建期可发现。
+
+另一条断言核对每个桥的 fallback 与上游原值逐字相同——桥接不得改变默认外观。"
+```
+
+---
+
+### Task 19: SPEC 同步 —— 把设计期发现的矛盾与偏离改回上位契约
 
 > 这个任务在收尾时做，因为它要落地的四条修订全部依赖前面任务的实际产出。
 > **它不是文档整理**：设计文档 §9 列的四条里有一条是 SPEC 现存的**真矛盾**
@@ -11674,7 +11960,7 @@ typecheck exit 0。
 - [ ] **Step 5: 把设计文档 §9 的修订表标记为已落地**
 
 在 `docs/superpowers/specs/2026-08-09-plan2-element-editor-design.md` 的 §9 表格每行末尾
-补一列「状态」，四条填「✅ Task 18 已落地」。各组提案追加的第 5–9 条同样落地并标记。
+补一列「状态」，四条填「✅ Task 19 已落地」。各组提案追加的第 5–9 条同样落地并标记。
 
 - [ ] **Step 6: 提交**
 
@@ -11718,10 +12004,10 @@ test/spec-sync.test.ts 守住这几条。它不是文档 lint——它守的是
 | 2 | 3–6 | element 运行时，内部耦合紧，一起审才看得出接缝对不对 |
 | 3 | 7–8 | 高亮两个实现。onig.wasm 那颗地雷在这批引爆 |
 | 4 | 9–10 | 构建与分发三条门。注意 §0.2：这时的 dist 是「假绿」 |
-| 5 | 11–12 | 浏览器测试基建 + 视觉回归。**M3 段到此完整** |
+| 5 | 11–12, 18 | 浏览器测试基建 + 视觉回归 + `--readit-*` 通道。**M3 段到此完整** |
 | 6 | 13–15 | 编辑器契约 + 两个实现 + 重渲染 |
 | 7 | 16–17 | 滚动同步 + IME。IME 那条带风险，见设计 §4.4 |
-| 8 | 18 | SPEC 同步收尾 |
+| 8 | 19 | SPEC 同步收尾（要等 Task 13–17 的实际产出才能改准） |
 
 **每批派发时必须把 §0 编排裁决逐字附上**——它压过任务正文，而实现者只看得见自己那几个任务。
 计划一的教训：契约不进任务书，实现者就会踩到它（Task 9 的 C3(a) 事故就是这么来的）。
