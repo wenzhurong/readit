@@ -19,10 +19,16 @@
     "refresh:math-golden": "vite-node tools/refresh-math-golden.ts",
     "browser:build": "node browser/fixtures/build-fixtures.mjs",
     "browser:serve": "npm run browser:build && node browser/serve.mjs",
-    "test:browser": "playwright test --project=element-chromium --project=element-webkit"
+    "test:browser": "playwright test --project=element-chromium --project=element-webkit",
+    "test:visual": "playwright test --project=visual-chromium",
+    "visual:baseline": "bash tools/visual-baseline.sh"
   },
   "devDependencies": {
+    "@fontsource/inter": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
     "@playwright/test": "1.62.1",
+    "bootstrap": "5.3.8",
+    "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vite": "8.2.1",
     "vite-node": "6.0.0",

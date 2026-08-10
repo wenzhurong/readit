@@ -1,0 +1,56 @@
+name: visual
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # 重写基线只能手动扳一次闸，见下面 l4-baseline 的 if。
+  workflow_dispatch:
+
+jobs:
+  l4-visual:
+    name: L4 visual regression
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.20.0'
+          cache: npm
+      - run: npm ci
+      # updateSnapshots: 'none'，所以缺基线是红灯，不是「悄悄补一张然后绿」。
+      - run: npx playwright test --project=visual-chromium
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: l4-visual-diff
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  # 给没装 docker 的贡献者留的唯一一条重写基线的路。它只在手动 dispatch 时跑，
+  # 产物是 artifact 而不是 commit——一次 PR 不可能顺带把基线洗掉。
+  l4-baseline:
+    name: L4 regenerate baselines (manual)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.20.0'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright test --project=visual-chromium --update-snapshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: l4-baselines
+          path: browser/__screenshots__/
+          retention-days: 14

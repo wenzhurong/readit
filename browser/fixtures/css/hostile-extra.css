@@ -1,0 +1,36 @@
+/*
+ * Preflight 与 Reboot 都是「善意」的 reset：它们用的是后代与类型选择器，
+ * 而那些选择器根本进不了 shadow 树，所以单靠它们两个，这条验收线太便宜。
+ *
+ * 这里补的全部是**继承属性**。继承是穿过 shadow 边界的——挡住它的不是 Shadow DOM，
+ * 是元素自己的 :host 重置。所以这张表就是那个重置的唯一证据。
+ * 不用 !important 打 ::part()：那会把 visual-fonts.css 的字体钉法也一起打掉，
+ * 变成在测「字体没被钉住时两张页面是否一样」，那不是这条验收线要问的问题。
+ */
+* {
+  line-height: 3 !important;
+  color: #ff00ff !important;
+  letter-spacing: 0.35em !important;
+  word-spacing: 0.5em !important;
+  text-transform: uppercase !important;
+  font-family: cursive !important;
+  font-style: italic !important;
+  font-variant-numeric: tabular-nums !important;
+  text-align: right !important;
+}
+
+/* 非继承的部分：只有隔离破了才会咬到。名字是照着 readit 的 DOM 形状挑的。 */
+.markdown-body, .markdown-body * {
+  background: #00ff00 !important;
+  border-color: #ff0000 !important;
+  padding: 12px !important;
+  margin: 12px !important;
+}
+
+pre, code, table, th, td, h1, h2, h3, blockquote, li {
+  outline: 3px dashed #ff0000 !important;
+  border-radius: 14px !important;
+}
+
+/* 宿主容器的盒子必须不受影响，否则比的就不是隔离而是两个不同宽度的元素。
+   页面上的 width 写在 style 属性里，这里不碰它。 */
