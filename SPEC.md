@@ -238,7 +238,7 @@ const html = render(src, opts)
 | 场景 | gzip |
 |---|---|
 | 嵌入方，只读，无高亮无数学（`highlighter: null`, `math: null`） | ~60–70 KB（引擎）+ 5.4 KB（github-markdown.css） |
-| 嵌入方，只读 + Shiki 高亮 | + ~54 KB（core，零 WASM）+ 每语言 0.8–16 KB 按需 |
+| 嵌入方，只读 + Shiki 高亮 | + ~54 KB（core，零 WASM）+ 每语言 0.08–194 KB 按需（2026-08-10 实测 361 个语言包：中位 1.4 KB、p90 8.0 KB、p99 30.4 KB、最大 emacs-lisp 194.2 KB。原写「0.8–16 KB」是估算，尾部低估 12 倍。表在 packages/highlight/data/lang-pack-sizes.json） |
 | 桌面壳，只读 + starry-night 高亮 | + ~64 KB JS + 151 KB WASM（本地磁盘，非网络） |
 | **含数学的文档**（首次遇到 `$`） | **+ ~677 KB**（引擎 117 KB + tex-font 561 KB） |
 | **含图表的文档**（首次遇到 ```mermaid） | + 约 1.0–1.5 MB minified（ESM 分块，非全量 3.4 MB） |

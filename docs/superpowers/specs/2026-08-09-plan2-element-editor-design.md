@@ -259,6 +259,64 @@ SPEC §12：「语法包超体积上限 → 不高亮 + 一个『仍要加载』
 （文案先定是因为 SPEC 要求「在实现前定死」；闸门是否需要则要靠测量回答，
 而 SPEC 写这条时手上只有估算。）
 
+### 5.4.1 实测结果与结论（2026-08-10，闸门：不建）
+
+`packages/highlight/data/lang-pack-sizes.json` 是机器可读的完整表，由
+`npm run measure:lang-packs --workspace @readit/highlight` 生成，
+`packages/highlight/test/lang-pack-sizes.test.ts` 每次跑套件都重算一遍比对。
+
+| | Shiki 4.4.2（`@shikijs/langs`） | starry-night 3.10.0（`lang/`） |
+|---|---|---|
+| 语言包个数 | 361 | 719 |
+| gzip 最小 | 0.08 KB | 0.10 KB |
+| gzip 中位（p50） | 1.4 KB | 1.8 KB |
+| gzip p90 | 8.0 KB | 5.9 KB |
+| gzip p95 | 14.5 KB | 9.4 KB |
+| gzip p99 | 30.4 KB | 27.9 KB |
+| gzip 最大 | **194.2 KB**（`emacs-lisp`） | **203.1 KB**（`source.emacs.lisp`） |
+| > 32 KB 的个数 | 3 | 3 |
+| > 50 KB 的个数 | 2 | 2 |
+| > 100 KB 的个数 | 1 | 1 |
+| 全部合计 | 1.30 MB | 2.32 MB |
+
+最大的八个（gzip / raw，KB）——
+Shiki：`emacs-lisp` 194.2/773.9 · `wolfram` 75.4/260.7 · `cpp` 32.4/521.4 ·
+`objective-cpp` 30.4/180.1 · `php` 28.0/117.5 · `blade` 27.6/109.5 ·
+`hack` 25.8/83.8 · `mdx` 23.0/142.9。
+starry-night：`source.emacs.lisp` 203.1/826.1 · `source.objc.platform` 50.5/163.5 ·
+`source.c.platform` 43.6/139.6 · `source.actionscript.3` 30.0/95.0 ·
+`text.html.php.blade` 30.0/131.5 · `source.maxscript` 29.7/97.7 ·
+`source.tsx` 28.2/236.1 · `text.html.php` 27.9/101.7。
+
+**只有 Shiki 侧的表与闸门有关。** starry-night 的语法集在工厂期就定死（`common`，
+34 条，269.1 KB gzip），因为 `register()` 是 async 而 `highlight()` 必须纯同步；
+桌面壳又是从本地磁盘读。它那 719 行只是「一个宿主最多可能挑到多大」的参考。
+
+**结论：不建这道闸。** 三条理由，按分量排：
+
+1. **与本项目自己已经接受的懒加载载荷不自洽。** 数学包首次遇到 `$` 就无条件加载
+   ~677 KB gzip，mermaid 1–1.5 MB，两者都没有任何闸门。最坏的单个语法包 194.2 KB
+   比其中较小的那个还小 3.5 倍。给三个懒加载大件里最小的那个建闸、放过更大的两个，
+   这不是谨慎，是不一致。
+2. **§5.4 第 3 步写的备用阈值被自己的实测输出否掉了。** p90 = 8.0 KB 会拦下 361 个
+   语言里的 36 个，其中包括 `cpp`、`php`、`jsx`、`tsx`、`mdx`。一条会让 C++ 和 PHP
+   不再高亮的规则，是被它自己的结果取消资格的，不是被偏好取消的。
+3. **闸门的真实成本不在那次字节判断上。** P3 下语言集在工厂期由 `scan()` 定死，
+   所以「仍要加载」意味着重建 highlighter 并整篇重渲——一套只为这个按钮存在的
+   `@readit/element` 机器。这正是 §5.4 第 2 步预见的 YAGNI。
+
+**推翻它是廉价的，而且推翻的触发器已经在跑：**
+`createShikiHighlighter({ langs })` 本来就在筛 `langs`，加一道体积判断是几行；
+而 `lang-pack-sizes.test.ts` 里有一条断言写死「最大的语法包仍小于无闸门的数学包」，
+哪天某个语言包越过那条线，它先红，决策就必须重做一次——不靠谁记得回来看这张表。
+
+**文案照 SPEC 要求现在定死**（记在 `data/lang-pack-sizes.json` 的
+`gate.copyIfEverBuilt` 字段里，由测试逐字盯住；**不**作为导出的 API 符号存在，
+因为闸门没建，导出它就成了「公共 API 里的永久 no-op」——计划一刚为
+`readFrontmatterOptions` 挨过这一条）：
+
+> 这个代码块的语言包较大（`<N>` KB），已跳过高亮。[仍要加载]
+
 ---
 
 ## 6. 构建与分发验证
@@ -345,6 +403,7 @@ math→core 是纯类型导入却声明成了运行时依赖。今天没事，�
 | 2 | §9.4 `mount()` 返回对象 | 标注 `find` 属 M6，本计划不导出。**理由：计划一刚因 `readFrontmatterOptions` 是「公共 API 里的永久 no-op」吃过评审批评**——宿主读了签名接进管线，静默拿不到任何东西。加方法向后兼容，留空壳不是 |
 | 3 | §9.2 `::part()` 名单 | 本计划只开 `root` / `content` / `code-block`；`mermaid` 推迟到 M5。SPEC 自己说这些名字是「永久公开 API，加容易删是破坏性变更」，而 mermaid 容器在 M5 前不存在——现在钉名字，等 M5 结构若不同就被自己锁死 |
 | 4 | §5 包表 | `@readit/find` 标注为 M6 |
+| 5 | §5.1 体积预算表 | 「每语言 0.8–16 KB 按需」是估算，实测为 0.08–194 KB（中位 1.4 KB、p99 30.4 KB），尾部低估 12 倍。已按实测改写，并在 §5.4.1 记下体积上限闸门**不建**的完整论证 |
 
 ---
 
