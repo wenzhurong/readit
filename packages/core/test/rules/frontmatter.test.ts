@@ -213,4 +213,47 @@ describe('frontmatter', () => {
   it('parses a YAML date as a CORE_SCHEMA string, not a timezone-dependent Date object', () => {
     expect(renderFrontmatterTable('date: 2020-01-01')).toContain('<td>2020-01-01</td>')
   })
+
+  /**
+   * B3（docs/plans/2026-08-08-plan2-debt.md 批次 8 派单）：CORE_SCHEMA 是为匹配
+   * GitHub 的 YAML 行为选的，不是为了安全——但计划一实测过它顺带关掉了 js-yaml
+   * 4 条 high 通告向量里的 2 条（merge key `<<`、`!!omap`）。**这份安全此前是无
+   * 保护的副作用**：没有任何测试断言 frontmatter.ts 用的是 CORE_SCHEMA，谁哪天
+   * 为了修 `<<` 的保真度差异换成 DEFAULT_SCHEMA，这两条会静默重新打开而不会有
+   * 任何东西报警。这里补上。
+   *
+   * 只测这两条，不是偷懒漏了另外两条（原型污染 / 别名链深度）——本轮复核时
+   * 直接用 CORE_SCHEMA 与 DEFAULT_SCHEMA 分别跑过这两个探针（见批次 8 报告），
+   * 结果**两个 schema 下完全一致**：js-yaml 从不把 `__proto__` 键写上真正的
+   * `Object.prototype`（这是加载器自身的防护，不是 schema 的分支），别名链在
+   * 深度 8/10/12/14 上两个 schema 都是次毫秒级、平坦无爆炸（js-yaml 对别名图
+   * 有内置的资源限制，同样不分 schema）。也就是说，若真的换成 DEFAULT_SCHEMA，
+   * 这两条其实**不会**重新打开——把它们也写进这条"换 schema 就会重新打开"的
+   * 守卫测试里会是一条测不出真实回归的假心理安慰。**真正随 schema 摆动的只有
+   * merge 与 omap 这两条**，守卫应该只钉这两条。
+   */
+  describe('CORE_SCHEMA 安全副作用守卫（B3）', () => {
+    it('merge key `<<` 能解析但不合并——CORE_SCHEMA 没有注册 merge 类型', () => {
+      const yaml = ['base: &b', '  x: 1', 'values:', '  <<: *b', '  y: 2'].join('\n')
+      const out = renderFrontmatterTable(yaml)
+      // 若 <<` 生效合并，它会被合并掉、从输出里彻底消失，`x` 会与 `y` 一起
+      // 平铺在 values 自己的行里。CORE_SCHEMA 下 `<<` 只是一个普通字符串键，
+      // 原样出现在输出里（转义成 &lt;&lt;）——这正是"能解析但不合并"的可观测证据。
+      expect(out, '`<<` 字面量作为普通键留在输出里').toContain('&lt;&lt;')
+      expect(out, '`y` 仍能正常解析').toContain('<th>y</th>')
+    })
+
+    it('`!!omap` 标签被拒绝——CORE_SCHEMA 没有注册这个类型（DEFAULT_SCHEMA 会接受）', () => {
+      // parseFrontmatter 内部 load() 抛出「unknown tag」，renderFrontmatterTable
+      // 把解析失败折成 null——与 applyFrontmatter 里同一失败会走 flash-error
+      // 横幅是同一条路径（见上面「malformed YAML」一组测试）。
+      expect(renderFrontmatterTable('!!omap\n- a: 1\n- b: 2\n')).toBeNull()
+    })
+
+    it('端到端：frontmatter 里的 `!!omap` 触发 flash-error 横幅，不是静默解析成有序表', () => {
+      const out = md().render('---\n!!omap\n- a: 1\n- b: 2\n---\n\nBody text.\n')
+      expect(out).toContain('<div class="flash flash-error mb-3">Error in user YAML: ')
+      expect(out).not.toContain('markdown-accessiblity-table')
+    })
+  })
 })
