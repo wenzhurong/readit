@@ -16,10 +16,10 @@
   },
   "dependencies": {
     "@mathjax/mathjax-tex-font": "4.1.3",
-    "@mathjax/src": "4.1.3",
-    "@readit/core": "0.0.0"
+    "@mathjax/src": "4.1.3"
   },
   "devDependencies": {
+    "@readit/core": "0.0.0",
     "@types/node": "24.10.1",
     "typescript": "5.9.3",
     "vitest": "4.1.10"

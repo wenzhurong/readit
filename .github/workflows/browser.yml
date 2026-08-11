@@ -1,0 +1,85 @@
+name: browser
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Chromium 与 WebKit 承重：Windows 壳走 WebView2（Chromium）、macOS 壳走 WKWebView
+  # （WebKit），M6 要用。容器与 L4 视觉层用同一个镜像 tag，两层不会各自漂移。
+  #
+  # §0 A10：两个 job 名——l3b-element 与 l3b-editor——是决策 1 那条保留意见的兑现：
+  # 套件变红时必须自己说清是 M3 侧还是 M4 侧坏的，只拆目录做不到这件事。
+  l3b-element:
+    name: L3b-element (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.20.0'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright test --project=element-${{ matrix.browser }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: l3b-element-${{ matrix.browser }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  # 尽力而为，失败不阻塞（设计 §7.2）。这是本仓库里唯一一处把某个 job 标成建议性的，
+  # 且它是刻意的产品决策而不是把红灯调暗：Firefox 不是任何一个出货壳的引擎。
+  # test/browser-wiring.test.ts 钉住了「只此一处、只在这个 job 里」。
+  l3b-element-firefox:
+    name: L3b-element (firefox, advisory)
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.20.0'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright test --project=element-firefox
+
+  # 历史注记：这条 job 建于 Task 11，那时 browser/editor 下还没有任何 spec，靠
+  # --pass-with-no-tests 空跑保绿。Task 17（批次 7）已落地 contract/ime/scroll-sync
+  # 三个真实 spec，这条 job 现在跑的是真东西——保留该标志只是为了不让「某天把
+  # 某个 project 的 spec 临时挪走」变成一次 job 崩溃，它在有测试时不改变任何行为。
+  # 下面这段是建 job 时写的原文，描述的是计划二开工前的状态，留作沿革：
+  # browser/editor 此刻还没有 spec——Task 17 才填（§0.2）。job 先建好、允许空跑：
+  # --pass-with-no-tests 让它现在能绿，Task 17 落地 spec 之后这条 job 自然开始
+  # 承重，不需要再碰这个文件。
+  l3b-editor:
+    name: L3b-editor (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.20.0'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright test --project=editor-${{ matrix.browser }} --pass-with-no-tests

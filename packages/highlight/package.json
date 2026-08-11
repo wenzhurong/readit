@@ -1,0 +1,37 @@
+{
+  "name": "@readit/highlight",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "refresh:shiki-golden": "tsx scripts/refresh-shiki-golden.ts",
+    "refresh:starry-night-golden": "tsx scripts/refresh-starry-night-golden.ts",
+    "measure:lang-packs": "tsx scripts/measure-lang-packs.ts"
+  },
+  "dependencies": {
+    "@wooorm/starry-night": "3.10.0",
+    "hast-util-to-html": "9.0.5",
+    "shiki": "4.4.2"
+  },
+  "devDependencies": {
+    "@readit/core": "0.0.0",
+    "@shikijs/langs": "4.4.2",
+    "@types/hast": "3.0.5",
+    "@types/node": "24.10.1",
+    "hast-util-from-html": "2.0.3",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10",
+    "vscode-oniguruma": "2.0.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

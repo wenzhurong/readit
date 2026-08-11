@@ -1,0 +1,23 @@
+{
+  "//": [
+    "browser/ 是仓库里唯一需要 DOM lib 的 TypeScript：fixture 入口跑在页面里，spec 的",
+    "page.evaluate 回调也按浏览器全局类型检查。它不是 workspace，所以根 tsconfig 够不着，",
+    "而把 DOM 加进根 tsconfig 会让 test/ 与 tools/ 里的 document. 也编译通过——那正是",
+    "Phase A 同构纯度在类型层的漏洞。playwright.config.ts 挂在这里，是因为 @playwright/test",
+    "的类型引用 DOM 全局。"
+  ],
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": ["**/*.ts", "../playwright.config.ts"]
+}

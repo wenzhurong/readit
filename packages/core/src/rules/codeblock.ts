@@ -41,8 +41,7 @@ export function fenceLanguage(token: Token): string {
 }
 
 function renderBlock(token: Token, highlighter: Highlighter | null): string {
-  const code = token.content
-  const trimmed = code.replace(/\n$/, '')
+  const trimmed = token.content.replace(/\n$/, '')
   const lang = fenceLanguage(token)
   const copy = escapeAttr(trimmed)
   const line = token.attrGet('data-line')
@@ -50,7 +49,7 @@ function renderBlock(token: Token, highlighter: Highlighter | null): string {
   const scopeClass = lang === '' ? null : scopeClassFor(lang)
 
   if (scopeClass !== null) {
-    const body = highlighter?.highlight(code, lang) ?? escapeText(trimmed)
+    const body = highlighter?.highlight(trimmed, lang) ?? escapeText(trimmed)
     return (
       `<div class="highlight ${scopeClass} notranslate position-relative overflow-auto"` +
       ` dir="auto"${dataLine} data-snippet-clipboard-copy-content="${copy}">` +
@@ -62,7 +61,7 @@ function renderBlock(token: Token, highlighter: Highlighter | null): string {
   return (
     '<div class="snippet-clipboard-content notranslate position-relative overflow-auto"' +
     `${dataLine} data-snippet-clipboard-copy-content="${copy}">` +
-    `<pre${langAttr} class="notranslate"><code>${escapeText(code)}</code></pre></div>\n`
+    `<pre${langAttr} class="notranslate"><code>${escapeText(token.content)}</code></pre></div>\n`
   )
 }
 

@@ -48,3 +48,27 @@ jobs:
       # test/setup/no-network.ts severs outbound sockets inside the worker,
       # so this run is offline on every OS, including the two with no unshare.
       - run: npm test
+
+  # The wall-clock perf assertions (packages/element/test/*.perf.ts) live outside the default
+  # `npm test` on purpose — review C2: running an absolute wall-clock number as a blocking gate
+  # across a three-OS matrix, on a Windows runner that is routinely 2-5x slower on CPU-bound Node
+  # work, buys flakes rather than signal. But "outside the matrix" must not mean "outside CI":
+  # a sentinel nothing runs is strictly worse than a flaky one, because a real regression now
+  # goes unnoticed forever instead of noisily. So it runs here — once, on the OS the recorded
+  # baseline was calibrated against.
+  #
+  # This job blocks, like every other job here. ci-wiring.test.ts forbids the advisory-job key
+  # across this whole workflow — as a bare substring, so even naming it in a comment trips the
+  # guard — and that reason applies verbatim here. If this job should not block a merge, delete
+  # it and say why; do not leave a check that looks like a gate and is not.
+  perf:
+    name: perf
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.20.0'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:perf

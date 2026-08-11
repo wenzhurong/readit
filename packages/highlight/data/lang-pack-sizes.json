@@ -1,0 +1,154 @@
+{
+  "measuredAt": "2026-08-10",
+  "shiki": {
+    "package": "@shikijs/langs",
+    "version": "4.4.2",
+    "count": 361,
+    "gzip": {
+      "min": 77,
+      "p50": 1415,
+      "p90": 8164,
+      "p95": 14799,
+      "p99": 31081,
+      "max": 198843,
+      "sum": 1364281
+    },
+    "over": {
+      "16KB": 14,
+      "32KB": 3,
+      "50KB": 2,
+      "64KB": 2,
+      "100KB": 1
+    },
+    "top": [
+      {
+        "name": "emacs-lisp",
+        "raw": 792499,
+        "gzip": 198843
+      },
+      {
+        "name": "wolfram",
+        "raw": 266942,
+        "gzip": 77198
+      },
+      {
+        "name": "cpp",
+        "raw": 533914,
+        "gzip": 33226
+      },
+      {
+        "name": "objective-cpp",
+        "raw": 184402,
+        "gzip": 31081
+      },
+      {
+        "name": "php",
+        "raw": 120361,
+        "gzip": 28717
+      },
+      {
+        "name": "blade",
+        "raw": 112078,
+        "gzip": 28222
+      },
+      {
+        "name": "hack",
+        "raw": 85796,
+        "gzip": 26415
+      },
+      {
+        "name": "mdx",
+        "raw": 146296,
+        "gzip": 23534
+      },
+      {
+        "name": "objective-c",
+        "raw": 111881,
+        "gzip": 23402
+      },
+      {
+        "name": "cpp-macro",
+        "raw": 303529,
+        "gzip": 21012
+      }
+    ]
+  },
+  "starryNight": {
+    "package": "@wooorm/starry-night",
+    "version": "3.10.0",
+    "count": 719,
+    "gzip": {
+      "min": 99,
+      "p50": 1813,
+      "p90": 5994,
+      "p95": 9645,
+      "p99": 28538,
+      "max": 207978,
+      "sum": 2434720
+    },
+    "over": {
+      "16KB": 17,
+      "32KB": 3,
+      "50KB": 2,
+      "64KB": 1,
+      "100KB": 1
+    },
+    "top": [
+      {
+        "name": "source.emacs.lisp",
+        "raw": 845896,
+        "gzip": 207978
+      },
+      {
+        "name": "source.objc.platform",
+        "raw": 167429,
+        "gzip": 51725
+      },
+      {
+        "name": "source.c.platform",
+        "raw": 142998,
+        "gzip": 44604
+      },
+      {
+        "name": "source.actionscript.3",
+        "raw": 97322,
+        "gzip": 30741
+      },
+      {
+        "name": "text.html.php.blade",
+        "raw": 134679,
+        "gzip": 30711
+      },
+      {
+        "name": "source.maxscript",
+        "raw": 100062,
+        "gzip": 30380
+      },
+      {
+        "name": "source.tsx",
+        "raw": 241741,
+        "gzip": 28912
+      },
+      {
+        "name": "text.html.php",
+        "raw": 104118,
+        "gzip": 28538
+      },
+      {
+        "name": "source.ts",
+        "raw": 245688,
+        "gzip": 27983
+      },
+      {
+        "name": "source.hack",
+        "raw": 98557,
+        "gzip": 27656
+      }
+    ]
+  },
+  "gate": {
+    "built": false,
+    "copyIfEverBuilt": "这个代码块的语言包较大（<N> KB），已跳过高亮。[仍要加载]",
+    "rationale": "本项目对懒加载载荷的既定容忍度是数学包 ~677 KB gzip 与 mermaid 1–1.5 MB，两者都没有闸门。最坏的单个语法包（shiki emacs-lisp 194.2 KB gzip）比其中较小的那个还小 3.5 倍。只给三个懒加载大件里最小的那个建闸不自洽。完整论证见设计文档 §5.4.1。"
+  }
+}
