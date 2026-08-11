@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -168,5 +168,41 @@ describe('D2-9：@readit/core ↔ @readit/math 的循环工作区依赖', () => 
     ) as { dependencies: Record<string, string>; devDependencies: Record<string, string> }
     expect(math.dependencies['@readit/core']).toBeUndefined()
     expect(math.devDependencies['@readit/core']).toBe('0.0.0')
+  })
+})
+
+/**
+ * §0.2 排期偿还（批次 4 交付时 @readit/editor/src/index.ts 只有类型再导出，
+ * createEditor() 不存在，dist/editor.js 是空壳——三条分发门当时对 './editor'
+ * 全部判绿，但那是假绿，见 batch-4-report.md）。Task 17 交付 createEditor()
+ * 之后，dist/editor.js 第一次有了真实的运行时绑定；批次 6 的报告顺带记了一笔账：
+ * 「module-boundary.test.ts 是源码 AST 层的检查，不验真实打包产物；CodeMirror
+ * 176,654 B 这个数字目前没有任何测试锚定它」——这里把那笔账还上，锚在真实产物上，
+ * 不是源码层的静态分析。
+ */
+describe('createEditor() 的 codemirror 档在真实产物里仍然是懒加载的', () => {
+  it('editor.js 的静态闭包里一个 CodeMirror 的字符串指纹都不出现——它只应该活在动态 import 里', () => {
+    const closure = bundleClosure('editor.js')
+    expect(closure).toContain('createEditor')
+    for (const fingerprint of ['cm-content', 'cm-editor', 'cm-scroller', 'posAtCoords']) {
+      expect(closure, `"${fingerprint}" 出现在 editor.js 的静态闭包里——CodeMirror 被内联了`).not.toContain(
+        fingerprint,
+      )
+    }
+  })
+
+  it('CodeMirror 落在一个独立的、真正体积可观的懒加载 chunk 里，不是几百字节的桩', () => {
+    // chunk 文件名带内容哈希（esbuild splitting 产物），不能硬编码；扫目录找。
+    const chunkName = readdirSync(DIST).find((name) => /^codemirror-[\w]+\.js$/.test(name))
+    expect(chunkName, 'dist/ 下没找到 codemirror-*.js——createEditor() 是不是又变回空壳了？').toBeDefined()
+    if (chunkName === undefined) return
+    const text = read(chunkName)
+    expect(text).toContain('cm-content')
+    expect(text).toContain('posAtCoords')
+    // 176,654 B（gzip）是批次 17 的实测记录（packages/element/src/panes.ts 顶部
+    // 注释）。这里不逐字节钉压缩后的数字——esbuild/CodeMirror 补丁版本变化都会
+    // 让它漂移几十到几百字节——只钉未压缩体量的数量级：一个真实编辑器实现，
+    // 不是被裁剪成空壳的替身。
+    expect(text.length).toBeGreaterThan(400_000)
   })
 })

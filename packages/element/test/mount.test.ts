@@ -5,6 +5,22 @@ import { DARK_CSS, LIGHT_CSS } from '../src/styles/theme-css.js'
 
 const DOC = '# Hello World\n\ntext\n\n```js\nvar a = 1\n```\n'
 
+/**
+ * Task 17 把 source/split/plain 接上了真实的 createEditor()（P2）——建它要走
+ * `import('@readit/editor')` 的动态 import，在这套 vitest + vite 的模块图下
+ * 需要真实的异步 I/O 才能落地，纯微任务循环等不到。轮询到条件成立为止，
+ * 不猜一个固定时长该等多久——固定 sleep 在空闲机器上够用，但在 CI/并发负载下
+ * 会闪烁（panes.test.ts 的 waitFor() 注释有实测记录：人为加满 CPU 负载后，
+ * 固定 60ms 的旧版本能稳定复现超时）。
+ */
+async function waitFor(check: () => boolean, timeoutMs = 5000): Promise<void> {
+  const start = Date.now()
+  while (!check()) {
+    if (Date.now() - start > timeoutMs) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
+
 let hosts: HTMLElement[] = []
 
 function makeHost(): HTMLElement {
@@ -32,6 +48,7 @@ describe('mount 的默认值', () => {
       highlighter: null,
       emojiBase: 'https://github.githubassets.com/images/icons/emoji/',
       onNavigate: null,
+      loadHighlighter: null,
     })
   })
 
@@ -131,14 +148,17 @@ describe('模式状态机', () => {
   })
 
   /**
-   * 编辑器是 Task 13–17。在它接进来之前，源码窗格不是空白也不抛——按 §12
-   * 「降级必须可见」显示只读源码，并用 data-editor="none" 把这个状态说出来。
+   * Task 17 把编辑器接进来了：source 走 CodeMirror（EDITOR_KIND 表），
+   * 建它要经过 `import('@readit/editor')` 的动态 import，因此不是
+   * createKernel() 返回时就已经落地，要 flush 一拍真实的异步 I/O。
+   * 这条原本测的是「编辑器还没接入时的只读回落」，那个状态现在已经不存在——
+   * 按 panes.ts 实际提供的行为订正为「真编辑器建出来了」。
    */
-  it('编辑器未接入时源码窗格显示只读源码，并自报 data-editor="none"', () => {
+  it('source 模式异步建出真实的 CodeMirror 编辑器', async () => {
     const kernel = createKernel(makeHost(), resolveMountOptions({ value: DOC, mode: 'source' }))
-    const pre = kernel.sourcePane.querySelector('pre.readit-source-fallback')
-    expect(pre?.getAttribute('data-editor')).toBe('none')
-    expect(pre?.textContent).toBe(DOC)
+    await waitFor(() => kernel.sourcePane.querySelector('.cm-editor') !== null)
+    expect(kernel.sourcePane.querySelector('.cm-editor')).not.toBeNull()
+    expect(kernel.sourcePane.querySelector('pre.readit-source-fallback')).toBeNull()
   })
 
   it('切模式是幂等的，来回切不留残留节点', () => {
@@ -150,11 +170,64 @@ describe('模式状态机', () => {
     expect(kernel.content.querySelectorAll('h1')).toHaveLength(1)
   })
 
-  it('setValue 在 split 下同时更新两个窗格', () => {
+  it('setValue 在 split 下同时更新两个窗格', async () => {
     const kernel = createKernel(makeHost(), resolveMountOptions({ value: DOC, mode: 'split' }))
+    // split 建的是 CodeMirror（EDITOR_KIND 表），要等它异步落地才有 .cm-content
+    // 可查——sourcePane.textContent 不再是可靠的断言目标：CodeMirror 开着
+    // lineNumbers() 扩展，窗格里还有一份行号 gutter 的文本混在一起。
+    await waitFor(() => kernel.sourcePane.querySelector('.cm-content') !== null)
     kernel.setValue('# New\n')
     expect(kernel.content.querySelector('h1')?.textContent).toBe('New')
-    expect(kernel.sourcePane.textContent).toBe('# New\n')
+    expect(kernel.getValue()).toBe('# New\n')
+    expect(kernel.sourcePane.querySelector('.cm-content')?.textContent).toBe('# New')
+  })
+})
+
+/**
+ * §0.1 G4：属性归这一批（Task 17）落地，样式那一半已经在 Task 3 的 BASE_CSS 里
+ * （批次 6 只落地了触发决策，见 batch-6-report.md「§0 冲突」一节）。这里要证明
+ * 的是 `host.setAttribute('data-readit-pending', …)` 真的发生了——不是
+ * RerenderHost.setPending() 回调被调用（那条批次 6 已经用假 host 测过），是
+ * 真实宿主 DOM 节点上的真实属性。
+ */
+describe('data-readit-pending：降级可见性的另一半', () => {
+  it('缺数学渲染器时，宿主元素立刻带上 data-readit-pending="math"', () => {
+    // rerenderer.repaint() 在 createPanes() 内部同步调用，scan() → missing() →
+    // host.setPending() → kernel 的 onPending → host.dataset 全程零 await，
+    // 所以不需要 flush() 就能在 createKernel() 返回后立刻看到它。
+    const host = makeHost()
+    const kernel = createKernel(host, resolveMountOptions({ value: 'a $x$ b' }))
+    expect(host.getAttribute('data-readit-pending')).toBe('math')
+    kernel.destroy()
+  })
+
+  it('math 异步加载完成后，属性被删掉而不是留一个空字符串', async () => {
+    const host = makeHost()
+    const kernel = createKernel(host, resolveMountOptions({ value: 'a $x$ b' }))
+    expect(host.hasAttribute('data-readit-pending')).toBe(true)
+    await waitFor(() => !host.hasAttribute('data-readit-pending'))
+    // 用真实的 @readit/math 动态加载完成之后，pending 列表清空——kernel 用
+    // delete 而不是设成空字符串，':host([data-readit-pending])' 选择器认的是
+    // 「属性存在」，留一个空字符串角标不会消失。
+    expect(host.hasAttribute('data-readit-pending')).toBe(false)
+    expect(host.getAttribute('data-readit-pending')).toBeNull()
+    kernel.destroy()
+  })
+
+  it('文档不需要任何降级能力时，属性从不出现', () => {
+    const host = makeHost()
+    const kernel = createKernel(host, resolveMountOptions({ value: DOC }))
+    expect(host.hasAttribute('data-readit-pending')).toBe(false)
+    kernel.destroy()
+  })
+
+  it('缺高亮器但宿主没打算要高亮（loadHighlighter 为 null）时不报 pending', () => {
+    // rerender.ts 的 missing()：宿主没给 loadHighlighter 不算「加载中」，是一个
+    // 已经完成的选择，不该被角标提醒——DOC 带一个 ```js 围栏块。
+    const host = makeHost()
+    const kernel = createKernel(host, resolveMountOptions({ value: DOC, highlighter: null }))
+    expect(host.hasAttribute('data-readit-pending')).toBe(false)
+    kernel.destroy()
   })
 })
 

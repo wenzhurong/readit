@@ -16,6 +16,16 @@ export interface MountOptions {
   highlighter: Highlighter | null
   emojiBase: string
   onNavigate: ((path: string) => void) | null
+  /**
+   * 高亮器的异步加载器（task-17-brief「新增契约提案」第 2 条）。P1 禁止
+   * @readit/element 在运行时 import @readit/highlight，而 SPEC §5.1 又要求
+   * 「首次遇到围栏语言」才加载那份体积——两条同时成立的唯一办法是加载器
+   * 由宿主注入。默认 null：宿主没打算要高亮，rerender.ts 的 missing() 不会
+   * 把 'highlight' 报进 pending（那不是「加载中」，是一个已经完成的选择）。
+   * 与 `highlighter` 字段互补：后者是宿主直接给实例的同步路径，这个字段是
+   * 「等真的用到再去拿」的懒加载路径。
+   */
+  loadHighlighter: (() => Promise<Highlighter>) | null
 }
 
 export interface MountHandle {

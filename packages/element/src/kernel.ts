@@ -1,8 +1,9 @@
-import { GITHUB_EMOJI_BASE, render } from '@readit/core'
+import { GITHUB_EMOJI_BASE } from '@readit/core'
 import { createDisposers, type Disposers } from './disposers.js'
 import { createRoot, ownerView, type RootContext } from './shadow.js'
 import { createNavigation, type NavigationController } from './navigate.js'
-import { setHtml } from './set-html.js'
+import { createPanes, type Panes } from './panes.js'
+import { browserDeps, type PendingCapability } from './rerender.js'
 import { BASE_CSS } from './styles/base-css.js'
 import { DARK_CSS, LIGHT_CSS } from './styles/theme-css.js'
 import { createThemeController, type ResolvedTheme } from './theme.js'
@@ -19,6 +20,7 @@ export const DEFAULT_MOUNT_OPTIONS: MountOptions = {
   highlighter: null,
   emojiBase: GITHUB_EMOJI_BASE,
   onNavigate: null,
+  loadHighlighter: null,
 }
 
 export function resolveMountOptions(opts?: Partial<MountOptions>): MountOptions {
@@ -60,9 +62,9 @@ export interface Kernel {
   readonly options: MountOptions
   readonly root: RootContext
   readonly disposers: Disposers
-  /** part="content"，.markdown-body。read / split 下可见。 */
+  /** part="content"，.markdown-body。read / split 下可见，也是预览侧的滚动容器。 */
   readonly content: HTMLDivElement
-  /** 源码窗格。Task 13–17 把 createEditor() 接进这里。 */
+  /** 源码窗格。panes.ts 的 createPanes() 把 createEditor() 接在它下面。 */
   readonly sourcePane: HTMLDivElement
   readonly navigation: NavigationController
   /** 窗口内错误态。path 显示的是解析后的完整路径（设计文档 §8）。 */
@@ -71,8 +73,6 @@ export interface Kernel {
   readonly destroyed: boolean
   /** 注册一个「每次预览重渲之后」的回调，按注册顺序跑。 */
   onAfterRender(fn: () => void): void
-  /** 按当前 value / mode 重画。 */
-  rerender(): void
   getValue(): string
   setValue(value: string): void
   getMode(): Mode
@@ -127,7 +127,6 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
     errorDetail.textContent = ''
   }
 
-  let value = opts.value
   let mode: Mode = opts.mode
   let destroyed = false
 
@@ -161,50 +160,6 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
     for (const pre of content.querySelectorAll('pre')) pre.setAttribute('part', 'code-block')
   })
 
-  const renderContent = (): void => {
-    // element 里把 HTML 写进 DOM 只准走 setHtml()（唯一入口，由 set-html.ts 实现，
-    // 见 test/set-html-usage.test.ts 的源码级断言）。content 是真实 HTMLDivElement，
-    // 结构上满足 setHtml 的 HtmlSink 参数（有 innerHTML，可能有 setHTML）。
-    setHtml(
-      content,
-      render(value, {
-        inlineMath: opts.inlineMath,
-        math: opts.math,
-        highlighter: opts.highlighter,
-        emojiBase: opts.emojiBase,
-      }),
-    )
-    for (const fn of afterRender) fn()
-  }
-
-  /**
-   * 接缝：Task 13–17 在这里换成 `createEditor(kind, { parent, root, value, onChange, onScroll })`
-   * （P2），kind 按 mode 取 'plain' 或 'codemirror'。
-   *
-   * 在那之前不是空白也不抛——按 §12「降级必须可见」显示只读源码，并用
-   * data-editor="none" 把「编辑器没接进来」这个状态说出来。
-   */
-  const renderSource = (): void => {
-    sourcePane.textContent = ''
-    const pre = doc.createElement('pre')
-    pre.className = 'readit-source-fallback'
-    pre.setAttribute('data-editor', 'none')
-    pre.textContent = value
-    sourcePane.appendChild(pre)
-  }
-
-  const rerender = (): void => {
-    root.root.setAttribute('data-mode', mode)
-    const showSource = mode !== 'read'
-    const showContent = mode === 'read' || mode === 'split'
-    sourcePane.hidden = !showSource
-    content.hidden = !showContent
-    if (showSource) renderSource()
-    else sourcePane.textContent = ''
-    if (showContent) renderContent()
-    else content.textContent = ''
-  }
-
   const navigation = createNavigation(
     {
       view,
@@ -222,7 +177,40 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
     navigation.afterRender()
   })
 
-  rerender()
+  // CodeMirror 的样式注入目标：shadow 模式下是 ShadowRoot 本身（container 就是它），
+  // light DOM 逃生舱下没有 ShadowRoot 可言，退回宿主所属的 Document——与
+  // createRoot() 判定 shadow 与否用的是同一个 opts.shadow，两边不会各说各话。
+  const editorRoot: ShadowRoot | Document = opts.shadow ? (root.container as ShadowRoot) : doc
+
+  root.root.setAttribute('data-mode', mode)
+
+  const panes: Panes = createPanes({
+    content,
+    sourcePane,
+    root: editorRoot,
+    value: opts.value,
+    mode: opts.mode,
+    renderOptions: {
+      inlineMath: opts.inlineMath,
+      math: opts.math,
+      highlighter: opts.highlighter,
+      emojiBase: opts.emojiBase,
+    },
+    deps: browserDeps(opts.loadHighlighter),
+    measure: (el) => (el as HTMLElement).offsetTop,
+    disposers,
+    onPending(pending: readonly PendingCapability[]): void {
+      // §0.1 G4：属性归这一批落地——样式那一半（角标）已经在 Task 3 的
+      // BASE_CSS 里，缺的正是这个 setAttribute()。空数组代表都到齐了，删掉
+      // 属性而不是设成空字符串：CSS 选择器 :host([data-readit-pending]) 认的
+      // 是「属性存在」，空字符串仍然存在，角标不会消失。
+      if (pending.length === 0) delete host.dataset['readitPending']
+      else host.dataset['readitPending'] = pending.join(' ')
+    },
+    onPainted(): void {
+      for (const fn of afterRender) fn()
+    },
+  })
 
   const kernel: Kernel = {
     host,
@@ -240,14 +228,12 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
     onAfterRender(fn: () => void): void {
       afterRender.push(fn)
     },
-    rerender,
     getValue(): string {
-      return value
+      return panes.getValue()
     },
     setValue(next: string): void {
       assertLive()
-      value = next
-      rerender()
+      panes.setValue(next)
     },
     getMode(): Mode {
       return mode
@@ -255,7 +241,8 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
     setMode(next: Mode): void {
       assertLive()
       mode = next
-      rerender()
+      root.root.setAttribute('data-mode', next)
+      void panes.setMode(next)
     },
     setTheme(next: Theme): void {
       assertLive()
@@ -265,8 +252,7 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
       if (destroyed) return
       destroyed = true
       // 先断内容再拆监听：反过来的话最后一次事件可能打到半拆的状态上。
-      content.textContent = ''
-      sourcePane.textContent = ''
+      panes.destroy()
       clearError()
       afterRender.length = 0
       disposers.disposeAll()

@@ -14,6 +14,13 @@ const env: ContractEnv = {
     ta.value = value
     ta.dispatchEvent(new Event('input', { bubbles: true }))
   },
+  compositionTarget(parent) {
+    const ta = parent.querySelector('textarea')
+    if (ta === null) throw new Error('plain editor did not create a textarea')
+    return ta
+  },
+  // textarea 的 composing/deferred 只是简单布尔标志，合成事件足够驱动它。
+  supportsSyntheticComposition: true,
 }
 
 describe('plain 档满足 P2 的 Editor 契约', () => {

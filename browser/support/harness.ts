@@ -1,6 +1,12 @@
 import { expect, test as base, type Page } from '@playwright/test'
 
 export { expect }
+// 只有本文件（而非各个 .spec.ts）允许 `from '@playwright/test'`（见下面
+// test/browser-wiring.test.ts 的 AST 守卫）。类型层面的 Page 同样只能从这里
+// 转出去——不然任何一个 spec 想标注一个 `page: Page` 参数的独立辅助函数，
+// 就得自己写 `import type { Page } from '@playwright/test'`，那个 import
+// 声明本身的字面文本就会命中守卫的字符串扫描，不区分 import type 还是 import。
+export type { Page } from '@playwright/test'
 
 export interface MountFixtureOptions {
   readonly value: string
