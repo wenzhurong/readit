@@ -405,14 +405,15 @@ math→core 是纯类型导入却声明成了运行时依赖。今天没事，�
 
 实施期须同步改 `SPEC.md`，每条都是本设计发现的不一致：
 
-| # | 位置 | 修订 |
-|---|---|---|
-| 1 | §9.4 `mount()` 签名 | `mode` 联合类型补 `'plain'`，并定义它（轻量编辑档，textarea，不加载 CodeMirror）。**这是 SPEC 现存的一处真矛盾**：`'plain'` 在 M4 里程碑行出现却从未定义，且不在联合类型里 |
-| 2 | §9.4 `mount()` 返回对象 | 标注 `find` 属 M6，本计划不导出。**理由：计划一刚因 `readFrontmatterOptions` 是「公共 API 里的永久 no-op」吃过评审批评**——宿主读了签名接进管线，静默拿不到任何东西。加方法向后兼容，留空壳不是 |
-| 3 | §9.2 `::part()` 名单 | 本计划只开 `root` / `content` / `code-block`；`mermaid` 推迟到 M5。SPEC 自己说这些名字是「永久公开 API，加容易删是破坏性变更」，而 mermaid 容器在 M5 前不存在——现在钉名字，等 M5 结构若不同就被自己锁死 |
-| 4 | §5 包表 | `@readit/find` 标注为 M6 |
-| 5 | §5.1 体积预算表 | 「每语言 0.8–16 KB 按需」是估算，实测为 0.08–194 KB（中位 1.4 KB、p99 30.4 KB），尾部低估 12 倍。已按实测改写，并在 §5.4.1 记下体积上限闸门**不建**的完整论证 |
-| 6 | §12「语法包超体积上限 → 不高亮 + 一个『仍要加载』的显式入口」 | **经实测决定不实现**，理由见 §5.4.1：最坏语法包（194.2 KB gzip）比本项目已无条件接受的数学包懒加载（~677 KB gzip，同样无闸门）还小 3 倍以上；§5.4 原定的备用阈值（p90）会误伤 `cpp`/`php`/`jsx`/`tsx` 等常用语言，且对任何分布都必然拦下 10%，规则本身自证不成立。文案（`这个代码块的语言包较大（<N> KB），已跳过高亮。[仍要加载]`）仍照 SPEC 要求定死，记在 `packages/highlight/data/lang-pack-sizes.json` 的 `gate.copyIfEverBuilt` 字段，由 `packages/highlight/test/lang-pack-sizes.test.ts` 逐字盯住，但不导出为 API 符号（闸门未建，导出即是又一个 `readFrontmatterOptions` 式的永久 no-op）。SPEC §12 这一行需要在 SPEC.md 里改写为「已评估，决定不实现，见设计文档 §5.4.1」而非删除——删除会抹掉「为什么没做」这个信息 |
+| # | 位置 | 修订 | 状态 |
+|---|---|---|---|
+| 1 | §9.4 `mount()` 签名 | `mode` 联合类型补 `'plain'`，并定义它（轻量编辑档，textarea，不加载 CodeMirror）。**这是 SPEC 现存的一处真矛盾**：`'plain'` 在 M4 里程碑行出现却从未定义，且不在联合类型里 | ✅ Task 19 已落地 |
+| 2 | §9.4 `mount()` 返回对象 | 标注 `find` 属 M6，本计划不导出。**理由：计划一刚因 `readFrontmatterOptions` 是「公共 API 里的永久 no-op」吃过评审批评**——宿主读了签名接进管线，静默拿不到任何东西。加方法向后兼容，留空壳不是 | ✅ Task 19 已落地 |
+| 3 | §9.2 `::part()` 名单 | 本计划只开 `root` / `content` / `code-block`；`mermaid` 推迟到 M5。SPEC 自己说这些名字是「永久公开 API，加容易删是破坏性变更」，而 mermaid 容器在 M5 前不存在——现在钉名字，等 M5 结构若不同就被自己锁死 | ✅ Task 19 已落地 |
+| 4 | §5 包表 | `@readit/find` 标注为 M6 | ✅ Task 19 已落地 |
+| 5 | §5.1 体积预算表 | 「每语言 0.8–16 KB 按需」是估算，实测为 0.08–194 KB（中位 1.4 KB、p99 30.4 KB），尾部低估 12 倍。已按实测改写，并在 §5.4.1 记下体积上限闸门**不建**的完整论证 | ✅ 批次 3 已落地（早于 Task 19；本批复核措辞与实测一致，未改） |
+| 6 | §12「语法包超体积上限 → 不高亮 + 一个『仍要加载』的显式入口」 | **经实测决定不实现**，理由见 §5.4.1：最坏语法包（194.2 KB gzip）比本项目已无条件接受的数学包懒加载（~677 KB gzip，同样无闸门）还小 3.5 倍（批次 8 收尾时统一措辞——此前这一行写的是「3 倍以上」，与 §5.4.1 正文、`gate.rationale` 两处「3.5 倍」口径不一；真实测量比值是 677/194.2 ≈ 3.49，`lang-pack-sizes.test.ts` 的断言故意把守护阈值收在 3 倍留出余量，那是测试的容错带宽，不是这句话本身该用的数字）；§5.4 原定的备用阈值（p90）会误伤 `cpp`/`php`/`jsx`/`tsx` 等常用语言，且对任何分布都必然拦下 10%，规则本身自证不成立。文案（`这个代码块的语言包较大（<N> KB），已跳过高亮。[仍要加载]`）仍照 SPEC 要求定死，记在 `packages/highlight/data/lang-pack-sizes.json` 的 `gate.copyIfEverBuilt` 字段，由 `packages/highlight/test/lang-pack-sizes.test.ts` 逐字盯住，但不导出为 API 符号（闸门未建，导出即是又一个 `readFrontmatterOptions` 式的永久 no-op）。SPEC §12 这一行需要在 SPEC.md 里改写为「已评估，决定不实现，见设计文档 §5.4.1」而非删除——删除会抹掉「为什么没做」这个信息 | ✅ Task 19 已落地（SPEC §12 此前一直未同步，批次 8 实测发现并补上） |
+| 7 | §14 M4 验收行 | IME 验收线在 WebKit 上不是「已通过」，是具名覆盖缺口：WKWebView 没有等价于 CDP `Input.imeSetComposition` 的入口，四条真机组合测试整体 `test.skip`（`GAP-IME-WEBKIT`）。**缺口边界比"4 条用例跳过"更宽**——共享契约表（`packages/editor/test/contract.ts`）另按 `kind === 'plain'` 把 CodeMirror 从"组合期间 setValue 被推迟"这条契约用例里整条排除，与浏览器无关，Chromium 上也一样排除。来源：task-17-brief.md 的「新增契约提案」附言 + D2-19（docs/plans/2026-08-08-plan2-debt.md） | ✅ Task 19 已落地 |
 
 ---
 

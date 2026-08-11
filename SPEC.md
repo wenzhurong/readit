@@ -230,7 +230,7 @@ const html = render(src, opts)
 | `@readit/highlight` | 高亮 adapter + 两个实现 | @wooorm/starry-night **3.10.0** / shiki **4.4.2** |
 | `@readit/editor` | CodeMirror 源码模式（懒加载） | @codemirror/view **6.43.8**、state **6.7.1**、language **6.12.4**、commands **6.10.4**、lang-markdown **6.5.2**、**style-mod >=4.1.2** |
 | `@readit/mermaid` | 图表（Phase B，懒加载） | mermaid **11.16.1**、dompurify **3.4.13** |
-| `@readit/find` | 查找（Phase B） | 无依赖 |
+| `@readit/find` | 查找（Phase B）—— M6 | 无依赖 |
 | `shell` | Tauri 桌面壳 | tauri **2.11.5**、tauri-plugin-single-instance **2.4.3** |
 
 ### 5.1 体积预算（实测）
@@ -487,7 +487,7 @@ frontmatter 键必须**扁平且带命名空间**——扁平因为 GitHub 把 f
 
 `theme: 'auto'` 读 `getComputedStyle(host).colorScheme`——`color-scheme` 是继承属性，跨 shadow 边界，所以无论宿主设在 `:root`、`.dark` 包装器还是没设（回落 `prefers-color-scheme`）都工作。
 
-对外只开两个覆写通道：`--readit-*` 自定义属性（映射到 GitHub 的 `--fgColor-*` / `--bgColor-*` / `--color-prettylights-syntax-*`，自定义属性会继承进 shadow 树），以及 `::part()`。**`::part()` 名字是永久公开 API**——先只开 `root / content / code-block / mermaid`，加容易删是破坏性变更。
+对外只开两个覆写通道：`--readit-*` 自定义属性（映射到 GitHub 的 `--fgColor-*` / `--bgColor-*` / `--color-prettylights-syntax-*`，自定义属性会继承进 shadow 树），以及 `::part()`。**`::part()` 名字是永久公开 API**——先只开 `root` / `content` / `code-block`，加容易删是破坏性变更。**`mermaid` 推迟到 M5**：那个容器在 M5 之前根本不存在，现在钉一个名字，等 M5 真做时结构若不同就被自己锁死了。⚠️ 本条于 2026-08-09 修订，原文的名单含 `mermaid`，是设计计划二时对着一个还不存在的结构提前钉了名字。
 
 **永不写 `document.documentElement` 或 `document.body`。**
 
@@ -523,10 +523,21 @@ readit/
 
 ```ts
 mount(el, {
-  value, mode: 'read'|'source'|'split', shadow: true, theme: 'auto',
-  baseUrl, inlineMath: 'github', math: null, highlighter, onNavigate,
-}) -> { setValue, getValue, setMode, setTheme, find, destroy }
+  value, mode: 'read'|'source'|'split'|'plain', shadow: true, theme: 'auto',
+  baseUrl, inlineMath: 'github', math: null, highlighter, emojiBase, onNavigate,
+  loadHighlighter,
+}) -> { setValue, getValue, setMode, setTheme, destroy }
 ```
+
+**四个模式。** `read` 只读渲染；`source` 用 CodeMirror 编辑源码；`split` 左源码右预览；**`'plain'` 是轻量编辑档——纯 textarea，不加载 CodeMirror**，给「想能改字但不想付 176,654 B」的嵌入方。
+
+⚠️ 本条于 2026-08-09 修订。原文的 `mode` 联合类型只有三个取值，而 §14 的 M4 里程碑行写着交付「`mode:'plain'` 档」——**`'plain'` 从未被定义过，也不在联合类型里**。这是一处真矛盾，且正是计划一栽过两次的那类：实现者对着一个含义不明的词自己猜。
+
+**`find` 不在返回对象里，它属 M6**（`@readit/find`，见 §11.3）。计划一有过一个 `readFrontmatterOptions` 长期是「公共 API 里的永久 no-op」，宿主读了签名接进管线、静默拿不到任何东西。加方法是向后兼容的，留空壳不是。
+
+**`setValue()` 在 CodeMirror 组合期间的语义（`source`/`split` 档；`plain` 档是原生 `<textarea>`，不受影响）。** 若宿主在用户正处于输入法组合过程中调用 `setValue()`，写入被推迟到 `compositionend` 才落地，落地时是**整体替换文档**——不是把新值拼接在组合结果之后，也不会保留用户刚提交的那段输入法文本。也就是说：若外部 `setValue()` 恰好在用户提交组合文本的同一时刻落地，那段刚提交的文字会被静默覆盖。
+
+这是刻意选择的语义，不是疏漏：推迟写入只是为了不打断 CodeMirror 自身的组合状态机（组合期间提前落笔会打断 `view.composing`），不是为了保留用户输入——`setValue()` 在任何时刻都是权威性的整体替换，普通打字过程中被外部 `setValue()` 覆盖同样会丢字，输入法只是让这件事更容易被注意到。**协同编辑同步、外部内容轮询等场景下，中日韩用户首当其冲。** 若某个宿主真的需要"组合期间的输入不能丢"这条更强的保证，这不是一个可以在 `setValue()` 内部悄悄加的修复：外部写入与用户正在输入的内容如何合并（谁的光标位置优先、新文本插在哪）本身就是一个需要产品裁决的问题，而不是把推迟窗口拉长或做一次自动拼接就能回答的。⚠️ 本条于批次 8（SPEC 同步）补充记录——这是 SPEC 第一次为这个行为写下明确措辞，此前它只活在一条测试断言与代码注释里（`packages/editor/src/codemirror.ts` 的 `applyDeferred()`；断言见 `browser/editor/ime.spec.ts`）。
 
 **`destroy()` 是强制的**，必须拆掉 CodeMirror view、所有 ResizeObserver/MutationObserver、matchMedia 监听。在长生命周期的宿主 SPA 里漏掉这些是可嵌入组件的经典 bug。
 
@@ -607,6 +618,8 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 
 ### 11.3 查找
 
+**归属：M6。** 查找的实现（`@readit/find`、CSS Custom Highlight API、shadow root 内的 `::highlight` 规则）不在计划二范围内；`mount()` 的返回对象在 M6 之前不含 `find`。
+
 **Shadow DOM 不是问题**——三个引擎的原生 find-in-page 都会遍历 open（乃至 closed）shadow root，WebKit 自 2017 年起如此。
 
 **真问题是 Tauri/WKWebView 在 macOS 上压根没有查找 UI**（tauri#9385，2024-04 开至今 needs-triage）。按 Cmd+F 什么都不会发生。**这是 v1 的实际阻塞项，且没人会替我们修。**
@@ -637,7 +650,7 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 | LaTeX 非法 | `noerrors`/`noundefined` → 显示原始源码文本。**不能**是空元素，不能抛 |
 | Mermaid 语法错 | 显示源码 + 错误提示框（GitHub 也是这样） |
 | 围栏语言未知 | 朴素 `<pre>`，不高亮，不报错 |
-| 语法包超体积上限 | 不高亮 + 一个"仍要加载"的显式入口。**这是产品决策不是埋点**，阈值与文案在实现前定死 |
+| 语法包超体积上限 | **已评估，决定不实现**，见设计文档 §5.4.1。最坏语法包（shiki `emacs-lisp`，194.2 KB gzip）比本项目已无条件接受、同样没有闸门的数学包懒加载（~677 KB gzip）还小 3.5 倍，只给三个懒加载大件里最小的那个建闸不自洽；备用的 p90 阈值方案会误伤 `cpp`/`php`/`jsx`/`tsx` 等常用语言。文案仍照原计划定死（`这个代码块的语言包较大（<N> KB），已跳过高亮。[仍要加载]`），逐字记在 `packages/highlight/data/lang-pack-sizes.json` 的 `gate.copyIfEverBuilt`，由 `packages/highlight/test/lang-pack-sizes.test.ts` 盯住，但闸门未建，不导出为 API 符号 |
 | 相对跳转文件不存在 | 窗口内错误态，显示解析后的完整路径，后退键仍可用 |
 | 原始 HTML | 唯一逃生舱 `allowDangerousHtml: true`（名字在调用处与代码评审中都该读起来像危险品）。**没有 `sanitize: false`** |
 | 卫生化边界 | 见 §6.1 |
@@ -733,10 +746,17 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 | **M1** | Phase A 引擎 + L1 + 归一化器 + L2 + oracle 刷新脚本 | 672/672 GFM 减白名单；语料**全部通过，或失配已具名入棘轮台账并附不可修的理由**（见 §15 第 10 条） |
 | **M2** | 美元护栏 + 数学 | 159 条护栏语料 154 对、5 条具名偏离；数学黄金文件 + **顺序置换测试**过 |
 | **M3** | element + Shadow DOM + L3b + 高亮双默认 | 敌意宿主 fixture 下渲染不变；同页两实例测试过 |
-| **M4** | 编辑器 + 滚动同步 + `mode:'plain'` 档 | IME 组合测试过 |
+| **M4** | 编辑器 + 滚动同步 + `mode:'plain'` 档 | IME 组合测试过（**若 Playwright 无法复现真实输入法行为，降级为手工验证并具名记录为覆盖缺口**——见计划二设计 §4.4） |
 | **M5** | Mermaid | 结构断言 + 截图；**不入字节快照** |
 | **M6** | 壳：文件关联、单实例、`readit://`、导航、查找、文件监听、更新器 | 双平台**真引擎**冒烟 |
 | **M7** | 签名分发 | 见下 |
+
+⚠️ **M4 的 IME 验收线实际落地情况（2026-08-09 批次 7 实测，本条 2026-08-10 补记）：Chromium 可自动化验证，WebKit 是具名覆盖缺口，且缺口的边界比"4 条用例跳过"更宽。** Chromium 走 CDP `Input.imeSetComposition` + `Input.insertText` 真实驱动组合，不是 `dispatchEvent()` 自我肯定。WebKit 侧：
+
+1. WKWebView 没有等价于 CDP `Input.imeSetComposition` 的入口，四条真机组合测试在 WebKit 上整体 `test.skip`（`GAP-IME-WEBKIT`）。
+2. **更宽的那一层**：CodeMirror 与"组合期间的 `setValue()` 被推迟"这条契约用例，在共享契约表（`packages/editor/test/contract.ts`）里就已经按 `kind === 'plain'`（`browser/fixtures/entry.ts`）把 CodeMirror **整条排除**——这与浏览器无关，Chromium 上也一样：CodeMirror 6 的 `view.composing` 只在真的观察到一次组合期间的文本变更时才置真，`dispatchEvent()` 派发的合成事件驱动不了它。
+
+两条排除叠加的净效果：**CodeMirror + WebKit 这个组合下，"组合期间的 `setValue()` 被推迟"这条契约行为没有任何自动化通道验证**，不只是"4 条 CDP 用例跳过"这一层。补偿手段是手工验证，目前尚未有人执行并记录结果——这是一处已知的、具名的覆盖缺口，不是已经完成的验证。
 
 ### 实施计划的切分
 
