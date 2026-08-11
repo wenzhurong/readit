@@ -2,6 +2,14 @@ import { defineReadit, mount } from '@readit/element'
 import { createEditor } from '@readit/editor'
 import type { EditorKind } from '@readit/editor'
 import { editorContractCases, runAllCases } from '../../packages/editor/test/contract.js'
+// 跨包边界的相对 import，同 `contract.ts` 那一条（上面）——`set-html.ts` 不在
+// packages/element/package.json 的 "exports" 里（不该被宿主直接 import），
+// 但 browser/ 不受 test/import-direction.test.ts 的扫描面覆盖（那条守卫只扫
+// packages/*/src，browser/ 是测试基础设施，不是发布产物），跟 contract.ts
+// 那条边同一个道理。`sanitizeSurvivesTags()`（下面）要测的正是 `createSetHtml`/
+// `readEnv` 这两个函数本身有没有把 EXTRA_ELEMENTS/TIER2_EXTRA_TAGS 真的接上，
+// 不重新实现一遍消毒器接线。
+import { createSetHtml, readEnv } from '../../packages/element/src/set-html.js'
 
 type MountOpts = NonNullable<Parameters<typeof mount>[1]>
 type Handle = ReturnType<typeof mount>
@@ -21,6 +29,22 @@ export interface ReaditFixtureApi {
    * element 的挂载管线，用一个游离的 scratch 容器 + document 当 root 即可。
    */
   runEditorContract(kind: EditorKind): Promise<string[]>
+  /**
+   * 终审 ②：对每个给定标签名，用**真实生产配置**的 `setHtml()`（`readEnv()` 读
+   * 当前页面的真实环境、`createSetHtml()` 接上 EXTRA_ELEMENTS/EXTRA_ATTRIBUTES/
+   * TIER2_EXTRA_TAGS/TIER2_EXTRA_ATTR，与 kernel.ts 调用的是同一个函数）探测
+   * 标签存不存活，不是重新实现一遍消毒器接线去猜。哪一级生效由页面当前的真实
+   * `Element.setHTML`/`trustedTypes` 存在与否决定（跟 kernel.ts 完全一致）——
+   * 调用方想强制第 2 级就在页面加载前 `Reflect.deleteProperty(Element.prototype,
+   * 'setHTML')`（`sanitize-tier2.spec.ts`/`trusted-types.spec.ts` 的既有做法）。
+   *
+   * 表格行/单元格系标签（tbody/tfoot/thead/tr/td/th）需要 `<table>` 包一层
+   * 探测，否则 HTML 解析器自己（不是消毒器）在「in body」插入模式下会直接
+   * 丢弃这些开始标签（HTML5 树构建算法逐字如此）——那样测出的是解析器的丢弃，
+   * 不是消毒器的允许名单，会污染结果。`source` 用更贴近真实用法的
+   * `<picture><source srcset>` 组合探测，而不是孤立的 `<source>`。
+   */
+  sanitizeSurvivesTags(tags: string[]): Record<string, boolean>
 }
 
 const handles = new Map<string, Handle>()
@@ -86,6 +110,22 @@ const api: ReaditFixtureApi = {
     const failures = await runAllCases(cases)
     scratch.remove()
     return failures
+  },
+  sanitizeSurvivesTags(tags) {
+    const inject = createSetHtml(readEnv())
+    const TABLE_CONTEXT = new Set(['tbody', 'tfoot', 'thead', 'tr', 'td', 'th'])
+    const probeHtmlFor = (tag: string): string => {
+      if (tag === 'source') return '<picture><source srcset="a.png" data-probe="1"><img src="b.png"></picture>'
+      const inner = `<${tag} data-probe="1">inner</${tag}>`
+      return TABLE_CONTEXT.has(tag) ? `<table>${inner}</table>` : inner
+    }
+    return Object.fromEntries(
+      tags.map((tag) => {
+        const div = document.createElement('div')
+        inject(div, probeHtmlFor(tag))
+        return [tag, div.querySelector(tag) !== null]
+      }),
+    )
   },
 }
 

@@ -59,6 +59,38 @@ export interface SanitizerCtorLike {
  * math-renderer 数学降级块、`<details>`）跑一遍 `@readit/core` 的 `render()`，
  * 用 `DOMParser` 解析出「期望」的元素与属性集合，再用下面这份配置跑一遍
  * `setHTML()`，逐元素逐属性 diff 到零差异（诊断脚本与命令见 batch-5-report.md）。
+ *
+ * ## 终审复审（D2-2x）：批次 8 的诊断只覆盖了 readit 自己规则产生的标记，漏了
+ * 用户手写原始 HTML 那一整个轴
+ *
+ * 上面那次诊断的语料全部来自 readit 自己的渲染规则（表格、锚点、alert、任务
+ * 列表、emoji、数学降级、代码块、`<details>`）——但 Phase A 的 `sanitizeTree()`
+ * （`@readit/core` 的 `sanitize.ts`，用 `hast-util-sanitize` 的 `defaultSchema`）
+ * 对**用户在 Markdown 里手写的原始 HTML** 是按 `defaultSchema.tagNames` 那
+ * 53 个标签放行的，这批标签此前只抽样测过 `<details>`/`<summary>` 一对，
+ * 其余 51 个从未被诊断覆盖过。
+ *
+ * 诊断先用 `browser/fixtures/entry.ts` 一个一次性、跑完即删的探测函数
+ * （bare 默认配置，不传 sanitizer/ADD_TAGS）对全部 53 个标签逐一实测「浏览器
+ * 原生 `Element.setHTML()` 的裸默认配置认不认识」，命令与完整输出见
+ * final-fix-report.md ②；表格行/单元格系标签（tbody/tfoot/thead/tr/td/th）
+ * 额外包一层 `<table>` 探测——不这样的话 HTML 解析器自己（不是消毒器）会在
+ * 「in body」插入模式下直接丢弃这些开始标签，测出来的是解析器的丢弃、不是
+ * 消毒器的允许名单。结果：53 个里有 8 个不认识——`details`/`img`/`input`/
+ * `summary` 已经在上面这份名单里了，新增的 4 个是 `picture`、`source`、
+ * `strike`、`tt`（跟终审已经手工核实过的反例逐一对上）。第 2 级（DOMPurify）
+ * 裸默认配置对全部 53 个标签都认识，不用补（`TIER2_EXTRA_TAGS` 不变，见该
+ * 常量新增的说明）。补齐后的回归覆盖是永久的：`browser/fixtures/entry.ts`
+ * 的 `sanitizeSurvivesTags()` 用**这份真实生产配置**逐个探测，
+ * `browser/element/sanitize-raw-html-tags.spec.ts` 钉住全部 53 个标签在
+ * 两级下都存活。
+ *
+ * `source` 额外带 `srcset`：Phase A 对它的属性放行表只有这一个
+ * （`defaultSchema.attributes.source === ['srcSet']`，`node_modules/
+ * hast-util-sanitize` 核过），不是全局属性（不在 `defaultSchema.attributes['*']`
+ * 里），漏了它 `<picture><source srcset="...">` 会剩一个没有 `srcset` 的空标签。
+ * `picture`/`strike`/`tt` 在 Phase A 里没有元素专属属性表（只吃全局属性），
+ * 不需要 `attributes` 字段，跟 `summary` 同款。
  */
 const EXTRA_ELEMENTS: readonly SanitizerElementEntry[] = [
   // 浏览器默认 Sanitizer 完全不认识 <img>——Phase A 渲染的每一张图片
@@ -83,6 +115,12 @@ const EXTRA_ELEMENTS: readonly SanitizerElementEntry[] = [
   // 此前既不在 EXTRA_ELEMENTS 里、也没有被 batch-5 的诊断覆盖到，是本次重做诊断时
   // 顺带发现的、与第 2 级同源的第 1 级既有缺口，不是本次改动引入的回归。
   { name: 'g-emoji', namespace: 'http://www.w3.org/1999/xhtml', attributes: [{ name: 'alias' }] },
+  // 终审复审（D2-2x，本文件头部大注释）：用户手写原始 HTML、Phase A 的
+  // defaultSchema 放行、浏览器原生 Sanitizer 裸默认配置不认识的 4 个标签。
+  { name: 'picture' },
+  { name: 'source', attributes: [{ name: 'srcset' }] },
+  { name: 'strike' },
+  { name: 'tt' },
 ]
 
 /** 同上，覆盖的是全局属性名单（浏览器默认对所有元素都放行的那一份）。 */
@@ -128,6 +166,17 @@ const EXTRA_ATTRIBUTES: readonly SanitizerNameEntry[] = [
  *
  * `markdown-accessiblity-table`/`math-renderer` 两个已知名字继续保留在这里，
  * 不是因为侥幸猜对，是因为它们同样在这次重做的诊断里被验证仍然需要。
+ *
+ * ## 终审复审（D2-2x）：`defaultSchema.tagNames` 那 53 个标签，第 2 级不用补
+ *
+ * 跟 `EXTRA_ELEMENTS` 头部大注释同一次诊断：一次性探测函数对全部 53 个
+ * 标签在 DOMPurify **裸默认配置**（不传 `ADD_TAGS`）下逐一实测，Chromium
+ * （`Reflect.deleteProperty` 逼走第 1 级）与 WebKit（天然选中第 2 级）结果
+ * 一致——53 个全部存活，一个都不用加（命令与完整输出见
+ * final-fix-report.md ②）。DOMPurify 的默认 HTML 允许名单本来就比浏览器
+ * 原生 Sanitizer 的默认名单宽（`strike`/`tt`/`picture`/`source` 这类 legacy
+ * 或较新标签它都认），第 1 级需要补的 4 个标签在这里不是缺口。回归覆盖同样
+ * 是永久的，见 `EXTRA_ELEMENTS` 头部大注释末尾指到的那两处。
  */
 // 不用 readonly：DOMPurify 3.4.13 自己的 Config.ADD_TAGS/ADD_ATTR 类型是可变
 // string[]，与本文件其余名单（EXTRA_ELEMENTS/EXTRA_ATTRIBUTES）用 readonly
