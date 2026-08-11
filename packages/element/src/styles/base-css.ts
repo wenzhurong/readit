@@ -27,10 +27,16 @@ export const BASE_CSS = `
 .readit-error-detail:empty { display: none; }
 
 /*
- * §0.1 G4：data-readit-pending 的可见样式——降级角标。属性本身由 Task 15 设置
- * （异步高亮器/数学渲染器还没准备好时挂在对应节点上），这里只提供让它「长得出来」
- * 的那一半；两半缺一，"降级必须可见" 就是一句空话。用 ::after 加一个小角标而不是
- * 改变宿主节点的布局盒子，避免内容到达后再次重排导致的跳动。
+ * §0.1 G4：data-readit-pending 的可见样式——降级角标。属性本身由 Task 17 设置
+ * （批次 6 评审 I2 订正：packages/element/src/rerender.ts 全文件零 DOM 依赖、
+ * 从不调 setAttribute——Task 15 只定义 RerenderHost.setPending() 这个回调
+ * 契约与触发时机（异步高亮器/数学渲染器还没准备好时该报什么），按 §0 A8 它不拥有
+ * 任何宿主 DOM 节点，物理上也拿不到节点可写。真正把这个回调接上宿主元素、写
+ * element.setAttribute('data-readit-pending', ...) 的是 Task 17 的 kernel 接线；
+ * 在那之前，本文件这条样式挂在一个永远不会被设上的属性上，"降级必须可见" 在
+ * Task 17 落地前并不成立），这里只提供让它「长得出来」的那一半；两半缺一，
+ * "降级必须可见" 就是一句空话。用 ::after 加一个小角标而不是改变宿主节点的
+ * 布局盒子，避免内容到达后再次重排导致的跳动。
  */
 [data-readit-pending] { position: relative; }
 [data-readit-pending]::after {
