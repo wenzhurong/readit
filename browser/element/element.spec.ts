@@ -141,6 +141,26 @@ test('同页两个实例互不干扰（同源样式表隔离的行为断言，�
   expect(after.bColor).toBe(both.bColor)
 })
 
+/**
+ * 终审发现：这条循环此前全程只用 `mode: 'read'`，压根没切到编辑器模式——
+ * 跟 `packages/element/test/leak.test.ts` 的同一批发现是同一个漏洞形状，只是
+ * 在真机层面重犯了一遍。修法是让循环也过 split/source，并且编辑器档真的
+ * `waitFor` 到 CodeMirror 建出来再 destroy（不 await 就 destroy 等于从未给过
+ * 它泄漏的机会）。
+ *
+ * 这里不会重犯 `leak.test.ts` 那条撞见的问题（CM6 自己 contentDOM 上的
+ * ~20 个原生事件从不被显式 `removeEventListener`，会把裸探针的「listeners
+ * 归零」淹没）：`INSTRUMENT`（harness.ts）从设计时就只数 `window`/
+ * `document`/`MediaQueryList` 三层，shadow 树内部节点（CodeMirror 的
+ * contentDOM 正是这一层）本来就不数（harness.ts 的注释：「随树一起死，数了
+ * 只是噪声」）。CodeMirror 6.43.8 自己在这三层里注册的东西——
+ * `DOMObserver.addWindowListeners()` 的 window resize/beforeprint/scroll +
+ * document.selectionchange，`resizeScroll`（一个 `ResizeObserver`）——都在它
+ * 自己的 `destroy()`（`removeWindowListeners()`/`resizeScroll.disconnect()`）
+ * 里显式清理（node_modules/@codemirror/view/dist/index.js 源码读过），所以
+ * 「50 次之后归零」在这三层上是真实、可达的不变量，不是又一次「测不到真东西
+ * 的断言」。
+ */
 test('50 次挂载/销毁之后，监听器与 observer 全部归零', async ({ page }) => {
   await page.goto('/host.html')
 
@@ -156,10 +176,42 @@ test('50 次挂载/销毁之后，监听器与 observer 全部归零', async ({ 
   ).toBeGreaterThan(sum(before))
   await page.evaluate((h) => { window.readitFixture.destroy(h) }, id)
 
+  // 第二条反空断言，专测编辑器模式：证明 split 挂载确实产生了仪表看得见的东西
+  // （上面那条只覆盖了 read，从未证明过编辑器模式下仪表不是恰好全部记零）。
+  const beforeEditor = await readLeaks(page)
+  const editorId = await page.evaluate(
+    (v) => window.readitFixture.mount('a', { value: v, mode: 'split' }),
+    DOC,
+  )
+  await page.waitForFunction(() => document.getElementById('a')?.shadowRoot?.querySelector('.cm-content') != null)
+  const duringEditor = await readLeaks(page)
+  expect(
+    sum(duringEditor),
+    'split 模式挂载没有产生任何被仪表看见的监听器或 observer；仪表本身可能不足以覆盖编辑器模式',
+  ).toBeGreaterThan(sum(beforeEditor))
+  await page.evaluate((h) => { window.readitFixture.destroy(h) }, editorId)
+
   const baseline = await readLeaks(page)
-  await page.evaluate((v) => {
+  await page.evaluate(async (v) => {
+    const waitFor = (check: () => boolean, timeoutMs = 5000): Promise<void> =>
+      new Promise((resolve) => {
+        const start = Date.now()
+        const tick = (): void => {
+          if (check() || Date.now() - start > timeoutMs) {
+            resolve()
+            return
+          }
+          setTimeout(tick, 10)
+        }
+        tick()
+      })
+    const modes = ['read', 'split', 'source'] as const
     for (let i = 0; i < 50; i += 1) {
-      const h = window.readitFixture.mount('a', { value: v, mode: 'read', theme: 'auto' })
+      const mode = modes[i % modes.length]
+      const h = window.readitFixture.mount('a', { value: v, mode, theme: 'auto' })
+      if (mode !== 'read') {
+        await waitFor(() => document.getElementById('a')?.shadowRoot?.querySelector('.cm-content') != null)
+      }
       window.readitFixture.destroy(h)
     }
   }, DOC)
