@@ -14,7 +14,6 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@readit/core": "0.0.0",
     "@types/node": "24.10.1",
     "happy-dom": "20.11.2",
     "typescript": "5.9.3",
