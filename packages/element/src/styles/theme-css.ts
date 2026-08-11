@@ -15,5 +15,5 @@ const RULES = ".markdown-body {\n  /** CSS default easing. Use for hover state c
 export const LIGHT_CSS = `${RULES}\n\n${CSS_BRIDGE_LIGHT}\n`
 export const DARK_CSS = `${RULES}\n\n${CSS_BRIDGE_DARK}\n`
 
-export const LIGHT_CSS_BYTES = 30933
-export const DARK_CSS_BYTES = 30918
+export const LIGHT_CSS_BYTES = 30956
+export const DARK_CSS_BYTES = 30940

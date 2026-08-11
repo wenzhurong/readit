@@ -7,13 +7,33 @@ const read = (rel: string): string => (existsSync(new URL(rel, root)) ? readFile
 
 const IMAGE = 'mcr.microsoft.com/playwright:v1.62.1-noble'
 
+const baselineDir = new URL('browser/__screenshots__/', root)
+const hasBaselines = existsSync(baselineDir) && readdirSync(baselineDir).some((f) => f.endsWith('.png'))
+const inCI = process.env.CI !== undefined
+
+/**
+ * 协调者裁决（批次 5 评审回来后）：这个文件此前把「接线对不对」与「基线存不存在」
+ * 混在一起断言。干净 clone 上（本机没有 docker，没有生成基线）`npm test` 因此
+ * 默认带一条红，会毒化后续每一批开工前记的失败集基线读数——协调者自己已经因为
+ * 误读一次红套件栽过。
+ *
+ * 拆成两层：
+ *  - 接线断言（project 名、CI job 名、SHOTS 名单形状、assertBaselineHost() 那道
+ *    容器闸……）不依赖基线是否存在，始终跑。
+ *  - 基线存在性断言（PNG 文件名单恰好等于 SHOTS）只在「基线目录非空」或
+ *    「环境变量表明在 CI」时才跑——本地没跑过 visual:baseline 时用 skipIf 具名
+ *    跳过（不是整条 describe 都不跑），CI 里即使基线真的缺失也不会被静默跳过，
+ *    仍然会照常红，不是「不要简单地把整条 skip 掉」这条原话要防的那种做法。
+ */
 describe('L4 的截图预算', () => {
-  it('基线不超过 SPEC §13 的 12 张', () => {
-    const dir = new URL('browser/__screenshots__/', root)
-    const pngs = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.png')).sort() : []
-    expect(pngs.length).toBeLessThanOrEqual(12)
-    expect(pngs).toEqual(SHOTS.map((s) => `${s.name}.png`).sort())
-  })
+  it.skipIf(!hasBaselines && !inCI)(
+    '基线不超过 SPEC §13 的 12 张（本地未生成基线时跳过——npm run visual:baseline 需要 docker，待 CI 首次生成）',
+    () => {
+      const pngs = existsSync(baselineDir) ? readdirSync(baselineDir).filter((f) => f.endsWith('.png')).sort() : []
+      expect(pngs.length).toBeLessThanOrEqual(12)
+      expect(pngs).toEqual(SHOTS.map((s) => `${s.name}.png`).sort())
+    },
+  )
 
   it('每张基线都被两个宿主页各断言一次', () => {
     // 干净页与敌意页共用同一个基线文件名，所以「敌意宿主下渲染不变」是逐像素的等式，

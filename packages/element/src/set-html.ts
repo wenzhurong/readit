@@ -106,6 +106,18 @@ const EXTRA_ATTRIBUTES: readonly SanitizerNameEntry[] = [
  *
  * `dataAttributes: true`：`data-line`（滚动同步用）、`data-footnote-ref` 等一批
  * `data-*` 没有必要逐个列举，浏览器自己就有这个开关。
+ *
+ * **`allowDangerousHtml: true` 下的限定**（评审 Minor，值得写清楚而不是留给人猜）：
+ * 那个模式的契约是 `@readit/core` 的 `sanitize.ts` 自己定的——`applyRawHtmlPolicy()`
+ * 明确「不跑消毒器，`user-content-` 前缀之外不做任何过滤」，调用方对内容的可信度
+ * 全权负责，这不是本文件能收窄或放宽的边界。但**打开这份配置之前**，第 1 级的
+ * 默认 Sanitizer 会顺带把 `style`/`class`/`id`/`target`/`rel`/`data-*` 也剥掉——
+ * 那是它整体过严的副作用，不是刻意的第二道防线，而现在这份配置显式放行了它们
+ * （EXTRA_ATTRIBUTES + `dataAttributes: true`）。净效果：`allowDangerousHtml: true`
+ * 模式下，这几个属性会原样穿透到 DOM 上。这打开的是 **CSS 注入面**（比如
+ * `style="..."` 能做遮罩劫持、追踪像素、破坏版面），不是脚本执行面——
+ * `<script>`、事件处理器属性、`<iframe>`/`<object>` 依旧被拦，`javascript:`
+ * 协议依旧受浏览器自己的协议白名单约束，都没有变。
  */
 function buildTier1Sanitizer(ctor: SanitizerCtorLike): SanitizerInstanceLike {
   const base = new ctor().get()

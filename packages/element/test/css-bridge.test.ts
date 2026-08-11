@@ -29,11 +29,29 @@ interface Decl {
   name: string
   value: string
 }
+
+/**
+ * 抓的是 base/dark/light 三段里的**每一条声明**，不只是自定义属性。
+ *
+ * 评审 Important 1：早先这里（与生成脚本一样）只匹配 `--*`，漏了两个媒体块里
+ * 各恰好一条的非自定义属性声明——`color-scheme: dark` / `color-scheme: light`。
+ * 这条测试与生成脚本共享同一条「只看 `--*`」的假设，是写检查与被检查物同源的
+ * 盲区：生成脚本漏抬 color-scheme 时，这里因为用的是同一个过滤条件，一样
+ * 看不出来。改成不分是否 `--` 前缀、抓每一条声明，两条断言从「每个变量都有桥」
+ * 扩成「源媒体块里的每一条声明都出现在产物里」，才不会再有这个盲区。
+ *
+ * `[\w-]+` 而非 `[a-zA-Z-]+`：自定义属性名里常见数字（`--base-size-16` 这类），
+ * 少了 `\w` 的数字支持会把它们静默漏掉——这是这条正则本身在改写过程中踩过的坑，
+ * 就是 Important 1 描述的那类「盲区」的一个具体例子，如实记在这里。
+ */
 function declarationsOf(text: string): Decl[] {
-  return [...text.matchAll(/^\s*(--[a-zA-Z][\w-]*)\s*:\s*([^;]+);/gm)].map((m) => ({
+  return [...text.matchAll(/^\s*([\w-]+)\s*:\s*([^;]+);/gm)].map((m) => ({
     name: m[1]!,
     value: m[2]!.trim(),
   }))
+}
+function isCustomProperty(name: string): boolean {
+  return name.startsWith('--')
 }
 function readitNameOf(cssVar: string): string {
   const bare = cssVar.slice(2)
@@ -51,6 +69,13 @@ function mergedTheme(themeText: string): Map<string, string> {
 const lightExpected = mergedTheme(lightText)
 const darkExpected = mergedTheme(darkText)
 
+/** 只取自定义属性那部分——`--readit-*` 桥只针对它们，`color-scheme` 这类普通属性不桥。 */
+function customPropertiesOf(merged: Map<string, string>): Map<string, string> {
+  return new Map([...merged].filter(([name]) => isCustomProperty(name)))
+}
+const lightCustom = customPropertiesOf(lightExpected)
+const darkCustom = customPropertiesOf(darkExpected)
+
 /**
  * SPEC §9.2：「对外只开两个覆写通道——`--readit-*` 自定义属性与 `::part()`。」
  *
@@ -59,14 +84,38 @@ const darkExpected = mergedTheme(darkText)
  * 所以断言是「上游声明的每一个变量都有桥」，不是「有一些桥」。
  */
 describe('--readit-* 覆写通道', () => {
-  it('上游合并版声明的每个自定义属性都有桥，明暗两份各一条，一个不漏', () => {
-    expect(lightExpected.size, 'light 侧应合并出大量变量').toBeGreaterThan(20)
-    expect(darkExpected.size, 'dark 侧应合并出大量变量').toBeGreaterThan(20)
+  it('上游合并版每一段声明的每一条都出现在产物里——自定义属性走桥，其余原样抄一份', () => {
+    // 评审 Important 1 扩的范围：不再只查 --* 有没有桥，连 color-scheme 这类
+    // 非自定义属性也要求「原样出现在产物里」——它不需要桥，但必须在场，否则
+    // theme: 'dark' 下浏览器原生控件（任务列表复选框、<pre> 滚动条、表单控件）
+    // 会按浅色渲染，这正是 Important 1 抓到的那次真实回退。
+    expect(lightExpected.size, 'light 侧应合并出大量声明').toBeGreaterThan(20)
+    expect(darkExpected.size, 'dark 侧应合并出大量声明').toBeGreaterThan(20)
+    // 反空断言：这条测试要真的覆盖到非自定义属性，而不是巧合地全是 --*。
+    expect([...lightExpected.keys()].some((n) => !isCustomProperty(n)), '语料失真：上游合并版里应该有非自定义属性声明（color-scheme）').toBe(true)
+    expect([...darkExpected.keys()].some((n) => !isCustomProperty(n))).toBe(true)
 
-    const missingLight = [...lightExpected.keys()].filter((name) => !CSS_BRIDGE_LIGHT.includes(`${name}:`))
-    const missingDark = [...darkExpected.keys()].filter((name) => !CSS_BRIDGE_DARK.includes(`${name}:`))
-    expect(missingLight, 'CSS_BRIDGE_LIGHT 有变量没有桥').toEqual([])
-    expect(missingDark, 'CSS_BRIDGE_DARK 有变量没有桥').toEqual([])
+    const checkPresence = (expected: Map<string, string>, bridge: string, label: string): void => {
+      const missing = [...expected.keys()].filter((name) => {
+        if (isCustomProperty(name)) return !bridge.includes(`${name}:`)
+        // 非自定义属性原样抄一份：`  color-scheme: dark;` 逐字出现，不带 var()。
+        return !bridge.includes(`${name}: ${expected.get(name)!};`)
+      })
+      expect(missing, `${label} 缺了这些声明`).toEqual([])
+    }
+    checkPresence(lightExpected, CSS_BRIDGE_LIGHT, 'CSS_BRIDGE_LIGHT')
+    checkPresence(darkExpected, CSS_BRIDGE_DARK, 'CSS_BRIDGE_DARK')
+  })
+
+  it('color-scheme 具体核一遍：不是桥、是原样声明，且明暗各自的值正确', () => {
+    // 上一条断言用的是通用逻辑，这条钉死这个具体值，防止「missing 列表恰好是空的
+    // 但内容其实错了」这种通用断言测不出的形态（比如 color-scheme 被错误地也套上
+    // 了 var(--readit-...) 包装——那样上一条的非自定义属性分支就不会命中它，
+    // 但它也不会出现在自定义属性分支要求的 var() 形态里，两头都会漏判）。
+    expect(CSS_BRIDGE_LIGHT).toContain('  color-scheme: light;')
+    expect(CSS_BRIDGE_DARK).toContain('  color-scheme: dark;')
+    expect(CSS_BRIDGE_LIGHT).not.toMatch(/color-scheme:\s*var\(/)
+    expect(CSS_BRIDGE_DARK).not.toMatch(/color-scheme:\s*var\(/)
   })
 
   it('每个桥都是 var(--readit-X, 原值) 的形式，不改默认行为', () => {
@@ -82,6 +131,8 @@ describe('--readit-* 覆写通道', () => {
     // 桥接不得改变默认外观。对每个变量比对 fallback 与「base ++ 主题专属，
     // 后者覆盖前者」合并出来的值——不是跟单条 dark/light 块本身比，因为
     // 10 个明暗共享的基础变量（--base-size-* 等）只在基础块里声明一次。
+    // 只比自定义属性（lightCustom/darkCustom）——color-scheme 不生成桥，
+    // 没有 fallback 可比，上一条测试已经单独核过它。
     //
     // fallback 本身可能是另一个 var(...) 调用（比如
     // `--focus-outlineColor: var(--readit-focus-outline-color, var(--borderColor-accent-emphasis));`），
@@ -90,8 +141,8 @@ describe('--readit-* 覆写通道', () => {
     // 少一个右括号。改成逐行按「每条声明独占一行、以 `);` 收尾」的已知格式解析，
     // `.*` 贪婪匹配 + `\);$` 锚定行尾，会自然吃掉嵌套 var() 自己的右括号。
     for (const [expected, bridge] of [
-      [lightExpected, CSS_BRIDGE_LIGHT],
-      [darkExpected, CSS_BRIDGE_DARK],
+      [lightCustom, CSS_BRIDGE_LIGHT],
+      [darkCustom, CSS_BRIDGE_DARK],
     ] as const) {
       const bridged = [...bridge.matchAll(/^\s*(--[\w-]+):\s*var\(--readit-[\w-]+,\s*(.*)\);$/gm)]
       expect(bridged.length).toBe(expected.size)
@@ -107,10 +158,9 @@ describe('--readit-* 覆写通道', () => {
       expect(v.startsWith('--readit-'), `${v} 应以 --readit- 开头`).toBe(true)
     }
     expect(new Set(BRIDGED_VARIABLES).size, '不得有重复').toBe(BRIDGED_VARIABLES.length)
-    // 明暗两侧合并后的变量名集合应完全等于 BRIDGED_VARIABLES（互相包含）。
-    const expectedNames = new Set(
-      [...lightExpected.keys(), ...darkExpected.keys()].map((n) => readitNameOf(n)),
-    )
+    // 明暗两侧合并后的自定义属性名集合应完全等于 BRIDGED_VARIABLES（互相包含）——
+    // 不含 color-scheme，它不是桥。
+    const expectedNames = new Set([...lightCustom.keys(), ...darkCustom.keys()].map((n) => readitNameOf(n)))
     expect(new Set(BRIDGED_VARIABLES)).toEqual(expectedNames)
   })
 

@@ -138,10 +138,15 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
   }
 
   const applyStyles = (resolved: ResolvedTheme): void => {
-    // 只 adopt 当前主题这一张。两份单主题文件互斥地上，所以不需要把 22 KB 的规则
-    // 逐条改写到 :host([data-theme=…]) 下——那要么靠 CSS 嵌套（WebKit 17.2 起才有
-    // 宽松嵌套解析，而 M6 的 WKWebView 可能更老），要么靠正则改写 CSS 文本。
-    // data-theme 仍然写在宿主上：它是 ::part 与 --readit-* 消费者看得见的公开状态。
+    // 只 adopt 当前主题这一张，两份互斥地上——不是因为「规则体不能挂在
+    // :host([data-theme=…]) 下」，批次 5 换源文件之后 LIGHT_CSS/DARK_CSS 各自的
+    // 变量块本来就是 :host([data-theme="light"|"dark"]) 生成出来的（Task 18，
+    // scripts/gen-theme-css.ts），运行时也确实能两张同时 adopt 而不冲突
+    // （ELEMENT_CSS 那份构建产物就是两张都在）。这里仍然只 adopt 一张，是因为
+    // LIGHT_CSS/DARK_CSS 各自的规则体（三万多字节，占了绝大部分体积）是相同的
+    // 文本重复了两份——两张都 adopt 等于把这份规则体在 adoptedStyleSheets 里
+    // 保留两份，纯粹的浪费，不是正确性需要。data-theme 仍然写在宿主上：它是
+    // ::part 与 --readit-* 消费者看得见的公开状态。
     root.setStyles([resolved === 'dark' ? DARK_CSS : LIGHT_CSS, BASE_CSS])
   }
 
