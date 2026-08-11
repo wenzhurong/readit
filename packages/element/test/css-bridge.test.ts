@@ -1,10 +1,18 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { BRIDGED_VARIABLES, CSS_BRIDGE_DARK, CSS_BRIDGE_LIGHT } from '../src/css-bridge.js'
 import { ELEMENT_CSS } from '../src/styles.js'
 
 const require_ = createRequire(import.meta.url)
+// 不用 `new URL('../scripts/...', import.meta.url)`：happy-dom（§0 A2，本包
+// environment）的全局 URL 会把相对路径解析成它自己伪造的 http: location，而不是
+// 这个测试文件的 file: 位置（本仓库其余 test/*.ts 已多次记录过这个坑，见
+// html-anchors.test.ts / leak.test.ts / styles.test.ts 等文件头的同款注释）。
+// 全程走 node:path 才能拿到真实文件系统路径。
+const TEST_DIR = dirname(fileURLToPath(import.meta.url))
 const upstream = readFileSync(require_.resolve('github-markdown-css/github-markdown.css'), 'utf8')
 
 /**
@@ -44,8 +52,12 @@ interface Decl {
  * 少了 `\w` 的数字支持会把它们静默漏掉——这是这条正则本身在改写过程中踩过的坑，
  * 就是 Important 1 描述的那类「盲区」的一个具体例子，如实记在这里。
  */
+// 提成命名常量只是为了下面 B6 那条「与生成脚本逐字同步」的守卫测试能读到
+// `.source`/`.flags`——declarationsOf() 本身的解析逻辑仍然独立于生成脚本，
+// 没有把任何函数体搬过来共享。
+const DECLARATION_REGEX = /^\s*([\w-]+)\s*:\s*([^;]+);/gm
 function declarationsOf(text: string): Decl[] {
-  return [...text.matchAll(/^\s*([\w-]+)\s*:\s*([^;]+);/gm)].map((m) => ({
+  return [...text.matchAll(DECLARATION_REGEX)].map((m) => ({
     name: m[1]!,
     value: m[2]!.trim(),
   }))
@@ -178,5 +190,27 @@ describe('--readit-* 覆写通道', () => {
     // （LIGHT_DOM_CSS 是纯浅色默认值，这一点批次 5 没有改）。
     expect(CSS_BRIDGE_LIGHT).toContain(':host([data-theme="light"]), .markdown-body {')
     expect(CSS_BRIDGE_DARK).not.toContain('.markdown-body {')
+  })
+
+  /**
+   * B6（docs/plans/2026-08-08-plan2-debt.md 批次 8 派单）：这份 `declarationsOf()`
+   * 与 `scripts/gen-theme-css.ts` 的 `declarations()` 是**故意**手工同步的两份
+   * 独立实现（文件头部注释：不 import 生成脚本，否则它自己的 bug 会在这里被同一套
+   * 逻辑再犯一遍，测不出来——「检查依赖被检查物」的同源盲区）。但两份独立不等于
+   * 没有校验：正则字面量本该逐字相同，若将来只改了其中一处（比如给某类声明加了
+   * 排除条件），这条测试要能报警，而不是安静地继续用两套不同的解析规则各测各的。
+   *
+   * 只读 `gen-theme-css.ts` 的**源码文本**（`readFileSync`），不 `import` 它——
+   * 那个脚本在模块顶层有 `writeFileSync` 副作用（生成 `css-bridge.ts` /
+   * `theme-css.ts`），import 会把两份产物文件当场重写一遍，这不是这条测试该做的事。
+   */
+  it('与生成脚本 declarations() 的正则字面量逐字同步（防将来只改一处）', () => {
+    const genScriptSource = readFileSync(join(TEST_DIR, '..', 'scripts', 'gen-theme-css.ts'), 'utf8')
+    const literal = `/${DECLARATION_REGEX.source}/${DECLARATION_REGEX.flags}`
+    expect(
+      genScriptSource.includes(literal),
+      `gen-theme-css.ts 的 declarations() 里应该逐字出现 ${literal}——` +
+        '若这条断言红了，说明两份手工同步的正则已经分岔，先看是哪一边改漏了',
+    ).toBe(true)
   })
 })
