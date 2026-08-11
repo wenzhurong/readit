@@ -10,7 +10,7 @@ import { createShikiHighlighter } from '../src/index.js'
 import { LANGS, SNIPPETS } from '../test/snippets.js'
 
 /**
- * B4（docs/plans/2026-08-08-plan2-debt.md 批次 8 派单）：main 守卫。批次 3 复审
+ * B4（批次 8 派单，定义见 .superpowers/sdd/2026-08-09-plan2-element-editor/batch-8-report.md）：main 守卫。批次 3 复审
  * 记过一笔——`measure-lang-packs.ts` 曾经就是这个形状（模块顶层无守卫地
  * `writeFileSync`），被测试 `import` 时会在 import 求值阶段就把黄金文件重写一遍，
  * 让后面比对「提交的文件是否与当前实测一致」的断言失去意义（永远在跟自己刚写的

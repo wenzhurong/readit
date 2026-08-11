@@ -57,6 +57,11 @@ jobs:
       - run: npm ci
       - run: npx playwright test --project=element-firefox
 
+  # 历史注记：这条 job 建于 Task 11，那时 browser/editor 下还没有任何 spec，靠
+  # --pass-with-no-tests 空跑保绿。Task 17（批次 7）已落地 contract/ime/scroll-sync
+  # 三个真实 spec，这条 job 现在跑的是真东西——保留该标志只是为了不让「某天把
+  # 某个 project 的 spec 临时挪走」变成一次 job 崩溃，它在有测试时不改变任何行为。
+  # 下面这段是建 job 时写的原文，描述的是计划二开工前的状态，留作沿革：
   # browser/editor 此刻还没有 spec——Task 17 才填（§0.2）。job 先建好、允许空跑：
   # --pass-with-no-tests 让它现在能绿，Task 17 落地 spec 之后这条 job 自然开始
   # 承重，不需要再碰这个文件。

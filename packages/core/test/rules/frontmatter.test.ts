@@ -215,7 +215,8 @@ describe('frontmatter', () => {
   })
 
   /**
-   * B3（docs/plans/2026-08-08-plan2-debt.md 批次 8 派单）：CORE_SCHEMA 是为匹配
+   * B3（批次 8 派单，定义见 .superpowers/sdd/2026-08-09-plan2-element-editor/batch-8-report.md；
+   * 债务台账 docs/plans/2026-08-08-plan2-debt.md 用的是 D2-N 编号，没有 B 前缀条目）：CORE_SCHEMA 是为匹配
    * GitHub 的 YAML 行为选的，不是为了安全——但计划一实测过它顺带关掉了 js-yaml
    * 4 条 high 通告向量里的 2 条（merge key `<<`、`!!omap`）。**这份安全此前是无
    * 保护的副作用**：没有任何测试断言 frontmatter.ts 用的是 CORE_SCHEMA，谁哪天

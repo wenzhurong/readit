@@ -11,7 +11,7 @@ import { createStarryNightHighlighter } from '../src/index.js'
 import { SNIPPETS } from '../test/snippets.js'
 
 /**
- * B4（docs/plans/2026-08-08-plan2-debt.md 批次 8 派单）：main 守卫，见
+ * B4（批次 8 派单，定义见 .superpowers/sdd/2026-08-09-plan2-element-editor/batch-8-report.md）：main 守卫，见
  * refresh-shiki-golden.ts 头部的同一条注释——同一个坑，同一个理由，还不是活洞
  * （无测试 import 它），但形状与修复前的 measure-lang-packs.ts 一样。
  */

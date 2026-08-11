@@ -745,11 +745,36 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 |---|---|---|
 | **M1** | Phase A 引擎 + L1 + 归一化器 + L2 + oracle 刷新脚本 | 672/672 GFM 减白名单；语料**全部通过，或失配已具名入棘轮台账并附不可修的理由**（见 §15 第 10 条） |
 | **M2** | 美元护栏 + 数学 | 159 条护栏语料 154 对、5 条具名偏离；数学黄金文件 + **顺序置换测试**过 |
-| **M3** | element + Shadow DOM + L3b + 高亮双默认 | 敌意宿主 fixture 下渲染不变；同页两实例测试过 |
+| **M3** | element + Shadow DOM + L3b + 高亮双默认 | 敌意宿主 fixture 下渲染不变（**未达成，见下**）；同页两实例测试过（达成） |
 | **M4** | 编辑器 + 滚动同步 + `mode:'plain'` 档 | IME 组合测试过（**若 Playwright 无法复现真实输入法行为，降级为手工验证并具名记录为覆盖缺口**——见计划二设计 §4.4） |
 | **M5** | Mermaid | 结构断言 + 截图；**不入字节快照** |
 | **M6** | 壳：文件关联、单实例、`readit://`、导航、查找、文件监听、更新器 | 双平台**真引擎**冒烟 |
 | **M7** | 签名分发 | 见下 |
+
+⚠️ **M3 的「敌意宿主 fixture 下渲染不变」验收线：未达成（2026-08-09 批次 5 实测，本条 2026-08-11 补记）。**
+`browser/element/hostile-isolation.spec.ts` 里对应的那条测试用 `test.fail()` 标着——
+也就是说**这条验收线被它自己的测试证明为假**，Chromium 与 WebKit 上都按预期失败。
+
+成因：`:host` 对五个继承属性缺重置——`letter-spacing` / `word-spacing` / `font-style` /
+`text-align` / `text-transform`。github-markdown-css 只在 `.markdown-body` 自身显式设了
+`color` / `font-family` / `font-size` / `line-height` / `word-wrap`，这几项因为在 shadow 树内
+有显式值而正确挡住了继承；上面那五项它从不设，于是宿主页面的样式**穿透进 shadow 树**。
+
+影响面：只影响排版观感（字距、词距、斜体、对齐、大小写变换），不影响内容、
+不影响安全边界、不改变 DOM 结构。修法明确（给 `:host` 补这五项重置），
+未在计划二落地是因为它跨批次、且改 `base-css.ts` 会牵动 L4 视觉基线。
+**记为 D2-20**，见 `docs/plans/2026-08-08-plan2-debt.md`。
+
+⚠️ **M3 / M4 共同的一条缺口：§13.2 自己定的「真引擎才算验收」从未满足（本条 2026-08-11 补记）。**
+§13.2 原文要求「验收门必须包含真 WKWebView（macOS runner）与真 WebView2（Windows runner）
+里的一次运行」，理由是 Playwright 的 WebKit 是打过补丁的 main 分支构建、跑在已发布 Safari 前面，
+**只能当廉价预筛**。而计划二交付的全部 L3b/L4 job 都只在 `ubuntu-latest` 的
+`mcr.microsoft.com/playwright:v1.62.1-noble` 容器里跑 Playwright 自带的引擎。
+`test.yml` 的 `unit` job 虽然覆盖 macos/windows，但它跑的是 vitest，从不包含 `browser/*.spec.ts`。
+
+这比「全部 Windows 实测被用户推迟」更宽——**macOS 侧的真 WKWebView 同样从未跑过**，
+而且 `docs/windows-test-plan.md` 写于计划二开工前、此后未更新，
+所以目前连「以后怎么做真机验证」的计划都不存在。**记为 D2-21。**
 
 ⚠️ **M4 的 IME 验收线实际落地情况（2026-08-09 批次 7 实测，本条 2026-08-10 补记）：Chromium 可自动化验证，WebKit 是具名覆盖缺口，且缺口的边界比"4 条用例跳过"更宽。** Chromium 走 CDP `Input.imeSetComposition` + `Input.insertText` 真实驱动组合，不是 `dispatchEvent()` 自我肯定。WebKit 侧：
 

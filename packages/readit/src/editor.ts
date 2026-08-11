@@ -10,4 +10,3 @@
 // 另有 packages/readit/test/build-output.test.ts 从产物侧兜底：CodeMirror 的字符串指纹
 // 不得出现在 editor.js 的静态闭包里，且它必须落在一个体积可观的独立懒加载 chunk 中。
 export * from '@readit/editor'
-export * from '@readit/editor'
