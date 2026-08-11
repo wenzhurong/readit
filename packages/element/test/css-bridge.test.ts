@@ -196,15 +196,32 @@ describe('--readit-* 覆写通道', () => {
    * B6（docs/plans/2026-08-08-plan2-debt.md 批次 8 派单）：这份 `declarationsOf()`
    * 与 `scripts/gen-theme-css.ts` 的 `declarations()` 是**故意**手工同步的两份
    * 独立实现（文件头部注释：不 import 生成脚本，否则它自己的 bug 会在这里被同一套
-   * 逻辑再犯一遍，测不出来——「检查依赖被检查物」的同源盲区）。但两份独立不等于
-   * 没有校验：正则字面量本该逐字相同，若将来只改了其中一处（比如给某类声明加了
-   * 排除条件），这条测试要能报警，而不是安静地继续用两套不同的解析规则各测各的。
+   * 逻辑再犯一遍，测不出来——「检查依赖被检查物」的同源盲区）。
+   *
+   * 终审复核过这条测试实际验证的是什么，纠正一处过誇：下面这条断言校验的是
+   * **两个正则字面量逐字相同**，它保证的只是「没人手滑改漏一边」（比如给某类
+   * 声明加排除条件时忘了两处都改）——**不是**「这条正则本身覆盖了所有合法 CSS
+   * 声明」。两份实现共享同一个正则意味着它们共享同一个正则的盲区：
+   * `([^;]+)` 抓值时遇到值本身含字面 `;` 的声明（比如内嵌 SVG 的 data-URI，
+   * `content: url("data:image/svg+xml,...style='fill:red;stroke:blue'...")`）
+   * 会在第一个 `;` 处截断，产出错误的 name/value 对——而且两边会切出**同一个**
+   * 错误结果，这条「逐字同步」断言依然会绿，因为它压根不检查解析结果对不对，
+   * 只检查两份工具是不是同一份工具。
+   *
+   * 现在不是活洞：`github-markdown-css@5.9.0` 合并版三段（base/dark/light）里
+   * 没有一条声明的值含字面分号，下面「已知边界暂不是活洞」那条测试独立验证过
+   * （不复用这个正则本身，见该测试注释）。要不要把正则本身做成完备的 CSS
+   * 解析器（比如接一个真实的 CSS AST 解析库）单独评估过：保持两份手工独立实现
+   * 是刻意的设计（避免同源盲区），而把这条正则升级到能处理所有合法 CSS 声明
+   * 语法（转义、字符串内分号、注释……）相对于这里唯一要解析的「小段生成良好的
+   * 上游变量声明」，投入产出不成比例，所以选择保留现状 + 如实记录边界 + 加一条
+   * 独立的边界哨兵，而不是引入新依赖去解决一个目前不存在的问题。
    *
    * 只读 `gen-theme-css.ts` 的**源码文本**（`readFileSync`），不 `import` 它——
    * 那个脚本在模块顶层有 `writeFileSync` 副作用（生成 `css-bridge.ts` /
    * `theme-css.ts`），import 会把两份产物文件当场重写一遍，这不是这条测试该做的事。
    */
-  it('与生成脚本 declarations() 的正则字面量逐字同步（防将来只改一处）', () => {
+  it('与生成脚本 declarations() 的正则字面量逐字同步（防将来只改一处；不代表这条正则本身完备）', () => {
     const genScriptSource = readFileSync(join(TEST_DIR, '..', 'scripts', 'gen-theme-css.ts'), 'utf8')
     const literal = `/${DECLARATION_REGEX.source}/${DECLARATION_REGEX.flags}`
     expect(
@@ -212,5 +229,35 @@ describe('--readit-* 覆写通道', () => {
       `gen-theme-css.ts 的 declarations() 里应该逐字出现 ${literal}——` +
         '若这条断言红了，说明两份手工同步的正则已经分岔，先看是哪一边改漏了',
     ).toBe(true)
+  })
+
+  /**
+   * 上面那条「逐字同步」测不出 `DECLARATION_REGEX` 自己的盲区（见其注释）：
+   * `([^;]+)` 一旦遇到值本身含字面分号的声明就会从第一个 `;` 截断，且两份
+   * 手工同步的实现会切出同一个错误结果，逐字同步断言仍然是绿的。这条测试
+   * 不复用 `DECLARATION_REGEX`——复用等于用同一个有盲区的工具去检查它自己的
+   * 盲区——改用「按物理行数分号」独立判定：base/dark/light 三段是逐条声明各占
+   * 一行的已知格式（gen-theme-css.ts 顶部注释与两处 `declarations()`/
+   * `declarationsOf()` 共享的假设），一行如果出现一个以上的分号，说明值本身
+   * 带着字面 `;`，会被截断。如实钉住「现在不是活洞」——上游一旦引入这类值
+   * （比如加一个内嵌 SVG data-URI 的自定义属性），这条测试会变红，而不是
+   * 继续沉默，逼着当时的人回头把 `DECLARATION_REGEX` 换成真正的 CSS 解析。
+   */
+  it('B6 已知的截断边界现在不是活洞：三段源文本里没有一条声明的值含字面分号', () => {
+    const sections = [
+      ['base', baseText],
+      ['dark', darkText],
+      ['light', lightText],
+    ] as const
+    for (const [label, text] of sections) {
+      const suspicious = text
+        .split('\n')
+        .filter((line) => line.includes(':') && (line.match(/;/g)?.length ?? 0) > 1)
+      expect(
+        suspicious,
+        `${label} 段里有声明的值本身含字面分号——DECLARATION_REGEX 的 [^;]+ 会从第一个 ; 截断，` +
+          '两份手工同步的实现会切出同一个错误结果，需要把正则换成真正的 CSS 解析',
+      ).toEqual([])
+    }
   })
 })
