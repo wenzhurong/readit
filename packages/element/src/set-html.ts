@@ -72,10 +72,17 @@ const EXTRA_ELEMENTS: readonly SanitizerElementEntry[] = [
   // 默认名单里没有，GitHub 形状的可折叠块（用户原始 HTML 里的 <details>）会被整个剥掉。
   { name: 'details', attributes: [{ name: 'open' }] },
   { name: 'summary' },
-  // GitHub 的两个自定义元素，Phase A 直接生成（rules/table.ts、rules/math-inline.ts），
-  // 不经过用户内容的消毒路径，本来就不该被当成「未知标签」处理。
+  // GitHub 的自定义元素，Phase A 直接生成（rules/table.ts、rules/math-inline.ts、
+  // rules/emoji.ts），不经过用户内容的消毒路径，本来就不该被当成「未知标签」处理。
   { name: 'markdown-accessiblity-table', namespace: 'http://www.w3.org/1999/xhtml' },
   { name: 'math-renderer', namespace: 'http://www.w3.org/1999/xhtml' },
+  // §0.1/D2-17 收尾诊断（批次 8）追加：emoji.ts 对 29 个自带 HTML 标记的 unicode
+  // 短代码（如 `:airplane:`）输出 `<g-emoji class="g-emoji" alias="...">`。
+  // 浏览器默认 Sanitizer 对未知标签是**整个连内容一起删掉**（不是 unwrap），实测确认
+  // （`browser/element/sanitize-tier2.spec.ts` 头部注释记录了复现方式）——这一条
+  // 此前既不在 EXTRA_ELEMENTS 里、也没有被 batch-5 的诊断覆盖到，是本次重做诊断时
+  // 顺带发现的、与第 2 级同源的第 1 级既有缺口，不是本次改动引入的回归。
+  { name: 'g-emoji', namespace: 'http://www.w3.org/1999/xhtml', attributes: [{ name: 'alias' }] },
 ]
 
 /** 同上，覆盖的是全局属性名单（浏览器默认对所有元素都放行的那一份）。 */
@@ -95,6 +102,38 @@ const EXTRA_ATTRIBUTES: readonly SanitizerNameEntry[] = [
   { name: 'aria-describedby' },
   { name: 'version' },
 ]
+
+/**
+ * 第 2 级（DOMPurify）的加法名单。D2-17（docs/plans/2026-08-08-plan2-debt.md）：
+ * 第 1 级做过「跑完整语料、`DOMParser` 解析出期望集合、逐元素逐属性 diff 到零差异」
+ * 的诊断（EXTRA_ELEMENTS/EXTRA_ATTRIBUTES 就是那次诊断的产物），第 2 级此前一个
+ * 配置都没传——`purify.sanitize(html, {RETURN_TRUSTED_TYPE: true})`，只用 DOMPurify
+ * 3.4.13 自己的默认允许名单。
+ *
+ * 这份名单是把同一诊断在真浏览器里对第 2 级重做一遍的结果（`browser/element/
+ * sanitize-tier2.spec.ts`，Chromium 用 `Reflect.deleteProperty` 逼走第 1 级 +
+ * WebKit 天然选中第 2 级，两个引擎共用同一个 DOMPurify、结果一致）。
+ * **不是只补批次 5 碰巧撞见的 `markdown-accessiblity-table`/`math-renderer`
+ * 两个名字**——那正是这个项目反复栽的坑：诊断另外命中了两处未曾记录的差异：
+ *
+ *   - `<g-emoji class="g-emoji" alias="...">`（emoji.ts 对 29 个自带
+ *     HTML 标记的 unicode 短代码，例如 `:airplane:`，输出的包装自定义元素；与
+ *     EXTRA_ELEMENTS 里已知的自定义 PNG emoji `<img class="emoji">` 是两条不同
+ *     的路径）——DOMPurify 对未知标签同样是 unwrap（保留文本、丢外层标签），
+ *     `alias` 也不在 DOMPurify 默认属性名单里。
+ *   - `target` 属性——DOMPurify 3.4.13 的默认 HTML 属性表本身就不含 `target`
+ *     （`node_modules/dompurify/dist/purify.js` 的 `html` 允许名单逐一核对过），
+ *     图片外链装饰（decorate.ts 的 `target="_blank"`）在第 2 级路径上此前
+ *     一直被静默剥掉。`rel="noopener noreferrer"` 不受影响（在默认名单里）。
+ *
+ * `markdown-accessiblity-table`/`math-renderer` 两个已知名字继续保留在这里，
+ * 不是因为侥幸猜对，是因为它们同样在这次重做的诊断里被验证仍然需要。
+ */
+// 不用 readonly：DOMPurify 3.4.13 自己的 Config.ADD_TAGS/ADD_ATTR 类型是可变
+// string[]，与本文件其余名单（EXTRA_ELEMENTS/EXTRA_ATTRIBUTES）用 readonly
+// 不同，是外部类型形状决定的，不是疏忽。
+const TIER2_EXTRA_TAGS: string[] = ['markdown-accessiblity-table', 'math-renderer', 'g-emoji']
+const TIER2_EXTRA_ATTR: string[] = ['target', 'alias']
 
 /**
  * 在浏览器自己的默认配置基础上做加法，**不是**从零手写一张白名单去替换它——
@@ -142,7 +181,10 @@ export interface HtmlSink {
  * @types/trusted-types 拖进本包的编译面 —— 我们对那个值只做一件事：原样交给 innerHTML。
  */
 export interface DomPurifyLike {
-  sanitize(dirty: string, cfg: { RETURN_TRUSTED_TYPE: true }): unknown
+  sanitize(
+    dirty: string,
+    cfg: { RETURN_TRUSTED_TYPE: true; ADD_TAGS?: string[]; ADD_ATTR?: string[] },
+  ): unknown
 }
 
 export type InjectionTier = 'setHTML' | 'trusted-types' | 'innerHTML'
@@ -205,8 +247,15 @@ export function createSetHtml(env: InjectionEnv): (sink: HtmlSink, html: string)
   if (tier === 'trusted-types') {
     return (sink, html) => {
       // 单一策略：DOMPurify 自己只建一次策略并复用，所以整个组件生命周期里
-      // 只有一个策略名要被宿主的 trusted-types 指令放行。
-      const trusted = env.purify.sanitize(html, { RETURN_TRUSTED_TYPE: true })
+      // 只有一个策略名要被宿主的 trusted-types 指令放行。ADD_TAGS/ADD_ATTR 是
+      // D2-17 诊断的产物（见 TIER2_EXTRA_TAGS/TIER2_EXTRA_ATTR 的注释）——
+      // 在 DOMPurify 自己的默认允许名单基础上做加法，与第 1 级 buildTier1Sanitizer()
+      // 同一个原则，不是替换掉它。
+      const trusted = env.purify.sanitize(html, {
+        RETURN_TRUSTED_TYPE: true,
+        ADD_TAGS: TIER2_EXTRA_TAGS,
+        ADD_ATTR: TIER2_EXTRA_ATTR,
+      })
       // TrustedHTML 不是 string —— 但在这条 CSP 下，innerHTML 的 setter 恰恰只接受它。
       // 这个 cast 是类型系统与运行时之间那道缝，不是偷懒。
       sink.innerHTML = trusted as string

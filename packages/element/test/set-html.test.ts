@@ -94,11 +94,14 @@ class FakeSanitizer implements SanitizerInstanceLike {
 const FakeSanitizerCtor: SanitizerCtorLike = FakeSanitizer
 
 interface SpyPurify extends DomPurifyLike {
-  calls: { dirty: string; cfg: { RETURN_TRUSTED_TYPE: true } }[]
+  calls: {
+    dirty: string
+    cfg: { RETURN_TRUSTED_TYPE: true; ADD_TAGS?: string[]; ADD_ATTR?: string[] }
+  }[]
 }
 
 function spyPurify(): SpyPurify {
-  const calls: { dirty: string; cfg: { RETURN_TRUSTED_TYPE: true } }[] = []
+  const calls: SpyPurify['calls'] = []
   return {
     calls,
     sanitize(dirty, cfg) {
@@ -188,6 +191,12 @@ describe('tier 1 — Element.setHTML()', () => {
     expect(elementNames).toContain('summary')
     expect(elementNames).toContain('markdown-accessiblity-table')
     expect(elementNames).toContain('math-renderer')
+    // D2-17 收尾诊断（批次 8）追加：<g-emoji> 是 emoji.ts 对带 HTML 标记的 unicode
+    // 短代码输出的自定义元素，与 markdown-accessiblity-table/math-renderer 同一类
+    // 「Phase A 自己生成、本不该被当未知标签」的东西，此前漏在 EXTRA_ELEMENTS 之外
+    // （真浏览器诊断证实：默认 Sanitizer 对未知标签是连内容一起整个删掉，不是 unwrap）。
+    expect(elementNames).toContain('g-emoji')
+    expect(augmented.elements.find((e) => e.name === 'g-emoji')?.attributes?.map((a) => a.name)).toContain('alias')
     expect(attributeNames).toContain('lang') // 桩默认值里的，原样保留
     expect(attributeNames).toContain('id') // EXTRA_ATTRIBUTES 加的
     expect(attributeNames).toContain('class')
@@ -243,7 +252,28 @@ describe('tier 2 — a Trusted Types host', () => {
   it('mints through the sanitizer once, with RETURN_TRUSTED_TYPE', () => {
     const purify = spyPurify()
     createSetHtml(envOf(false, true, purify))(new CspSink(), HTML)
-    expect(purify.calls).toEqual([{ dirty: HTML, cfg: { RETURN_TRUSTED_TYPE: true } }])
+    expect(purify.calls).toHaveLength(1)
+    expect(purify.calls[0]?.dirty).toBe(HTML)
+    expect(purify.calls[0]?.cfg.RETURN_TRUSTED_TYPE).toBe(true)
+  })
+
+  /**
+   * D2-17：第 2 级此前一个配置都没传，只用 DOMPurify 自己的默认允许名单——批次 5
+   * 只碰巧撞见 `markdown-accessiblity-table` 被 unwrap 那一项。真浏览器诊断
+   * （`browser/element/sanitize-tier2.spec.ts`）重做了一遍第 1 级那次「完整语料 +
+   * 逐元素逐属性 diff」的方法，额外命中 `math-renderer`、`g-emoji`（自带 HTML 标记
+   * 的 unicode emoji 包装元素）与 `target` 属性（DOMPurify 默认属性表本身不含它）。
+   * 这条测试只钉「配置里确实带着这份加法名单」这个机制本身，不重复真浏览器证据。
+   */
+  it('passes ADD_TAGS/ADD_ATTR alongside RETURN_TRUSTED_TYPE — the tier 2 counterpart of buildTier1Sanitizer()', () => {
+    const purify = spyPurify()
+    createSetHtml(envOf(false, true, purify))(new CspSink(), HTML)
+    const [call] = purify.calls
+    expect(call?.cfg.RETURN_TRUSTED_TYPE).toBe(true)
+    expect(call?.cfg.ADD_TAGS).toEqual(
+      expect.arrayContaining(['markdown-accessiblity-table', 'math-renderer', 'g-emoji']),
+    )
+    expect(call?.cfg.ADD_ATTR).toEqual(expect.arrayContaining(['target', 'alias']))
   })
 })
 
