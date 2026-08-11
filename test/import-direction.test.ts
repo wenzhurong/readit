@@ -126,6 +126,13 @@ export function collectImports(source: string, fileName: string): ImportRef[] {
         // 本仓库是 ESM，但 require() 若混进来它同样是运行时边，按 value 记。
         else if (ts.isIdentifier(node.expression) && node.expression.text === 'require') push(arg0, 'value')
       }
+    } else if (ts.isImportTypeNode(node)) {
+      // `type X = import('pkg').Foo` / `(x: import('pkg').Foo)` / `typeof import('pkg')`——
+      // 内联类型引用，产出 ts.SyntaxKind.ImportType 节点，不是 CallExpression，
+      // 上面那个分支完全看不见它。它在语法上只可能是类型位置，运行时不会执行，
+      // 一律记 'type'（跟 `import type { … } from …` 同一档）。
+      const arg = node.argument
+      if (ts.isLiteralTypeNode(arg)) push(arg.literal, 'type')
     }
     ts.forEachChild(node, walk)
   }
@@ -217,6 +224,7 @@ describe('the scanner can tell the three import kinds apart', () => {
       "export * from 'j'",
       "const p = import('k')",
       "const q = require('l')",
+      "type M = import('m').N",
     ].join('\n')
     expect(collectImports(source, 'probe.ts').map((ref) => `${ref.specifier}:${ref.kind}`)).toEqual([
       'a:type',
@@ -231,7 +239,37 @@ describe('the scanner can tell the three import kinds apart', () => {
       'j:value',
       'k:dynamic',
       'l:value',
+      'm:type',
     ])
+  })
+
+  /**
+   * 终审发现的盲区：`type X = import('pkg').Foo` 产出 ts.SyntaxKind.ImportType
+   * 节点，不是 CallExpression——上面那条「classifies every import form」加了
+   * 一行就够分类，但分类对不等于守卫真的抓得到违规，这里单独钉一条用
+   * `inspect()` 走完整路径的场景。用真实 typescript 包解析验证过：改动前
+   * `collectImports()` 对这种写法记录零条目，不是分类错，是完全看不见——
+   * `packages/core/src/*.ts` 里写 `type X = import('@readit/math').Y`
+   * 这种 P1 明令只许 dynamic 的边会被这张网完全漏过。
+   */
+  it('flags an inline `type X = import(...)` reference the same as a normal import', () => {
+    const report = inspect(
+      '@readit/core',
+      'packages/core/src/probe.ts',
+      "type X = import('@readit/math').Foo\n",
+    )
+    expect(report.violations).toHaveLength(1)
+    expect(report.violations[0]).toContain('@readit/core -> @readit/math 是 type 导入，P1 允许的是：dynamic')
+  })
+
+  it('also passes an inline `import(...)` type reference on an edge P1 allows', () => {
+    const report = inspect(
+      '@readit/math',
+      'packages/math/src/probe.ts',
+      "type X = import('@readit/core').Foo\n",
+    )
+    expect(report.violations).toEqual([])
+    expect(report.crossEdges).toBe(1)
   })
 
   it('flags a value import where P1 allows only types', () => {
