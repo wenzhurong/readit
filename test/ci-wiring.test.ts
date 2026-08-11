@@ -105,3 +105,55 @@ describe('typecheck actually covers the whole repo', () => {
     },
   )
 })
+
+/**
+ * The perf assertions were moved out of `npm test` for a good reason (review C2: an absolute
+ * wall-clock number is the wrong thing to gate a three-OS matrix on). But the move landed them
+ * where nothing ran them at all: `test:perf` existed only in `packages/element/package.json`,
+ * was absent from the root, and appeared in no workflow. A sentinel nothing runs is worse than
+ * a flaky one — a flaky gate at least gets looked at, whereas this one would have sat there
+ * looking like coverage while a 50x highlighter regression sailed past it.
+ *
+ * That is the same failure this file's `continue-on-error` assertion exists to prevent, arriving
+ * by a different door: not a check made advisory, but a check made unreachable. So it is pinned
+ * the same way.
+ */
+describe('the perf sentinel is reachable from the root and runs in CI', () => {
+  const workflow = read('.github/workflows/test.yml')
+  const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string> }
+
+  it('has a root test:perf script that delegates to every workspace declaring one', () => {
+    expect(
+      pkg.scripts['test:perf'],
+      'without a root script, `npm run test:perf` fails at the repo root and CI cannot invoke it',
+    ).toBe('npm run test:perf --workspaces --if-present')
+  })
+
+  it('is declared by the workspace that owns the perf files', () => {
+    const element = JSON.parse(read('packages/element/package.json')) as { scripts: Record<string, string> }
+    expect(element.scripts['test:perf']).toBeDefined()
+  })
+
+  it('has a perf job in the test workflow that runs it', () => {
+    expect(workflow).toMatch(/^ {2}perf:$/m)
+    expect(workflow).toContain('- run: npm run test:perf')
+  })
+
+  it('runs perf once, on one OS — the point of moving it was to leave the three-OS matrix', () => {
+    expect(workflow.match(/- run: npm run test:perf/g)).toHaveLength(1)
+    const perfJob = workflow.slice(workflow.indexOf('\n  perf:'))
+    expect(perfJob).toContain('runs-on: ubuntu-latest')
+    expect(perfJob).not.toContain('matrix')
+  })
+
+  /**
+   * The narrow reason this file cares: default `npm test` must NOT pick the perf files back up.
+   * `packages/element/vitest.config.ts` excludes them by matching only `*.test.ts`, which is a
+   * property of a glob three files away from here — exactly the kind of thing that gets widened
+   * by someone with an unrelated goal.
+   */
+  it('keeps the perf files out of the default vitest include', () => {
+    const cfg = read('packages/element/vitest.config.ts')
+    expect(cfg).toContain("include: ['test/**/*.test.ts']")
+  })
+})
