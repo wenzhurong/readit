@@ -12,6 +12,7 @@
   },
   "scripts": {
     "test": "vitest run",
+    "test:perf": "vitest run --config vitest.perf.config.ts",
     "typecheck": "tsc --noEmit",
     "gen:theme-css": "vite-node scripts/gen-theme-css.ts"
   },
@@ -22,6 +23,7 @@
     "github-markdown-css": "5.9.0"
   },
   "devDependencies": {
+    "@readit/highlight": "0.0.0",
     "@types/node": "24.10.1",
     "happy-dom": "20.11.2",
     "typescript": "5.9.3",

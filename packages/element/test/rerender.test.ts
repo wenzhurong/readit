@@ -3,6 +3,7 @@ import type { Highlighter, MathRenderer, RenderOptions } from '@readit/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   DEBOUNCE_MS,
+  DEBOUNCE_MS_HIGHLIGHT,
   createRerenderer,
   type PendingCapability,
   type RerenderDeps,
@@ -121,6 +122,43 @@ describe('输入 → 防抖 → rAF 批处理 → 整体重渲', () => {
     r.destroy()
   })
 
+  it('highlighter 已加载后，防抖计时器改用 DEBOUNCE_MS_HIGHLIGHT（C1：不用一个最坏值惩罚没接高亮的宿主，也不用一个最好值低估已接高亮的成本）', async () => {
+    const seen: number[] = []
+    const deps: RerenderDeps = {
+      ...h.deps,
+      setTimer(fn, ms) {
+        seen.push(ms)
+        return h.deps.setTimer(fn, ms)
+      },
+    }
+    const r = createRerenderer(h.host, deps, {}, '```js\nlet a=1\n```\n')
+    r.repaint() // 让 pending 探测到围栏语言、kick 高亮加载
+    expect(h.loadHighlighter).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => {
+      expect(h.painted.at(-1)).toContain('<span class="fake">')
+    })
+    seen.length = 0
+    r.update('```js\nlet a=2\n```\n')
+    expect(seen).toEqual([DEBOUNCE_MS_HIGHLIGHT])
+    r.destroy()
+  })
+
+  it('宿主在构造时直接传入 highlighter（不经 loadHighlighter）同样按 DEBOUNCE_MS_HIGHLIGHT 计时——初始 highlighter 也要走这一档，不只是异步加载来的那个', () => {
+    const seen: number[] = []
+    const deps: RerenderDeps = {
+      ...h.deps,
+      setTimer(fn, ms) {
+        seen.push(ms)
+        return h.deps.setTimer(fn, ms)
+      },
+    }
+    const preloaded: Highlighter = { highlight: (code) => `<b>${code}</b>`, supports: () => true }
+    const r = createRerenderer(h.host, deps, { highlighter: preloaded }, 'a')
+    r.update('b')
+    expect(seen).toEqual([DEBOUNCE_MS_HIGHLIGHT])
+    r.destroy()
+  })
+
   it('计时器到点只是排一帧，渲染发生在帧回调里', () => {
     const r = createRerenderer(h.host, h.deps, {}, 'a')
     r.update('b')
@@ -137,6 +175,53 @@ describe('输入 → 防抖 → rAF 批处理 → 整体重渲', () => {
     r.setValue('# H')
     expect(h.painted).toHaveLength(1)
     expect(h.painted[0]).toContain('<h1')
+    r.destroy()
+  })
+})
+
+describe('C1：加载到的 highlighter 被记忆化包裹（集成验证，不只是 highlight-memo.ts 自己的单元测试）', () => {
+  let h: ReturnType<typeof harness>
+  beforeEach(() => {
+    h = harness()
+  })
+
+  it('同一份未变的代码块重渲两次，只穿透一次 highlight()', async () => {
+    let calls = 0
+    const countingLoader = vi.fn(
+      async (): Promise<Highlighter> => ({
+        highlight: (code) => {
+          calls++
+          return `<span class="fake">${code}</span>`
+        },
+        supports: () => true,
+      }),
+    )
+    const deps: RerenderDeps = { ...h.deps, loadHighlighter: countingLoader }
+    const r = createRerenderer(h.host, deps, {}, '```js\nlet a=1\n```\n')
+    r.repaint()
+    await vi.waitFor(() => {
+      expect(h.painted.at(-1)).toContain('<span class="fake">')
+    })
+    expect(calls).toBe(1)
+    r.repaint() // 内容没变，仍是整体重渲一次
+    expect(calls).toBe(1) // 仍是 1：命中缓存，没有再穿透到底层 highlighter
+    r.destroy()
+  })
+
+  it('宿主构造时直接传入的 highlighter 同样被包裹，不只是异步加载来的那个', () => {
+    let calls = 0
+    const preloaded: Highlighter = {
+      highlight: (code) => {
+        calls++
+        return `<b>${code}</b>`
+      },
+      supports: () => true,
+    }
+    const r = createRerenderer(h.host, h.deps, { highlighter: preloaded }, '```js\nlet a=1\n```\n')
+    r.repaint()
+    expect(calls).toBe(1)
+    r.repaint()
+    expect(calls).toBe(1)
     r.destroy()
   })
 })

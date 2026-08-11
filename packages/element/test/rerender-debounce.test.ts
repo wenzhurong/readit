@@ -1,50 +1,46 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { render } from '@readit/core'
 import { describe, expect, it } from 'vitest'
-import { DEBOUNCE_MS } from '../src/rerender.js'
 
 /**
- * 「按 p95 定」这句话在这里有确切含义：对 corpus/real-world/ 全部 6 个文件
- * 各跑 RUNS 次 render()，去掉每文件前 WARMUP 次，把剩下 6*(RUNS-WARMUP) 个
- * 样本合成一个分布，取它的 p95 记作 T，防抖间隔取 max(ceil(T), 16)
- * （16ms 是一帧，低于一帧的防抖没有意义）。
+ * 这份文件此前直接量墙钟时间来导出 `DEBOUNCE_MS`——评审 C1/C2 两条都指向它：
  *
- * 2026-08-10 实测（Darwin 25.5.0 / Node 22.23.1，RUNS=100 / WARMUP=10）：
- *   gitignore 1.07 · hast-util-sanitize 1.72 · markdown-it 0.39
- *   mermaid 3.73 · sindresorhus-is 2.79 · tauri 1.04   （各自 p95，ms）
- *   合并 6*(100-10)=540 样本：p50 1.07 · p95 2.94 · p99 3.70
- * 所以 T=2.94 → max(3, 16) = 16。
+ *  - C1：`render(src)` 单参数裸调用不是 `rerender.ts:168` 真实重渲染路径的形状，
+ *    不带 highlighter；真实接入高亮的场景实测比这条基线慢 49.9×，这条断言永远
+ *    抓不到 Shiki 的性能回归。
+ *  - C2：把一条会随机器噪声抖动的墙钟断言放进跨 ubuntu/macos/windows 三个 OS
+ *    的阻塞矩阵（`.github/workflows/test.yml` 的 `unit` job 原样跑 `npm test`），
+ *    余量只有 5.4 倍，Windows runner 对 CPU 密集负载慢 2-5 倍是常态，假红会
+ *    主动引导人去追一个不存在的回归。
  *
- * 这条断言会随代码变慢而变红。**变红时先上报，不要重钉这个数**——把
- * DEBOUNCE_MS 从 16 改成 40 是把「渲染慢了 14 倍」这件事记成了一个常数。
+ * 两条都已修：真实的、按「未接入高亮」/「已接入记忆化高亮」分档的测量与断言
+ * 挪到了 `test/rerender-perf.perf.ts`（见 `vitest.perf.config.ts` 与
+ * `package.json` 的 `test:perf` 脚本），不进默认 `npm test`。
+ *
+ * 这份文件只留下这一条：**样本集本身**的钉子。它是非计时断言，对机器抖动免疫，
+ * 留在原地——`rerender-perf.perf.ts` 的两条 p95 断言的含义完全建立在
+ * 「样本集就是这固定的 6 个文件」之上，换语料集会让那两个数字的含义跟着变，
+ * 所以钉住它，让换样本变成一次显式修改，而不是悄悄发生。
  */
 // 不用 `new URL('../../core/test/corpus/real-world/', import.meta.url)`：happy-dom
 // （§0 A2，本包的 vitest environment）的全局 URL 构造器对「相对路径 + file: base」
 // 解析有 bug——不管传进去的 base 是什么，结果的 scheme 总变成它自己伪造的
-// http://localhost:.../@fs/... location，readdirSync/readFileSync 会抛
+// http://localhost:.../@fs/... location，readdirSync 会抛
 // "The URL must be of scheme file"（同一缺陷已在 test/leak.test.ts:162-170 与
 // test/set-html-usage.test.ts 记录过）。改用 dirname(fileURLToPath(import.meta.url))
 // + join 全程走 node:path，不经过全局 URL。
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))
 const CORPUS = join(TEST_DIR, '..', '..', 'core', 'test', 'corpus', 'real-world')
-const RUNS = 100
-const WARMUP = 10
 
 const FILES = readdirSync(CORPUS)
   .filter((f) => f.endsWith('.md'))
   .sort()
 
-function percentile(samples: readonly number[], q: number): number {
-  const sorted = [...samples].sort((a, b) => a - b)
-  const idx = Math.min(Math.max(Math.ceil(q * sorted.length) - 1, 0), sorted.length - 1)
-  return sorted[idx] ?? 0
-}
-
-describe('防抖间隔是量出来的，不是猜的', () => {
+describe('防抖间隔的测量样本集是量出来的、不是猜的（计时断言见 test:perf）', () => {
   it('样本集就是 real-world 语料的那 6 个文件，一个不多一个不少', () => {
-    // 换了样本集，上面那个 p95 就换了含义。钉住它，让换样本变成一次显式修改。
+    // 换了样本集，rerender-perf.perf.ts 里的两个 p95 就换了含义。钉住它，
+    // 让换样本变成一次显式修改。
     expect(FILES).toEqual([
       'gitignore.md',
       'hast-util-sanitize.md',
@@ -53,28 +49,5 @@ describe('防抖间隔是量出来的，不是猜的', () => {
       'sindresorhus-is.md',
       'tauri.md',
     ])
-  })
-
-  it('全部样本的 p95 仍低于一帧，所以 DEBOUNCE_MS 仍是 16', () => {
-    const samples: number[] = []
-    for (const file of FILES) {
-      const src = readFileSync(join(CORPUS, file), 'utf8')
-      for (let i = 0; i < RUNS; i++) {
-        const t0 = performance.now()
-        render(src)
-        const t1 = performance.now()
-        if (i >= WARMUP) samples.push(t1 - t0)
-      }
-    }
-    expect(samples).toHaveLength(FILES.length * (RUNS - WARMUP))
-
-    const p95 = percentile(samples, 0.95)
-    const derived = Math.max(Math.ceil(p95), 16)
-    expect(
-      derived,
-      `measured p95 = ${p95.toFixed(2)} ms over ${String(samples.length)} samples; ` +
-        `debounce should be max(ceil(p95), 16) = ${String(derived)} ms. ` +
-        `If this is red because render() got slower, report the regression — do not re-pin the constant.`,
-    ).toBe(DEBOUNCE_MS)
   })
 })
