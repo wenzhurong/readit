@@ -162,6 +162,19 @@ test.describe('L3b-editor：中日韩输入法在 Shadow Root 内的组合', () 
     await cdp.send('Input.insertText', { text: COMMITTED })
     // compositionend 之后，被推迟的外部写入才落地，最终值是外部写入本身
     // （它整体替换了文档），不是把组合结果拼接进去。
+    //
+    // ⚠️ 这一行钉住的是一个**产品语义决策**，不是一条显然的不变量——它断言
+    // 用户刚通过输入法提交的 COMMITTED 被**静默丢弃**了。之所以值得专门说明：
+    // 推迟写入这件事本身容易读成「我们会让你把这句话打完」，而实际语义是
+    // 「推迟只为了不打断输入法的状态机，写入落地时照样整体替换」。两种读法都站得住，
+    // 所以它是个决策，不是个 bug——但它此前是隐式的：Task 13 的合成 composition
+    // 事件从不真的往文档里写字，所以「丢用户输入」在批次 7 用真实 CDP 之前
+    // 根本不可观测。
+    //
+    // 若将来判定该保留用户输入（协同编辑、外部内容同步等场景下这是数据丢失），
+    // 要改的是 codemirror.ts 的 applyDeferred()，**这一行会跟着变**。
+    // 它是决策的落点，不是回归的护栏——别把它当成「本来就该这样」而绕过去。
+    // 记账见 docs/plans/2026-08-08-plan2-debt.md 的 D2-18。
     await page.waitForFunction(
       ([hid]) => window.readitFixture.get(hid).getValue() === '外部写入',
       [id] as const,
