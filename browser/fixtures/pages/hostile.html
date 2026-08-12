@@ -12,14 +12,22 @@
     </style>
   </head>
   <body>
-    <h1 id="probe-h1">probe</h1>
-    <ul id="probe-ul"><li>probe</li></ul>
-    <div id="probe-box">probe</div>
+    <!--
+      挂载点必须排在 light DOM 探针**之前**。探针是 hostile-isolation.spec.ts 用来
+      先证明"敌意 fixture 真的敌意"的，它们受 hostile-extra.css 的 line-height: 3 等
+      影响而在两页上高度不同——排在上面就会把 #a 推到不同的亚像素起点。
+      L4 逐像素比对因此红过一轮：两页渲染的几何逐位相同（760.00x486.41），
+      全属性 computed 差集也为空，唯独截图一个 487 一个 488——分数高度落在
+      不同的舍入侧。放在 body 顶端让起点恒为 0，把这个与隔离无关的变量消掉。
+    -->
     <div id="a" style="display: block; width: 760px"></div>
     <div id="pair" style="display: none; gap: 24px; align-items: flex-start; width: 784px">
       <div id="c" style="display: block; width: 380px"></div>
       <div id="d" style="display: block; width: 380px"></div>
     </div>
+    <h1 id="probe-h1">probe</h1>
+    <ul id="probe-ul"><li>probe</li></ul>
+    <div id="probe-box">probe</div>
     <script type="module" src="/assets/entry.js"></script>
   </body>
 </html>
