@@ -40,6 +40,18 @@ export const BASE_CSS = `
  * 声明正是批次 5 从上游媒体块里抬块时漏掉、又补回来的东西（见 gen-theme-css.ts）。
  * .markdown-body 内部不受影响：gmc 在它自己身上显式设了这三项，那个声明赢。
  *
+ * ## tab-size 不在敌意表里，是像素比对逼出来的
+ *
+ * 前面那份清单从 hostile-extra.css 反推，因此覆盖不到**另一个来源**：
+ * 敌意页还加载了 Tailwind Preflight 与 Bootstrap Reboot，而干净页不加载
+ * （那是夹具的设计——见 test/visual-wiring.test.ts 那条"差别必须只有那三个 link"）。
+ * Preflight 把 tab-size 从浏览器默认的 8 改成 4、把 text-size-adjust 设成 100%，
+ * 两者都是继承属性，照样穿过 shadow 边界，含制表符的代码块因此两个宿主渲染不同。
+ *
+ * 抓到它的不是 hostile-isolation.spec.ts——那条当时是绿的，因为它比的是一张
+ * **手挑的** PROPS 表，而 tab-size 不在表里。抓到它的是 L4 的逐像素比对，
+ * 以及随后对 getComputedStyle **全部**属性做的一次差集。那条 spec 已改成全属性差集。
+ *
  * ## font-family 是唯一一项**故意不重置**的，理由是实测出来的
  *
  * 它是敌意表设的第九项，守卫（base-css.test.ts）里有一条具名豁免。
@@ -66,6 +78,7 @@ export const BASE_CSS = `
   letter-spacing: normal; word-spacing: normal; font-style: normal;
   font-variant-numeric: normal; text-align: start; text-transform: none;
   color: CanvasText; line-height: normal;
+  tab-size: 8; text-size-adjust: auto; -webkit-text-size-adjust: auto;
 }
 .readit-root[data-mode="split"] { display: grid; grid-template-columns: 1fr 1fr; }
 .readit-pane { min-width: 0; overflow: auto; }
