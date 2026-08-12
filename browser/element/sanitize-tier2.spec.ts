@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../support/harness.js'
+import { forceTier2 } from '../support/tiers.js'
 
 /**
  * D2-17（docs/plans/2026-08-08-plan2-debt.md）：第 2 级（DOMPurify）的允许名单
@@ -191,15 +192,13 @@ async function mountAndSnapshot(page: Page): Promise<Snapshot> {
 }
 
 test.describe('第 2 级 DOMPurify 的允许名单对齐 Phase A 输出（D2-17）', () => {
-  test.beforeEach(async ({ page, browserName }) => {
-    test.skip(browserName === 'firefox', 'Firefox 既无原生 setHTML 也无 window.trustedTypes，走第 3 级，第 2 级配置对它没有意义')
-    if (browserName === 'chromium') {
-      // 不删掉的话第 2 级在 Chromium 上永远选不中(它有原生 setHTML)，那等于这条诊断
-      // 只测了 WebKit 一个引擎——同 trusted-types.spec.ts 逼出第 2 级的既有做法。
-      await page.addInitScript(() => {
-        Reflect.deleteProperty(Element.prototype, 'setHTML')
-      })
-    }
+  test.beforeEach(async ({ page }) => {
+    // 这里原本有一条 `test.skip(browserName === 'firefox', 'Firefox 既无原生 setHTML
+    // 也无 window.trustedTypes，走第 3 级…')`——**那两句都不成立**（2026-08-12 实测，
+    // 能力矩阵见 browser/support/tiers.ts：Firefox 两样都有）。于是 D2-17 这条第 2 级
+    // 诊断以一个站不住的理由静默跳过了一整个引擎。跳过已删除，三个引擎一视同仁地
+    // 逼进第 2 级。
+    await forceTier2(page)
   })
 
   test('两个引擎都真的落在第 2 级上（前提校验，不是这条诊断本身）', async ({ page }) => {

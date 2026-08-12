@@ -15,7 +15,7 @@ test('企业 CSP 下渲染成功（Element.setHTML 在场，走第 1 级）', as
   expect(await page.evaluate(() => window.__cspViolations)).toEqual([])
 })
 
-test('企业 CSP 下渲染成功（Element.setHTML 缺席，逼出第 2 级 Trusted Types 策略）', async ({ page, browserName }) => {
+test('企业 CSP 下渲染成功（Element.setHTML 缺席，逼出第 2 级 Trusted Types 策略）', async ({ page }) => {
   // 删掉第 1 级，否则在带 setHTML 的 Chromium 上第 2 级永远不会被执行到——那等于这一级没写。
   await page.addInitScript(() => {
     Reflect.deleteProperty(Element.prototype, 'setHTML')
@@ -28,15 +28,18 @@ test('企业 CSP 下渲染成功（Element.setHTML 缺席，逼出第 2 级 Trus
   expect(await page.evaluate(() => document.getElementById('a')?.shadowRoot?.querySelector('h1')?.textContent)).toBe('Enterprise')
   expect(await page.evaluate(() => window.__cspViolations)).toEqual([])
 
-  if (browserName === 'chromium') {
-    // 只有 Chromium 真的实现了 Trusted Types。它在场时，走 innerHTML 会硬抛，
-    // 上面两条断言就会以「内容缺失 + 有 violation」的形式一起红。
-    // TS 5.9 的 lib.dom.d.ts 还没有 Trusted Types 类型（同 set-html.ts 的 readEnv()
-    // 用 `'trustedTypes' in window` 而非属性访问的理由），这里用同样的窄化取值方式。
-    expect(
-      await page.evaluate(() => typeof (window as unknown as { trustedTypes?: unknown }).trustedTypes),
-    ).toBe('object')
-  }
+  // 这里原本写的是「只有 Chromium 真的实现了 Trusted Types」并只在 chromium 下断言。
+  // 2026-08-12 实测三个引擎都实现了（能力矩阵见 browser/support/tiers.ts），
+  // 所以那句限定既不必要也已经过时——现在三个引擎一律断言。
+  // Trusted Types 在场时，走 innerHTML 会硬抛，上面两条断言会以「内容缺失 +
+  // 有 violation」的形式一起红；这一条是那个前提本身的守卫。
+  // TS 5.9 的 lib.dom.d.ts 还没有 Trusted Types 类型（同 set-html.ts 的 readEnv()
+  // 用 `'trustedTypes' in window` 而非属性访问的理由），这里用同样的窄化取值方式。
+  expect(
+    await page.evaluate(() => typeof (window as unknown as { trustedTypes?: unknown }).trustedTypes),
+    '这个引擎不再提供 Trusted Types —— 不要直接删掉这条断言，先去 tiers.ts 更新能力矩阵，' +
+      '再判断 setHtml() 的档位选择是否需要跟着改',
+  ).toBe('object')
 })
 
 /**

@@ -1,4 +1,5 @@
 import { expect, mountDoc, test, type Page } from '../support/harness.js'
+import { forceTier2 } from '../support/tiers.js'
 
 /**
  * 终审复审（D2-2x）：批次 8 重做的诊断（`sanitize-tier2.spec.ts`、
@@ -56,14 +57,11 @@ test.describe('原始 HTML 53 个标签（hast-util-sanitize defaultSchema.tagNa
     expect(failing, `第 1 级下没存活的标签：${failing.join(', ')}`).toEqual([])
   })
 
-  test('第 2 级（DOMPurify）：53 个全部存活（Chromium 逼出第 2 级 + WebKit 天然）', async ({ page, browserName }) => {
-    if (browserName === 'chromium') {
-      // 不删掉的话第 2 级在 Chromium 上永远选不中（它有原生 setHTML）——同
-      // sanitize-tier2.spec.ts/trusted-types.spec.ts 的既有做法。
-      await page.addInitScript(() => {
-        Reflect.deleteProperty(Element.prototype, 'setHTML')
-      })
-    }
+  test('第 2 级（DOMPurify）：53 个全部存活（三个引擎都逼进第 2 级）', async ({ page }) => {
+    // 不按引擎名判。原来写的是 `if (browserName === 'chromium')`，而 2026-08-12 实测
+    // Firefox 同样有原生 setHTML（能力矩阵见 browser/support/tiers.ts），于是 Firefox 上
+    // 下面那条前提断言直接失败——那条 advisory job 一直红着，被 continue-on-error 盖住。
+    await forceTier2(page)
     await page.goto('/host.html')
     expect(await page.evaluate(() => 'setHTML' in Element.prototype), '前提：这个引擎现在没有原生 setHTML，走的是第 2 级').toBe(false)
     const seen = await survives(page, TAGS_53)
