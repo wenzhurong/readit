@@ -232,6 +232,14 @@ const RATIO_UPPER_BOUND = 25
  * 落在哪个整数根本不影响 `Math.max(..., 16)` 的结果。这一档没有这层保护
  * （测出来的值本身就*是*那个决定性的数），所以要显式处理。
  *
+ * ⚠️ **2026-08-12 补记：这套缓冲在跨机器时不成立，已因此把绝对值断言移出 CI。**
+ * GitHub 的 ubuntu runner 上实测 p95 = **35.30 ms**（比本机慢约 18%），
+ * 加缓冲取整后是 **50**，与本机导出的 40 不同。缓冲能治「同一台机器上贴着
+ * 边界闪烁」，治不了「换一台机器整体平移」——后者会平移过任意固定的桶边界。
+ * 所以 `DEBOUNCE_MS_HIGHLIGHT` 与实测 p95 的相等断言现在只在
+ * `READIT_PERF_CALIBRATE=1` 下跑（见那条用例的注释），CI 里阻塞的是比值哨兵。
+ * 下面这段推导仍然有效——它解释 40 这个数在**本机**上从哪来。
+ *
  * 处理方式：先加 5ms 缓冲再取整到十的倍数——`Math.ceil((p95 + 5) / 10) * 10`。
  * 用上面全部 8 个实测样本验证过：29.63+5=34.63→40，30.25+5=35.25→40，
  * 全部 8 个样本在加缓冲后都落进同一个「40」桶，不再有任何一次会给出别的结果。
@@ -289,7 +297,37 @@ describe('C1 重做：防抖间隔按真实重渲染路径分档测量，不是�
     ).toBe(DEBOUNCE_MS)
   })
 
-  it('接入真实 Shiki 高亮（记忆化，编辑每个文件里最大的可高亮代码块）：DEBOUNCE_MS_HIGHLIGHT 按这个最坏情形重导', () => {
+  /**
+   * ⚠️ **这条只在校准时跑，不进 CI**（`READIT_PERF_CALIBRATE=1`）。
+   *
+   * 2026-08-12 首次推上 CI 就红了，而且红得很有教育意义：
+   *
+   * ```
+   * measured p95 = 35.30 ms（GitHub ubuntu runner）→ derived = 50
+   * 而 DEBOUNCE_MS_HIGHLIGHT = 40（本机 29.63-30.25ms 导出）
+   * ```
+   *
+   * 本机与 CI 只差约 18%，却正好跨过 40/50 的桶边界。加缓冲那一步本来就是为了
+   * 治「贴着取整边界闪烁」，但缓冲的宽度是**用一台机器的分布**定的，然后被接进了
+   * **另一台机器**上的阻塞门——这正是这个项目的头号失效模式（「声明的广度由做
+   * 声明的人自己选定」）又一次发作，只不过这次发作在控制端自己身上。
+   *
+   * 教训不是「把缓冲再加大」——那是拿改数字换绿灯，本文件别处已经明令禁止。
+   * 教训是：**绝对墙钟阈值在结构上就当不了跨机器的阻塞门。** 评审在 C2 里已经
+   * 说过这句话，当时的处置只做到一半（挪出三 OS 矩阵，却又钉进单 OS 的 perf job）。
+   *
+   * 所以现在按本文件开头声明的分工彻底执行：
+   *   - **比值哨兵**（下一条）跨机器稳定 → 它才是 CI 里阻塞的那条
+   *   - **绝对值**（本条）按构造就编码了某一台机器的速度 → 只是常数的**出处**，
+   *     校准时跑，用来回答「40 这个数从哪来」
+   *
+   * 重新校准的跑法：`READIT_PERF_CALIBRATE=1 npm run test:perf`。
+   * 若它给出的 derived 与 DEBOUNCE_MS_HIGHLIGHT 不同，**先判断是机器变了还是代码
+   * 变慢了**——比值哨兵没红就说明记忆化没坏，多半只是换了台机器。
+   */
+  it.runIf(process.env.READIT_PERF_CALIBRATE === '1')(
+    '【校准专用】接入真实 Shiki 高亮（记忆化，编辑每个文件里最大的可高亮代码块）：DEBOUNCE_MS_HIGHLIGHT 的出处',
+    () => {
     const p95 = percentile(b.merged, 0.95)
     // 用 deriveHighlightedDebounceMs 而不是原来那条 `max(ceil(p95), 16)`：
     // 独立跑了 8 次，测出的 p95 落在 29.63–30.25ms 之间——紧贴着「30」这个整数
@@ -308,6 +346,21 @@ describe('C1 重做：防抖间隔按真实重渲染路径分档测量，不是�
         `slower or memoization regressed, report the regression — do not re-pin the constant, and do not ` +
         `"fix" it by lowering render fidelity (e.g. skipping languages) or by editing a smaller block.`,
     ).toBe(DEBOUNCE_MS_HIGHLIGHT)
+    },
+  )
+
+  /**
+   * 机器无关的下限护栏——补上上面那条移出 CI 之后留下的空档。
+   *
+   * 它不校验「40 是不是最优值」（那要靠校准），只校验「这个常数没有被改成
+   * 一个显然说不通的数」：必须不低于一帧的地板 `DEBOUNCE_MS`，且必须是
+   * `deriveHighlightedDebounceMs()` 那条公式**可能产出**的形状（十的倍数）。
+   *
+   * 弱，但诚实：它不假装自己验证了时序。真正的时序回归由比值哨兵抓。
+   */
+  it('机器无关的下限：DEBOUNCE_MS_HIGHLIGHT 不低于一帧地板，且形状与推导公式一致', () => {
+    expect(DEBOUNCE_MS_HIGHLIGHT).toBeGreaterThanOrEqual(DEBOUNCE_MS)
+    expect(DEBOUNCE_MS_HIGHLIGHT % 10, 'deriveHighlightedDebounceMs 只会产出十的倍数').toBe(0)
   })
 
   it('比值哨兵：已接入高亮档相对未接入高亮档的 p95 比值，跨机器稳定，是真正该被 CI 信任的回归信号', () => {
