@@ -69,9 +69,11 @@ export async function assertFontsPinned(page: Page, hostId: string): Promise<voi
     // 而两个视觉夹具页都加载 visual-fonts.css，于是继承下来的正好就是被钉住的字体。
     // D2-20 给 .readit-root 补上 font-family 之后这个巧合断了，断言当场红——
     // 红得对，但红在一个它本来就不该量的元素上。
-    const para = root.querySelector('.markdown-body p')
+    // 不是所有 shot 都有段落：code-and-tables 通篇是标题/表格/代码围栏/任务列表，
+    // 一个 <p> 都没有。挑第一个真实存在的正文元素，而不是假定段落一定在。
+    const para = root.querySelector('.markdown-body p, .markdown-body li, .markdown-body td, .markdown-body h1')
     const pre = root.querySelector('.markdown-body pre')
-    if (para === null) throw new Error('渲染结果的 .markdown-body 里没有 <p>')
+    if (para === null) throw new Error('渲染结果的 .markdown-body 里没有任何正文元素（p/li/td/h1）')
 
     // 探针 span 挂在 shadow root 本体上（不进 .readit-root），不挂在 document.body 上。
     // 敌意宿主的 hostile-extra.css 用 `* { font-family: cursive !important }` 通吃

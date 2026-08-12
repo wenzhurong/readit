@@ -57,9 +57,32 @@ describe('D2-20：敌意宿主的继承属性在 .readit-root 上逐项被重置
     expect(hostile).toContain('font-variant-numeric')
   })
 
+  /**
+   * 唯一一条豁免，理由是实测出来的、不是"看着不重要"。
+   *
+   * 给 .readit-root 加 `font-family` 会让 L4 基线生不出来：visual-fonts.css 靠
+   * `#a::part(root)` / `::part(content)` 把字体钉成 'Noto Sans'，再用文档级
+   * @font-face 把那个族名接管到自托管 woff2——整套 L4 的字体确定性都建立在
+   * "元素自己不硬钉字体、让外部 ::part 说了算"上。在根上写死族栈会跟它打架。
+   *
+   * 残留缺口是具名的：真实宿主用 `* { font-family: … !important }` 时，界面外壳
+   * （错误面板标题等）的字体会跟宿主走；正文不受影响，gmc 在 .markdown-body
+   * 自己身上设了字体栈。属排版观感，不影响内容与安全边界。
+   *
+   * **这条豁免必须带着理由一起被读到。** 往下面这张表里加名字之前先问一句：
+   * 是"实测证明重置它会打坏别的东西"，还是"我不想处理它"——D2-20 这个缺陷
+   * 本身就是第二种态度攒出来的。
+   */
+  const EXEMPT = new Map([['font-family', '与 L4 的 ::part 字体钉法冲突，见 base-css.ts 里的实测记述']])
+
+  it('豁免表本身不许悄悄变长', () => {
+    // 加一条豁免是一次需要解释的动作，不是随手的。
+    expect([...EXEMPT.keys()]).toEqual(['font-family'])
+  })
+
   it.each(
     // 逐条列出来而不是塞进一个循环断言：红的时候要一眼看出少的是哪个属性名。
-    hostileUniversalDeclarations(readFileSync(HOSTILE_CSS, 'utf8')),
+    hostileUniversalDeclarations(readFileSync(HOSTILE_CSS, 'utf8')).filter((p) => !EXEMPT.has(p)),
   )('.readit-root 重置了 %s', (prop) => {
     expect(
       reset.has(prop),
@@ -67,6 +90,19 @@ describe('D2-20：敌意宿主的继承属性在 .readit-root 上逐项被重置
         '而 base-css.ts 的 .readit-root 没有重置它。加一条重置——不要从敌意表里删掉它，' +
         '那等于把验收线改窄来换绿灯。',
     ).toBe(true)
+  })
+
+  it('BASE_CSS 的源文件里只有两个反引号 —— 注释写在模板字面量内部，反引号会截断它', () => {
+    // 这一轮里同一颗雷踩了三次（另有批次 6 的实现者踩过一次）：BASE_CSS 是个模板
+    // 字面量，而 CSS 注释写在它**内部**，注释里习惯性地用反引号引一段代码，
+    // 就把字面量提前闭合了。报错信息指向 oxc 的 transform，离真正的原因很远。
+    // 这条断言把它变成一句人话。要在注释里引代码，用双引号。
+    const src = readFileSync(join(HERE, '..', 'src', 'styles', 'base-css.ts'), 'utf8')
+    expect(
+      (src.match(/`/g) ?? []).length,
+      'base-css.ts 里的反引号只应该是 BASE_CSS 模板字面量的开闭两个。' +
+        '多出来的那个多半在某条 CSS 注释里——把它换成双引号。',
+    ).toBe(2)
   })
 
   it('重置挂在 .readit-root 而不是 :host —— 挂 :host 会被宿主的 !important 压过', () => {

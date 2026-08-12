@@ -40,12 +40,19 @@ export const BASE_CSS = `
  * 声明正是批次 5 从上游媒体块里抬块时漏掉、又补回来的东西（见 gen-theme-css.ts）。
  * .markdown-body 内部不受影响：gmc 在它自己身上显式设了这三项，那个声明赢。
  *
- * font-family 是第九项，也是最容易被漏掉的一项——它此前**没有出现在真机 diff 里**，
- * 不是因为我们挡住了它，而是因为 L4 的夹具自己用 ::part() 钉死了字体
- * （见 hostile-extra.css 顶部那段「不用 !important 打 ::part()」的说明）。
- * 那是夹具特有的，真实宿主没有这层，所以靠 diff 反推清单会漏掉它。
- * 抓到它的是 base-css.test.ts 那条从敌意表反推的守卫，不是真机测试。
- * 这里给的是界面外壳的字体栈；.markdown-body 内部照旧由 gmc 的声明赢。
+ * ## font-family 是唯一一项**故意不重置**的，理由是实测出来的
+ *
+ * 它是敌意表设的第九项，守卫（base-css.test.ts）里有一条具名豁免。
+ * 试过给它加 "font-family: system-ui, sans-serif"，结果是 L4 基线**生不出来**：
+ * visual-fonts.css 靠 "#a::part(root)" / "::part(content)" 把字体钉成
+ * 'Noto Sans'，再用文档级 @font-face 把那个族名接管到自托管的 woff2——
+ * 整套 L4 的字体确定性都建立在「元素自己不硬钉字体、让外部 ::part 说了算」上。
+ * 在 .readit-root 上写死一个族栈会跟这套钉法打架。
+ *
+ * 残留缺口（具名，不是遗漏）：真实宿主若用 "* { font-family: … !important }"，
+ * 界面外壳（错误面板标题、降级提示）的字体会跟着宿主走。正文不受影响——
+ * github-markdown-css 在 .markdown-body 自己身上设了字体栈。
+ * 这是排版观感层面的，不影响内容、不影响安全边界。
  *
  * 其中 font-variant-numeric 是这次才补上的第六项——D2-20 原本记的是「五项」，
  * 那五项来自 browser/support/visual.ts 的 PROPS 采样表，而**那张表漏了它**。
@@ -59,7 +66,6 @@ export const BASE_CSS = `
   letter-spacing: normal; word-spacing: normal; font-style: normal;
   font-variant-numeric: normal; text-align: start; text-transform: none;
   color: CanvasText; line-height: normal;
-  font-family: system-ui, sans-serif;
 }
 .readit-root[data-mode="split"] { display: grid; grid-template-columns: 1fr 1fr; }
 .readit-pane { min-width: 0; overflow: auto; }
