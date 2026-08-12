@@ -86,8 +86,27 @@ export async function assertFontsPinned(page: Page, hostId: string): Promise<voi
     const width = (family: string): number => {
       const span = document.createElement('span')
       span.textContent = 'MMMMMiiiii 0123456789 the quick brown fox'
+      // 除 font-family 外，把所有会影响宽度的继承属性一并钉死。
+      //
+      // 探针 span 是**故意**挂在 shadow root 本体上、不进 .readit-root 的（理由见上），
+      // 代价是它继承的是**宿主元素**的样式——敌意页上那包括 font-style: italic、
+      // letter-spacing: 0.35em、word-spacing: 0.5em、text-transform: uppercase、
+      // font-variant-numeric: tabular-nums。它们对两次测量本应对称、互相抵消，
+      // 但 italic 不对称：'Noto Sans' 的斜体 face 是懒加载的，第一次 width() 调用
+      // 触发加载、第二次才拿到真 face，于是同一个族名量出两个宽度。
+      //
+      // 实测（2026-08-12，本机 chromium，两个宿主页 × 5 张 shot）：
+      //   kitchen-sink-*            visual 0    hostile 0       ← 正文本来就有斜体，face 已加载
+      //   code-and-tables-*         visual 0    hostile 17.20   ← 正文无斜体
+      //   alerts-and-footnotes-*    visual 0    hostile 17.20
+      // 容器里同一现象给出 17.484375，与本机的 17.203125 同源、只差字体栅格化。
+      //
+      // 这条断言要问的是「族名解析到了哪个字体」，不是「宿主漏进来的排版属性是什么」，
+      // 所以把后者钉死才是它本来的语义。
       span.style.cssText =
-        `position:absolute;left:-9999px;top:0;white-space:pre;font-size:16px;font-weight:400;font-family:${family}`
+        'position:absolute;left:-9999px;top:0;white-space:pre;font-size:16px;font-weight:400;' +
+        'font-style:normal;font-variant-numeric:normal;letter-spacing:normal;word-spacing:normal;' +
+        `text-transform:none;font-family:${family}`
       root.appendChild(span)
       const w = span.getBoundingClientRect().width
       span.remove()
