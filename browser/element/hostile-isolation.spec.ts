@@ -53,7 +53,6 @@ test('敌意宿主下的 computed style 与干净宿主逐条相同', async ({ p
   // 需要补一条更完整的重置（例如 `:host { all: initial; display: block; }`）才能
   // 把这条继承链在 shadow 边界上截断——这正是这条测试要证明「还没补」的地方。
   // 两个浏览器（Chromium 与 WebKit）表现一致，确认这是 CSS 层面的缺口，不是引擎差异。
-  test.fail(true, '已知缺陷：:host 缺少对 letter-spacing/word-spacing/font-style/text-align/text-transform 等继承属性的重置，需要 element 一侧在 base-css.ts 补全，不在本批范围内')
 
   await page.goto('/visual.html')
   await loadShot(page, SHOT)

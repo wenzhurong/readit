@@ -8,7 +8,59 @@
 export const BASE_CSS = `
 :host { display: block; }
 :host([hidden]) { display: none; }
-.readit-root { position: relative; height: 100%; min-width: 0; outline: none; }
+/*
+ * D2-20：继承属性的边界重置。SPEC §14 的 M3 验收线「敌意宿主 fixture 下渲染不变」
+ * 此前被 hostile-isolation.spec.ts 自己的 test.fail() 证明为假，成因就是这里缺的东西。
+ *
+ * ## 为什么落在 .readit-root 而不是 :host
+ *
+ * 继承是穿过 shadow 边界的——挡它的从来不是 Shadow DOM，是一次显式重置。
+ * 但重置不能挂 :host：宿主页面的 "* { … !important }" 同样命中宿主元素本身，
+ * 而按 CSS Scoping 的跨树层叠顺序，**普通**声明外层树赢、**important** 声明内层树赢。
+ * 挂 :host 就得跟着写 !important 才压得住，等于跟宿主打 important 军备竞赛。
+ *
+ * 挂 .readit-root 不用打：那个元素在 shadow 树**内部**，宿主的 "*" 选择器根本
+ * 匹配不到它，所以普通声明就赢，而它的全部后代改从它这里继承，不再从被污染的
+ * 宿主元素继承。这与 github-markdown-css 挡住 color/font-family/line-height 的
+ * 机理完全一致（它把那三项设在 .markdown-body 自己身上）——不是新发明的招式。
+ *
+ * ## 为什么是这些项
+ *
+ * 起点是 browser/fixtures/css/hostile-extra.css 设的那九个继承属性。
+ *
+ * 第一版只重置了六项，把 line-height / color / font-family 减掉了，理由是
+ * "github-markdown-css 自己在 .markdown-body 上设了这三项"。**那个减法是错的**，
+ * 而且是被测试当场抓住的：它把「shadow 树」与「.markdown-body」当成了一回事。
+ * shadow 树里还有错误面板、源码窗格、回落 <pre> 这些**不在 .markdown-body 下**的
+ * 节点，gmc 的选择器根本够不到它们。抓到它的是采样里的 "p"——
+ * root.querySelector("p") 命中的是错误面板的 .readit-error-title，不是正文段落。
+ *
+ * 所以 color 与 line-height 也要重置。color 不能硬钉成黑色：错误面板在深色主题下
+ * 会变成黑字。用 CanvasText——它随 color-scheme 自动翻转，而那两条 color-scheme
+ * 声明正是批次 5 从上游媒体块里抬块时漏掉、又补回来的东西（见 gen-theme-css.ts）。
+ * .markdown-body 内部不受影响：gmc 在它自己身上显式设了这三项，那个声明赢。
+ *
+ * font-family 是第九项，也是最容易被漏掉的一项——它此前**没有出现在真机 diff 里**，
+ * 不是因为我们挡住了它，而是因为 L4 的夹具自己用 ::part() 钉死了字体
+ * （见 hostile-extra.css 顶部那段「不用 !important 打 ::part()」的说明）。
+ * 那是夹具特有的，真实宿主没有这层，所以靠 diff 反推清单会漏掉它。
+ * 抓到它的是 base-css.test.ts 那条从敌意表反推的守卫，不是真机测试。
+ * 这里给的是界面外壳的字体栈；.markdown-body 内部照旧由 gmc 的声明赢。
+ *
+ * 其中 font-variant-numeric 是这次才补上的第六项——D2-20 原本记的是「五项」，
+ * 那五项来自 browser/support/visual.ts 的 PROPS 采样表，而**那张表漏了它**。
+ * 计算样式探针看不见，截图看得见（code-and-tables 里那个 42 会变成等宽数字）。
+ * 「广度由做声明的人自己选定」在这个项目里又发作了一次，这次发作在债务条目本身。
+ * PROPS 已同步补上它，且 base-css.test.ts 现在从 hostile-extra.css **反推**这张
+ * 清单——往敌意表里加一条继承属性而不在这里重置，构建会红，不再依赖谁记得。
+ */
+.readit-root {
+  position: relative; height: 100%; min-width: 0; outline: none;
+  letter-spacing: normal; word-spacing: normal; font-style: normal;
+  font-variant-numeric: normal; text-align: start; text-transform: none;
+  color: CanvasText; line-height: normal;
+  font-family: system-ui, sans-serif;
+}
 .readit-root[data-mode="split"] { display: grid; grid-template-columns: 1fr 1fr; }
 .readit-pane { min-width: 0; overflow: auto; }
 .readit-pane[hidden] { display: none; }

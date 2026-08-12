@@ -112,6 +112,13 @@ const SAMPLED = [
 
 const PROPS = [
   'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'wordSpacing',
+  // fontVariantNumeric 是 2026-08-12 补的：hostile-extra.css 一直设着
+  // `font-variant-numeric: tabular-nums !important`，而这张表漏了它，于是
+  // D2-20 被记成「五项继承属性没重置」——实际是六项。计算样式探针看不见的那一项，
+  // 截图看得见（code-and-tables 里那个 42 会变成等宽数字）。这张表的广度此前
+  // 由写它的人自己选定，而它比敌意表窄；现在 base-css.test.ts 从 hostile-extra.css
+  // 反推重置清单，这里补齐只是让两层探测的广度对齐。
+  'fontVariantNumeric',
   'textTransform', 'textAlign', 'direction', 'color', 'backgroundColor', 'boxSizing', 'listStyleType',
   'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
   'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
