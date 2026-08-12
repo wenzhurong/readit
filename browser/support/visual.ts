@@ -59,9 +59,19 @@ export async function assertFontsPinned(page: Page, hostId: string): Promise<voi
   const m = await page.evaluate((id: string) => {
     const root = document.getElementById(id)?.shadowRoot ?? null
     if (root === null) throw new Error(`no shadow root on #${id}`)
-    const para = root.querySelector('p')
-    const pre = root.querySelector('pre')
-    if (para === null) throw new Error('渲染结果里没有 <p>')
+    // 限定在 .markdown-body 内。这条断言的文案说的是「**正文**没有落在自托管的
+    // Noto Sans 上」，而裸的 root.querySelector('p') 命中的是 shadow 树里的第一个
+    // <p>——实测那是 .readit-error-title（错误面板的标题，界面外壳，不是正文）。
+    // 同理 root.querySelector('pre') 会先撞上 .readit-source-fallback，那是编辑器
+    // 加载失败时的回落框，也不是代码块。
+    //
+    // 它此前"通过"是个巧合：外壳元素没有自己的 font-family，一路继承到宿主页面，
+    // 而两个视觉夹具页都加载 visual-fonts.css，于是继承下来的正好就是被钉住的字体。
+    // D2-20 给 .readit-root 补上 font-family 之后这个巧合断了，断言当场红——
+    // 红得对，但红在一个它本来就不该量的元素上。
+    const para = root.querySelector('.markdown-body p')
+    const pre = root.querySelector('.markdown-body pre')
+    if (para === null) throw new Error('渲染结果的 .markdown-body 里没有 <p>')
 
     // 探针 span 挂在 shadow root 本体上（不进 .readit-root），不挂在 document.body 上。
     // 敌意宿主的 hostile-extra.css 用 `* { font-family: cursive !important }` 通吃
