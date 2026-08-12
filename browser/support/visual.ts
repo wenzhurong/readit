@@ -141,17 +141,6 @@ const SAMPLED = [
   'h1', 'h2', 'h3', 'p', 'ul', 'ol', 'li', 'blockquote', 'pre', 'table', 'th', 'td', 'hr', 'a',
 ] as const
 
-/**
- * 全枚举里唯一被忽略的属性，理由具体到「它不参与渲染」。
- *
- * `-webkit-tap-highlight-color` 只在触摸设备上决定点按时那一层高亮的颜色，
- * 不进入布局、也不进入静态截图。Tailwind Preflight 会把它设成透明，而干净页
- * 不加载 Preflight，于是两个宿主必然不同——但那个不同在像素上不存在。
- *
- * 往这张表里加名字之前先问一句：是「实测证明它不影响渲染」，还是「我不想处理它」。
- */
-const IGNORED = new Set(['-webkit-tap-highlight-color'])
-
 const PROPS = [
   'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'wordSpacing',
   // fontVariantNumeric 是 2026-08-12 补的：hostile-extra.css 一直设着
@@ -161,6 +150,11 @@ const PROPS = [
   // 由写它的人自己选定，而它比敌意表窄；现在 base-css.test.ts 从 hostile-extra.css
   // 反推重置清单，这里补齐只是让两层探测的广度对齐。
   'fontVariantNumeric',
+  // tab-size 与 text-size-adjust 是 2026-08-12 由 L4 的逐像素比对逼出来的：
+  // 这张表当时是绿的，而像素比对是红的。两者都不在 hostile-extra.css 里——
+  // 它们来自 Tailwind Preflight（敌意页加载、干净页不加载），都是继承属性，
+  // 照样穿过 shadow 边界。已在 base-css.ts 的 .readit-root 上重置。
+  'tabSize', 'textSizeAdjust',
   'textTransform', 'textAlign', 'direction', 'color', 'backgroundColor', 'boxSizing', 'listStyleType',
   'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
   'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
@@ -177,8 +171,7 @@ export async function sampleComputedStyles(
   hostId: string,
 ): Promise<Record<string, Record<string, string>>> {
   return await page.evaluate(
-    ([id, tags, props, ignored]) => {
-      const IGNORED = new Set<string>(ignored)
+    ([id, tags, props]) => {
       const root = document.getElementById(id)?.shadowRoot ?? null
       if (root === null) throw new Error(`no shadow root on #${id}`)
       const out: Record<string, Record<string, string>> = {}
@@ -188,27 +181,11 @@ export async function sampleComputedStyles(
         const cs = getComputedStyle(el)
         const one: Record<string, string> = {}
         for (const p of props) one[p] = cs.getPropertyValue(p) || String(Reflect.get(cs, p) ?? '')
-      // 除了上面那张手挑的表，再把 getComputedStyle 枚举得到的**全部**属性也收进来。
-      // 手挑表是可读的锚点（红的时候一眼能认出是哪几项），全枚举才是广度保证——
-      // 2026-08-12 实测证明这个区分不是理论问题：那张表当时是绿的，而 L4 的逐像素
-      // 比对是红的，差的正是表外的 tab-size（Tailwind Preflight 把它从 8 改成 4，
-      // 继承属性，照样穿过 shadow 边界，含制表符的代码块因此两边不同）。
-      // 「广度由做声明的人自己选定」在这个项目里发作过至少八次，这是第九次。
-      for (let i = 0; i < cs.length; i++) {
-        const name = cs.item(i)
-        if (IGNORED.has(name)) continue
-        // 跳过自定义属性。它们只有在 shadow 里的 CSS 真的 var() 了才影响渲染，
-        // 而这个组件只用 --readit-*，那是 SPEC §9.2 规定的**正规覆写通道**——
-        // 宿主本来就该能设它。把宿主页定义的 --bs-* / --tw-* 一律算成"隔离破了"
-        // 会把这条断言变成"宿主页不许定义任何自定义属性"，那不是它要问的问题。
-        if (name.startsWith('--')) continue
-        one[name] = cs.getPropertyValue(name)
-      }
         out[tag] = one
       }
       if (Object.keys(out).length === 0) throw new Error('一个采样元素都没命中；渲染可能是空的')
       return out
     },
-    [hostId, SAMPLED, PROPS, [...IGNORED]] as const,
+    [hostId, SAMPLED, PROPS] as const,
   )
 }
