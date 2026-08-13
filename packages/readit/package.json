@@ -45,6 +45,10 @@
       "types": "./dist/plugins/highlight.d.ts",
       "import": "./dist/plugins/highlight.js"
     },
+    "./plugins/mermaid": {
+      "types": "./dist/plugins/mermaid.d.ts",
+      "import": "./dist/plugins/mermaid.js"
+    },
     "./styles.css": "./dist/readit.css",
     "./package.json": "./package.json"
   },
@@ -59,6 +63,7 @@
     "@readit/element": "0.0.0",
     "@readit/highlight": "0.0.0",
     "@readit/math": "0.0.0",
+    "@readit/mermaid": "0.0.0",
     "@types/node": "24.10.1",
     "esbuild": "0.25.12",
     "publint": "0.3.23",

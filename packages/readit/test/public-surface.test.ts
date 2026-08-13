@@ -21,6 +21,7 @@ const EXPECTED_SUBPATHS = [
   './package.json',
   './plugins/highlight',
   './plugins/math',
+  './plugins/mermaid',
   './styles.css',
 ]
 
@@ -39,6 +40,7 @@ const EXPECTED_JS_EXPORTS: Readonly<Record<string, readonly string[]>> = {
   './element': ['DEFAULT_MOUNT_OPTIONS', 'DEFAULT_TAG', 'defineReadit', 'mount'],
   './plugins/highlight': ['createShikiHighlighter', 'createStarryNightHighlighter'],
   './plugins/math': ['TEX_PACKAGES', 'createMathRenderer'],
+  './plugins/mermaid': ['createMermaidRenderer'],
 }
 
 /** 只取 import 条件实际会走的 JS 目标；类型、require 与非 JS 子路径不混进来。 */

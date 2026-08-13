@@ -96,6 +96,7 @@ describe('exports 映射就是 SPEC §9.3 的那张表', () => {
       './editor': { types: './dist/editor.d.ts', import: './dist/editor.js' },
       './plugins/math': { types: './dist/plugins/math.d.ts', import: './dist/plugins/math.js' },
       './plugins/highlight': { types: './dist/plugins/highlight.d.ts', import: './dist/plugins/highlight.js' },
+      './plugins/mermaid': { types: './dist/plugins/mermaid.d.ts', import: './dist/plugins/mermaid.js' },
       './styles.css': './dist/readit.css',
       './package.json': './package.json',
     })
@@ -129,7 +130,7 @@ describe('CSS 双形态：一个源，两种交付', () => {
   })
 
   it('全 dist 不出现 CSS module script —— 那会把 CSS import 属性的支持强加给每个宿主打包器', () => {
-    for (const rel of ['core.js', 'element.js', 'editor.js', 'plugins/math.js', 'plugins/highlight.js']) {
+    for (const rel of ['core.js', 'element.js', 'editor.js', 'plugins/math.js', 'plugins/highlight.js', 'plugins/mermaid.js']) {
       const text = read(rel)
       expect(text, rel).not.toMatch(/with\s*\{\s*type\s*:\s*["']css["']\s*\}/)
       expect(text, rel).not.toMatch(/(?<![@\w])(?:from|import)\s*\(?\s*["'][^"']*\.css["']/)
@@ -204,5 +205,25 @@ describe('createEditor() 的 codemirror 档在真实产物里仍然是懒加载�
     // 让它漂移几十到几百字节——只钉未压缩体量的数量级：一个真实编辑器实现，
     // 不是被裁剪成空壳的替身。
     expect(text.length).toBeGreaterThan(400_000)
+  })
+})
+
+describe('Mermaid 留在独立插件边界，不污染其他入口', () => {
+  it('五个非 Mermaid 入口的静态闭包都不含 Mermaid 实现指纹', () => {
+    for (const rel of ['core.js', 'element.js', 'editor.js', 'plugins/math.js', 'plugins/highlight.js']) {
+      const closure = bundleClosure(rel)
+      expect(closure, `${rel} 的静态闭包包含 Mermaid`).not.toContain('suppressErrorRendering')
+      expect(closure, `${rel} 的静态闭包包含 Mermaid`).not.toContain('flowchart-v2')
+    }
+  })
+
+  it('plugins/mermaid 的独占闭包含真实 Mermaid 与 DOMPurify，不是桩', () => {
+    const closure = bundleClosure('plugins/mermaid.js')
+    expect(closure).toContain('suppressErrorRendering')
+    expect(closure).toContain('flowchart-v2')
+    expect(closure).toContain('DOMPurify')
+    // esbuild minify 后当前静态闭包约 664 KB；钉数量级而非精确字节，既能排除
+    // 空壳/替身，也不把 Mermaid 的补丁版本或压缩细节变成无意义的破坏性变更。
+    expect(closure.length).toBeGreaterThan(500_000)
   })
 })

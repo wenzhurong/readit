@@ -16,6 +16,7 @@ const ESM_ENTRIES = [
   { out: 'editor', in: join(HERE, 'src/editor.ts') },
   { out: 'plugins/math', in: join(HERE, 'src/plugins/math.ts') },
   { out: 'plugins/highlight', in: join(HERE, 'src/plugins/highlight.ts') },
+  { out: 'plugins/mermaid', in: join(HERE, 'src/plugins/mermaid.ts') },
 ] as const
 
 /**
@@ -30,6 +31,7 @@ const WORKSPACE_TYPE_TARGETS: Readonly<Record<string, string>> = {
   '@readit/math': 'packages/math/src/index.js',
   '@readit/math/stylesheet': 'packages/math/src/svg-stylesheet.js',
   '@readit/math/introspect': 'packages/math/src/introspect.js',
+  '@readit/mermaid': 'packages/mermaid/src/index.js',
   '@readit/element': 'packages/element/src/index.js',
   '@readit/element/styles': 'packages/element/src/styles.js',
   '@readit/highlight': 'packages/highlight/src/index.js',
@@ -158,8 +160,8 @@ function bareSpecifiers(text: string): string[] {
 /**
  * 从发布入口出发，顺着 .d.ts 的相对 `from "./x.js"` 说明符爬出真正可达的声明子树。
  *
- * tsc 按 rootDir 镜像了 tsconfig.build.json include 里五个包的整棵 src/——那远大于
- * 「五个入口实际导出的类型用得到的文件」：例如 highlight 内部 serialize.ts 从 'hast'
+ * tsc 按 rootDir 镜像了 tsconfig.build.json include 里各工作区包的整棵 src/——那远大于
+ * 「发布入口实际导出的类型用得到的文件」：例如 highlight 内部 serialize.ts 从 'hast'
  * 取类型，但 createShikiHighlighter/createStarryNightHighlighter 的导出签名都不引用它
  * （返回类型显式标注为 core 的 Highlighter），所以它从未被任何发布入口的类型引用到。
  * 对着整棵镜像树做裸说明符扫描会把这类「镜像了、但没人会走到」的内部文件也算进来，
@@ -207,8 +209,8 @@ export async function buildDist(): Promise<void> {
   rmSync(DIST, { recursive: true, force: true })
   mkdirSync(DIST, { recursive: true })
 
-  // 1. ESM 五入口 + 代码分割。splitting 让 element → editor 的动态 import 落在包内相对
-  //    路径上，宿主不需要解析任何裸说明符，四个大件仍是四个互相独立的动态 import（§2.1）。
+  // 1. ESM 六入口 + 代码分割。splitting 让 element → editor 的动态 import 落在包内相对
+  //    路径上，宿主不需要解析任何裸说明符，五个大件仍是互相独立的动态 import（§2.1）。
   const esmResult = await esbuild.build({
     entryPoints: [...ESM_ENTRIES],
     outdir: DIST,

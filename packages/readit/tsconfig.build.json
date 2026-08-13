@@ -20,6 +20,7 @@
     "../math/src/**/*.ts",
     "../element/src/**/*.ts",
     "../highlight/src/**/*.ts",
-    "../editor/src/**/*.ts"
+    "../editor/src/**/*.ts",
+    "../mermaid/src/**/*.ts"
   ]
 }

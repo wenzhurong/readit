@@ -24,8 +24,9 @@ const PACKAGES = [
   '@readit/element',
   '@readit/highlight',
   '@readit/editor',
+  '@readit/mermaid',
   // §0 A7：Task 9 建的发布外观包，此刻还没有目录，这里先占位。
-  // 不占位的话，Task 9 一落地 packages/readit，"a sixth package cannot slip past the
+  // 不占位的话，Task 9 一落地 packages/readit，"a new package cannot slip past the
   // table" 那条断言就会因为磁盘上突然多出一个未登记目录而变红——而 Task 9 的任务书
   // 并不知道要回头改这份表。`packageOf()` 的现有实现（裸 specifier 走 else 分支）
   // 已经能匹配无斜杠的包名，不用改代码，只需要把 'readit' 填进这三张表。
@@ -39,6 +40,7 @@ const DIRECTORY: Record<PackageName, string> = {
   '@readit/element': 'packages/element',
   '@readit/highlight': 'packages/highlight',
   '@readit/editor': 'packages/editor',
+  '@readit/mermaid': 'packages/mermaid',
   readit: 'packages/readit',
 }
 
@@ -64,20 +66,22 @@ const ALLOWED: Record<PackageName, Partial<Record<PackageName, readonly ImportKi
   '@readit/math': { '@readit/core': ['type'] },
   '@readit/highlight': { '@readit/core': ['type'] },
   '@readit/editor': { '@readit/core': ['type'] },
+  '@readit/mermaid': {},
   '@readit/element': {
     '@readit/core': ['value', 'type', 'dynamic'],
     '@readit/highlight': ['type'],
     '@readit/editor': ['type', 'dynamic'],
   },
   // Task 9 落地：readit 是发布外观包，src/{core,element,editor,plugins/math,
-  // plugins/highlight}.ts 各自对应一个 `export * from '@readit/…'`，是静态值导出
-  // （esbuild 在构建期整体内联，不是运行时的裸 import），所以五条边都记 'value'。
+  // plugins/highlight,plugins/mermaid}.ts 各自对应一个 `export * from '@readit/…'`，
+  // 是静态值导出（esbuild 在构建期整体内联，不是运行时的裸 import）。
   readit: {
     '@readit/core': ['value'],
     '@readit/element': ['value'],
     '@readit/editor': ['value'],
     '@readit/highlight': ['value'],
     '@readit/math': ['value'],
+    '@readit/mermaid': ['value'],
   },
 }
 
@@ -337,7 +341,7 @@ describe('the scanner can tell the three import kinds apart', () => {
 })
 
 describe('P1 import directions hold across packages/*/src', () => {
-  it('covers every workspace under packages/ — a sixth package cannot slip past the table', () => {
+  it('covers every workspace under packages/ — a new package cannot slip past the table', () => {
     const dirs = readdirSync(join(ROOT, 'packages'), { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => `packages/${entry.name}`)
