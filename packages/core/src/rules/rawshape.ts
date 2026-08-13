@@ -46,7 +46,7 @@ import { OCTICON_LINK, sharedSlugger } from './heading.js'
  */
 
 /** Measured set, same as `dirauto.ts`'s: p / h1..h6 / ul / ol and nothing else. */
-const DIR_AUTO_TAGS: ReadonlySet<string> = new Set([
+export const DIR_AUTO_TAGS: ReadonlySet<string> = new Set([
   'p',
   'h1',
   'h2',

@@ -1,12 +1,29 @@
 import { describe, expect, it } from 'vitest'
 import MarkdownIt from 'markdown-it'
-import { applyDirAuto } from '../../src/rules/dirauto.js'
+import { applyDirAuto, DIR_AUTO_TOKENS } from '../../src/rules/dirauto.js'
+import { DIR_AUTO_TAGS } from '../../src/rules/rawshape.js'
+
+const TOKEN_TO_TAGS: Readonly<Record<string, readonly string[]>> = {
+  paragraph_open: ['p'],
+  heading_open: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'],
+  bullet_list_open: ['ul'],
+  ordered_list_open: ['ol'],
+}
 
 function md() {
   return new MarkdownIt('default', { html: true, linkify: false }).use(applyDirAuto)
 }
 
 describe('applyDirAuto', () => {
+  it('maps every Markdown token in the dir-auto policy', () => {
+    expect([...DIR_AUTO_TOKENS].sort()).toEqual(Object.keys(TOKEN_TO_TAGS).sort())
+  })
+
+  it('maps every raw HTML tag in the dir-auto policy', () => {
+    const mappedTags = new Set(Object.values(TOKEN_TO_TAGS).flat())
+    expect([...DIR_AUTO_TAGS].sort()).toEqual([...mappedTags].sort())
+  })
+
   it('puts dir="auto" on paragraphs, headings and lists only', () => {
     expect(md().render('hello\n')).toBe('<p dir="auto">hello</p>\n')
     expect(md().render('## hi\n')).toBe('<h2 dir="auto">hi</h2>\n')

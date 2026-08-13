@@ -7,7 +7,7 @@ import type { MarkdownIt, StateCore, Token } from 'markdown-it'
  * p / h1..h6 / ul / ol carry it; blockquote, hr, pre, table, thead,
  * tbody, tr, th, td and li never do.
  */
-const DIR_AUTO_TOKENS: ReadonlySet<string> = new Set([
+export const DIR_AUTO_TOKENS: ReadonlySet<string> = new Set([
   'paragraph_open',
   'heading_open',
   'bullet_list_open',
