@@ -25,6 +25,7 @@ const PACKAGES = [
   '@readit/highlight',
   '@readit/editor',
   '@readit/mermaid',
+  '@readit/find',
   // §0 A7：Task 9 建的发布外观包，此刻还没有目录，这里先占位。
   // 不占位的话，Task 9 一落地 packages/readit，"a new package cannot slip past the
   // table" 那条断言就会因为磁盘上突然多出一个未登记目录而变红——而 Task 9 的任务书
@@ -41,6 +42,7 @@ const DIRECTORY: Record<PackageName, string> = {
   '@readit/highlight': 'packages/highlight',
   '@readit/editor': 'packages/editor',
   '@readit/mermaid': 'packages/mermaid',
+  '@readit/find': 'packages/find',
   readit: 'packages/readit',
 }
 
@@ -67,6 +69,7 @@ const ALLOWED: Record<PackageName, Partial<Record<PackageName, readonly ImportKi
   '@readit/highlight': { '@readit/core': ['type'] },
   '@readit/editor': { '@readit/core': ['type'] },
   '@readit/mermaid': {},
+  '@readit/find': {},
   '@readit/element': {
     '@readit/core': ['value', 'type', 'dynamic'],
     '@readit/highlight': ['type'],
