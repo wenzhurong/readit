@@ -14,8 +14,8 @@
     "causes": [
       {
         "category": "deviation",
-        "explanation": "D-MERMAID: the ```mermaid fence renders as an ordinary highlight-source-mermaid code block (<div class=\"highlight highlight-source-mermaid\">...<pre>SOURCE</pre></div>); GitHub emits <section data-type=\"mermaid\">SOURCE</section>. Mermaid rendering is milestone M5, out of scope for this plan. Verified: the entire 5-vs-3-line diff is exactly this wrapper-shape difference; the mermaid source text itself is identical on both sides.",
-        "source": "task-24-report.md \"known deviation / D-MERMAID\"; re-verified against the live diff in task-36"
+        "explanation": "D-MERMAID, permanent architectural deviation: Phase A intentionally emits a local highlight-source-mermaid code block (<div class=\"highlight highlight-source-mermaid\">...<pre>SOURCE</pre></div>), and Phase B hydrates that same wrapper in the browser. GitHub instead emits a hosted enrichment <section data-type=\"mermaid\"> whose data-src points at its viewscreen.githubusercontent.com service. An offline reader must not fabricate that service URL or its enrichment shell. Verified: the entire 5-vs-3-line diff is exactly this wrapper-shape difference; the mermaid source text itself is identical on both sides.",
+        "source": "docs/plans/2026-08-13-plan3-m5-m6mac-spec.md §2.1 branch A; original finding task-24; re-verified against the live diff in task-36"
       }
     ]
   },
@@ -34,8 +34,8 @@
     "causes": [
       {
         "category": "deviation",
-        "explanation": "D-MERMAID, same mechanism as frontend/mermaid-large: highlight-source-mermaid code block vs GitHub's <section data-type=\"mermaid\">. Verified: 5-vs-3-line diff is entirely the wrapper shape; the (deliberately invalid) mermaid source text matches on both sides.",
-        "source": "task-24-report.md \"known deviation / D-MERMAID\"; re-verified against the live diff in task-36"
+        "explanation": "D-MERMAID, permanent architectural deviation, same mechanism as frontend/mermaid-large: Phase A keeps the local highlight-source-mermaid code block and Phase B hydrates it in place; readit does not reproduce GitHub's hosted <section data-type=\"mermaid\"> enrichment shell or fabricate its viewscreen.githubusercontent.com URL. Verified: 5-vs-3-line diff is entirely the wrapper shape; the (deliberately invalid) mermaid source text matches on both sides.",
+        "source": "docs/plans/2026-08-13-plan3-m5-m6mac-spec.md §2.1 branch A; original finding task-24; re-verified against the live diff in task-36"
       }
     ]
   },
@@ -54,8 +54,8 @@
     "causes": [
       {
         "category": "deviation",
-        "explanation": "D-MERMAID, same mechanism as frontend/mermaid-large: highlight-source-mermaid code block vs GitHub's <section data-type=\"mermaid\">. Verified: 5-vs-3-line diff is entirely the wrapper shape; the mermaid source text matches on both sides.",
-        "source": "task-24-report.md \"known deviation / D-MERMAID\"; re-verified against the live diff in task-36"
+        "explanation": "D-MERMAID, permanent architectural deviation, same mechanism as frontend/mermaid-large: Phase A keeps the local highlight-source-mermaid code block and Phase B hydrates it in place; readit does not reproduce GitHub's hosted <section data-type=\"mermaid\"> enrichment shell or fabricate its viewscreen.githubusercontent.com URL. Verified: 5-vs-3-line diff is entirely the wrapper shape; the mermaid source text matches on both sides.",
+        "source": "docs/plans/2026-08-13-plan3-m5-m6mac-spec.md §2.1 branch A; original finding task-24; re-verified against the live diff in task-36"
       }
     ]
   },
@@ -158,8 +158,8 @@
     "causes": [
       {
         "category": "deviation",
-        "explanation": "D-MERMAID: all 10 ```mermaid fences in this README render as highlight-source-mermaid code blocks instead of GitHub's <section data-type=\"mermaid\">. Same mechanism as the frontend/mermaid-* trio; dominates the file's line count (this README is almost entirely mermaid examples).",
-        "source": "task-24-report.md \"known deviation / D-MERMAID\"; re-verified against the live diff in task-36"
+        "explanation": "D-MERMAID, permanent architectural deviation: all 10 ```mermaid fences keep their local highlight-source-mermaid code blocks for Phase B hydration instead of reproducing GitHub's hosted <section data-type=\"mermaid\"> enrichment shells and fabricated viewscreen.githubusercontent.com URLs. Same mechanism as the frontend/mermaid-* trio; it dominates the file's line count because this README is almost entirely mermaid examples.",
+        "source": "docs/plans/2026-08-13-plan3-m5-m6mac-spec.md §2.1 branch A; original finding task-24; re-verified against the live diff in task-36"
       },
       {
         "category": "normalizer-gap",

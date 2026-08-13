@@ -493,7 +493,7 @@ frontmatter 键必须**扁平且带命名空间**——扁平因为 GitHub 把 f
 
 `theme: 'auto'` 读 `getComputedStyle(host).colorScheme`——`color-scheme` 是继承属性，跨 shadow 边界，所以无论宿主设在 `:root`、`.dark` 包装器还是没设（回落 `prefers-color-scheme`）都工作。
 
-对外只开两个覆写通道：`--readit-*` 自定义属性（映射到 GitHub 的 `--fgColor-*` / `--bgColor-*` / `--color-prettylights-syntax-*`，自定义属性会继承进 shadow 树），以及 `::part()`。**`::part()` 名字是永久公开 API**——先只开 `root` / `content` / `code-block`，加容易删是破坏性变更。**`mermaid` 推迟到 M5**：那个容器在 M5 之前根本不存在，现在钉一个名字，等 M5 真做时结构若不同就被自己锁死了。⚠️ 本条于 2026-08-09 修订，原文的名单含 `mermaid`，是设计计划二时对着一个还不存在的结构提前钉了名字。
+对外只开两个覆写通道：`--readit-*` 自定义属性（映射到 GitHub 的 `--fgColor-*` / `--bgColor-*` / `--color-prettylights-syntax-*`，自定义属性会继承进 shadow 树），以及 `::part()`。**`::part()` 名字是永久公开 API**——当前名单为 `root` / `content` / `code-block` / `mermaid`。`mermaid` 落在 Phase A 已有的 `.highlight-source-mermaid` wrapper 上，Phase B 水合前后都是同一个公开覆写点，而不是为运行时 SVG 另造一个短命容器。⚠️ 本条于 2026-08-13 随 M5 实现修订并钉死该名字。
 
 **永不写 `document.documentElement` 或 `document.body`。**
 
@@ -531,7 +531,7 @@ readit/
 mount(el, {
   value, mode: 'read'|'source'|'split'|'plain', shadow: true, theme: 'auto',
   baseUrl, inlineMath: 'github', math: null, highlighter, emojiBase, onNavigate,
-  loadHighlighter,
+  loadHighlighter, loadMermaid,
 }) -> { setValue, getValue, setMode, setTheme, destroy }
 ```
 
@@ -569,7 +569,7 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 
 ### 10.2 macOS 的 WebKit 版本
 
-⚠️ **不要写"最低 macOS 14 即得现代 WebKit"**。macOS 14 出厂是 Safari 17.0；Safari 26 是可选的独立更新，不是 OS 版本下限能保证的。要么把下限提到 macOS 15/26，要么运行时从 UA 检测 WebKit 构建号并显式降级/告警。文档里写 **"macOS 14 + Safari ≥ N"**，不写 "macOS 14"。
+⚠️ **不要写"最低 macOS 14 即得现代 WebKit"**。macOS 14 出厂是 Safari 17.0；Safari 26 是可选的独立更新，不是 OS 版本下限能保证的。发布门槛写成公式：**macOS 14 + Safari ≥ max(17.2, measured Mermaid/WKWebView floor)**。其中 17.2 是 CSS Custom Highlight API 不走 `<mark>` 降级的既有下限；`measured Mermaid/WKWebView floor` 必须由已发布 Safari 对应的真 WKWebView 矩阵实测得出。Playwright WebKit 只作预筛，不能拿它的版本替代这个实测下限；在矩阵完成前不得把 `N` 猜成当前开发机版本或更低版本。
 
 ### 10.3 Mermaid 在 WKWebView 上：真实风险与真实缓解
 
@@ -594,7 +594,7 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 - `Math.random()` 仍活在 `blockDB.ts`，更要命的是 `scoreLayout.ts` 里——它扰动的是**几何**而不只是标识符
 - `deterministicIDSeed` 的实现只用种子字符串的**长度**（源码内 TODO），不同种子等长即碰撞，按文档播种并不能真正区分文档
 
-因此：**Phase A 只快照它发出的占位符**（`<pre class="mermaid">` / 代码块），Phase B 的 mermaid 用结构断言与视觉截图覆盖。这干净地保住了"Phase A 是快照对象"这条边界。
+因此：**Phase A 只快照它发出的精确本地形状**：`.highlight-source-mermaid > pre`（现有 GitHub 风格代码块 wrapper）。Phase B 原地水合这个 wrapper，运行时 SVG 用结构断言、错误/降级断言与视觉截图覆盖，不进入字节快照。分支 A 将它登记为永久 D-MERMAID：GitHub 的 `<section data-type="mermaid">` 是指向 `viewscreen.githubusercontent.com` 的托管富化外壳，离线阅读器不伪造该服务 URL。这干净地保住了"Phase A 是快照对象"这条边界。
 
 ---
 
@@ -757,7 +757,7 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 > 3. **已知的一次上游漂移不追**：2026-08-11 起 GitHub 把 mermaid enrichment 里
 >    `<section data-json="…">` 的实体从双重转义（`--&amp;gt;`）改成单重（`--&gt;`）。
 >    受影响的 4 个文件本就在 `known-mismatches.json` 里记为 D-MERMAID 全量不匹配
->    （M5 之前 readit 不还原 GitHub 的 mermaid 包装），所以两侧测试都不红。
+>    （分支 A 永久不还原 GitHub 的托管 mermaid 包装，而是在本地代码块上水合），所以两侧测试都不红。
 >    快照保持旧值。
 >
 > 机器整套留着（`oracle:refresh`、`detect-drift.ts`、`salt-mask.ts`、workflow 本身），
@@ -784,7 +784,7 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 | **M2** | 美元护栏 + 数学 | 159 条护栏语料 154 对、5 条具名偏离；数学黄金文件 + **顺序置换测试**过 |
 | **M3** | element + Shadow DOM + L3b + 高亮双默认 | 敌意宿主 fixture 下渲染不变（**达成**，2026-08-12 修复后，见下）；同页两实例测试过（达成） |
 | **M4** | 编辑器 + 滚动同步 + `mode:'plain'` 档 | IME 组合测试过（**若 Playwright 无法复现真实输入法行为，降级为手工验证并具名记录为覆盖缺口**——见计划二设计 §4.4） |
-| **M5** | Mermaid | 结构断言 + 截图；**不入字节快照** |
+| **M5** | Mermaid：Phase A 保留本地 `.highlight-source-mermaid > pre`，Phase B 按需原地水合 | 真浏览器结构、错误/降级与断网断言 + 固定容器截图；运行时 SVG **不入字节快照** |
 | **M6** | 壳：文件关联、单实例、`readit://`、导航、查找、文件监听、更新器 | 双平台**真引擎**冒烟 |
 | **M7** | 签名分发 | 见下 |
 
@@ -868,7 +868,7 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 
     计划一实测语料 45/60，修完四个用户可见缺陷后 48/60。剩余失配里有三类**结构性**不可达，不是待办：
 
-    - **Mermaid（4 个文件）** —— GitHub 发 `<section data-type="mermaid">` 由闭源 iframe 渲染。属 M5，设计上就不在 M1 范围。
+    - **Mermaid（4 个文件）** —— 永久架构偏离（分支 A）：GitHub 发 `<section data-type="mermaid">`，其富化数据指向闭源的 `viewscreen.githubusercontent.com` 服务；readit 作为离线阅读器保留本地 `.highlight-source-mermaid > pre`，并在 Phase B 原地水合，不伪造 GitHub 的服务 URL。M5 交付渲染能力，但不会让这四条 Phase A 字节差异消失。
     - **`data-animated-image`（1 个文件）** —— GitHub 靠**检查图片实际字节**判定动图。Phase A 是纯同步、不碰网络、不读字节的（§3 的承重约束）。要修就得违反核心约束，或在 Phase A 之外新增一道读字节的异步缝。
     - **YAML 诊断文字（1 个文件）** —— GitHub 用 Psych/libyaml，readit 用 js-yaml。对同一段坏 YAML，两者**诊断结论不同**（不只是措辞：libyaml 怪罪开启流序列的 `[`，js-yaml 怪罪流耗尽的位置）。复现它需要内嵌一个 libyaml 兼容解析器，或手写一张 libyaml 错误字符串表。
 

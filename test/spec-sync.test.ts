@@ -61,13 +61,18 @@ describe('SPEC 与实现同步', () => {
     expect(spec).toMatch(/find[^\n]*M6|M6[^\n]*find/)
   })
 
-  it('§9.2 的 ::part() 名单只开三个，mermaid 推迟 M5', () => {
-    const parts = spec.match(/`::part\(\)` 名字是永久公开 API`?\*\*[\s\S]{0,200}/)
+  it('§9.2 的 ::part() 名单包含 M5 钉死的 mermaid part', () => {
+    const parts = spec.match(/`::part\(\)` 名字是永久公开 API`?\*\*[\s\S]{0,400}/)
     expect(parts, 'SPEC §9.2 应有 ::part() 名单段').not.toBeNull()
-    expect(parts![0]).toContain('root')
-    expect(parts![0]).toContain('content')
-    expect(parts![0]).toContain('code-block')
-    expect(parts![0]).toMatch(/mermaid[^\n]*M5/)
+    const publicNames = parts![0].match(/当前名单为([^。]+)/)
+    expect(publicNames, 'SPEC §9.2 应明确列出当前公开 part 名单').not.toBeNull()
+    expect(publicNames?.[1]?.match(/`[^`]+`/g)).toEqual([
+      '`root`',
+      '`content`',
+      '`code-block`',
+      '`mermaid`',
+    ])
+    expect(parts![0]).toMatch(/`mermaid`[^\n]*Phase A[^\n]*Phase B/)
   })
 
   it('§5 包表把 @readit/find 标为 M6', () => {

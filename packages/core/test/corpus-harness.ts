@@ -252,10 +252,11 @@ export function diffShape(actualLines: readonly string[], expectedLines: readonl
  * and `edits` degenerates into the two line counts — so any change that rewrites a line without
  * changing how many lines there are is completely invisible to the pin.
  *
- * Three ledger entries are in this state today: the `frontend/mermaid-*` files, whose
- * `div.highlight` wrapper shares nothing with GitHub's `<section data-type="mermaid">`. For
- * those, `corpus.test.ts` requires the entry to pin `output` verbatim — a magnitude cannot
- * protect a file whose magnitude is a constant.
+ * Three ledger entries are in this state today: the `frontend/mermaid-*` files, whose local
+ * `div.highlight` wrapper shares nothing with GitHub's hosted `<section data-type="mermaid">`.
+ * Branch A keeps that difference permanently: Phase B hydrates the local wrapper instead of
+ * fabricating GitHub's viewscreen service URL. For those entries, `corpus.test.ts` therefore
+ * requires `output` verbatim — a magnitude cannot protect a file whose magnitude is a constant.
  *
  * There was a fourth, `gfm/tagfilter`, whose entire normalized output was one line. It is gone
  * because the file now MATCHES its oracle (the tagfilter-vs-sanitizer ordering fix) and its entry
@@ -406,16 +407,14 @@ export interface MismatchEntry {
    * churn engine that gets re-pinned reflexively — the exact failure mode this ledger exists to
    * avoid.
    *
-   * ## What these three mermaid pins cost when M5 lands: nothing
+   * ## Why M5 does not retire these three mermaid pins
    *
-   * Stated on this branch as "the three mermaid `output` pins will need re-pinning when M5
-   * lands". They will not. At M5 readit emits `<section data-type="mermaid">`, which is the whole
-   * of each entry's recorded diff (its cause records that the mermaid source text is already
-   * identical on both sides), so those three entries start MATCHING, direction 2 fires, and the
-   * entries are deleted outright — `output` with them. That is a debt payoff, not a re-pin.
-   * `real-world/mermaid` is the one that does get re-pinned: 20 of its 22 hunks are the ten
-   * fences (two hunks each, a `-5` and a `+3`), and the remaining two are unrelated causes, so
-   * that entry survives M5 with a much smaller magnitude.
+   * An earlier comment claimed M5 would emit `<section data-type="mermaid">` and direction 2
+   * would delete the entries. That is false: GitHub's section is a hosted enrichment shell whose
+   * `data-src` points at viewscreen.githubusercontent.com, not a portable Mermaid placeholder.
+   * Branch A intentionally keeps Phase A's local `highlight-source-mermaid` wrapper and hydrates
+   * that same wrapper after it reaches the DOM. The Phase A corpus comparison therefore keeps
+   * seeing the permanent architectural deviation, so all three verbatim pins remain necessary.
    *
    * ## The `real-world/mermaid` residual, and why it stops here
    *
@@ -428,8 +427,9 @@ export interface MismatchEntry {
    *  - 50 of the 52 are the ten D-MERMAID fence wrappers (10 x `<div class="highlight
    *    highlight-source-mermaid …">`, `<pre>`, the source line, `</pre>`, `</div>`) — one named,
    *    recorded cause, whose exact construct is ALREADY pinned verbatim three times over by the
-   *    three `frontend/mermaid-*` entries, and which the same M5 event retires. The marginal
-   *    content this residual leaves unprotected is 2 lines: one `<img>` and one `<a class=
+   *    three `frontend/mermaid-*` entries. Branch A makes that wrapper a permanent Phase A shape;
+   *    M5 hydrates it but does not retire it. The marginal content this residual leaves
+   *    unprotected is 2 lines: one `<img>` and one `<a class=
    *    "anchor">`, each of which is a separately recorded cause on this same entry.
    *  - `output` cannot be used to close it. Direction 3b forbids an `output` pin on a non-blind
    *    entry, and that "forbids it otherwise" half is exactly what makes 3b self-maintaining;
