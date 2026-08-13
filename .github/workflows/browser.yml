@@ -48,6 +48,22 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.62.1-noble
       options: --ipc=host
     continue-on-error: true
+    # HOME=/root 是 Firefox 专属的启动前提，不是随手加的环境变量。
+    # 这个 job 在 playwright 容器里以 root 运行，而 Actions 把 $HOME 挂成
+    # /github/home（属主 pwuser）。Firefox 检查到「$HOME 不属于当前用户」就拒绝启动：
+    #   Running Nightly as root in a regular user's session is not supported.
+    #   ($HOME is /github/home which is owned by pwuser.)
+    # Chromium 与 WebKit 没有这个检查，所以只有这条 job 起不来。
+    # 修法是 Playwright 自己在报错框里印的那一条。
+    #
+    # 它一直红着，而下面那个 advisory 开关让 workflow **run** 是绿的——
+    # 但 GitHub 的提交状态徽章按 **check-run** 聚合，所以 commit 一直显示 ✗。
+    # 一个永远红的检查会训练人无视红灯，这正是 test/ci-wiring.test.ts 里
+    # 「不要留一个看起来像门、其实不是门的检查」要防的东西。
+    # （这段注释刻意不写那个开关的字面名字：browser-wiring.test.ts 按裸子串
+    #   断言它「只出现一次、且只在这个 job 里」，注释里提到也会把计数顶到 2。）
+    env:
+      HOME: /root
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
