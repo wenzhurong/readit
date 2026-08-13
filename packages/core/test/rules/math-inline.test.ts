@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import MarkdownIt from 'markdown-it'
-import { applyMathInline, type ReaditEnv } from '../../src/rules/math-inline.js'
+import { applyMathInline, scanDollars, type ReaditEnv } from '../../src/rules/math-inline.js'
 
 /**
  * Both shapes of the no-renderer fallback element — `$…$` is inline, `$$…$$`
@@ -32,6 +32,50 @@ function spans(src: string, inlineMath: 'github' | 'strict' | 'off' = 'github'):
   }
   return out
 }
+
+function dollarMask(source: string, ...masked: number[]): Uint8Array {
+  const mask = new Uint8Array(source.length)
+  for (const index of masked) mask[index] = 1
+  return mask
+}
+
+describe('scanDollars direct unit seam', () => {
+  it.each([
+    {
+      name: 'reports single and display delimiter widths',
+      source: 'probe $x$ $$y$$',
+      masked: [],
+      expected: [
+        { open: 6, close: 8, delim: 1 },
+        { open: 10, close: 14, delim: 2 },
+      ],
+    },
+    {
+      name: 'ignores a masked opener without shifting later offsets',
+      source: 'probe $x$ $y$',
+      masked: [6],
+      expected: [{ open: 10, close: 12, delim: 1 }],
+    },
+    {
+      name: 'counts astral characters as two UTF-16 code units',
+      source: 'probe $😀x$',
+      masked: [],
+      expected: [{ open: 6, close: 10, delim: 1 }],
+    },
+  ])('$name', ({ source, masked, expected }) => {
+    expect(scanDollars(source, dollarMask(source, ...masked), 'github', null)).toEqual(expected)
+  })
+
+  it('writes exact flattened-run offsets to the supplied decision log', () => {
+    const source = 'probe $x$'
+    const log: NonNullable<Parameters<typeof scanDollars>[3]> = []
+    scanDollars(source, dollarMask(source), 'github', log)
+    expect(log).toEqual([
+      { offset: 6, verdict: 'opened', ruleId: 'R3' },
+      { offset: 8, verdict: 'closed', ruleId: 'R6' },
+    ])
+  })
+})
 
 describe('R1/R2 opener left context', () => {
   it('accepts run start, ASCII space and "(" in github mode', () => {

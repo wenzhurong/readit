@@ -147,7 +147,7 @@ describe('all 19 rules in one engine', () => {
 })
 
 describe('createSpecEngine loads only the semantic slot', () => {
-  const md = createSpecEngine(DEFAULT_OPTIONS)
+  const md = createSpecEngine()
 
   it('emits no GitHub shape for a plain heading', () => {
     expect(md.render('# hi')).toBe('<h1>hi</h1>\n')

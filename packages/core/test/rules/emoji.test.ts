@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import MarkdownIt from 'markdown-it'
-import { applyEmoji } from '../../src/rules/emoji.js'
+import { applyEmoji, replaceEmoji } from '../../src/rules/emoji.js'
 import { render } from '../../src/index.js'
 import { GITHUB_EMOJI_BASE } from '../../src/types.js'
 
@@ -11,6 +11,27 @@ function md(base?: string) {
 }
 
 const p = (src: string) => md().renderInline(src)
+
+describe('replaceEmoji direct unit seam', () => {
+  it('keeps Unicode replacements in the surrounding text fragment', () => {
+    expect(replaceEmoji('probe :smile: tail', '/assets/')).toEqual(['probe 😄 tail'])
+  })
+
+  it('splits custom markup into alternating text and raw fragments', () => {
+    expect(replaceEmoji('probe :shipit: tail', '/assets/')).toEqual([
+      'probe ',
+      '<img class="emoji" title=":shipit:" alt=":shipit:" ' +
+        'src="/assets/shipit.png" height="20" width="20" align="absmiddle">',
+      ' tail',
+    ])
+  })
+
+  it('latches after an unknown candidate before replacing the next known one', () => {
+    expect(replaceEmoji('probe :not_an_emoji::smile:', '/assets/')).toEqual([
+      'probe :not_an_emoji:😄',
+    ])
+  })
+})
 
 describe('emoji', () => {
   it('replaces a standard shortcode with the literal character', () => {

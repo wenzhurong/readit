@@ -214,10 +214,9 @@ export function createEngine(opts: RenderOptions): MarkdownIt {
  * 规格一致性引擎：只加载语义规则。仅供 test/spec/ 下的 L1 套件使用。
  *
  * 不调用 `applyRawHtmlPolicy`：L1 套件（见 test/spec/harness.ts 的
- * `renderForSpec`）总是以 `allowDangerousHtml: true` 调用本函数，且规格假定
- * 原始 HTML 透传——markdown-it 在 `html: true` 且没有渲染器覆写的情况下，
+ * `renderForSpec`）假定原始 HTML 透传——markdown-it 在 `html: true` 且没有渲染器覆写的情况下，
  * 对 html_block/html_inline 的默认行为本来就是原样输出 token.content，
- * 完全等价于「透传」，不需要再套一层策略。
+ * 完全等价于「透传」，不需要再套一层策略，也没有 RenderOptions 可消费。
  *
  * `rules` 默认等于 `SEMANTIC_RULES`（保持原有「规格引擎 = 全部语义规则」的行为，
  * 集成测试 `createSpecEngine loads only the semantic slot` 依赖这个默认值）。
@@ -225,11 +224,7 @@ export function createEngine(opts: RenderOptions): MarkdownIt {
  * `SEMANTIC_RULE_BY_EXTENSION` 的文档注释，这是 Task 32a 修复 L1 套件结构性
  * 缺口所需要的挂钩。
  */
-export function createSpecEngine(
-  opts: RenderOptions,
-  rules: readonly Rule[] = SEMANTIC_RULES,
-): MarkdownIt {
-  void opts
+export function createSpecEngine(rules: readonly Rule[] = SEMANTIC_RULES): MarkdownIt {
   const md = baseEngine()
   for (const apply of rules) apply(md)
   return md

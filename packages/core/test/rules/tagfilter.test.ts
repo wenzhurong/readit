@@ -233,7 +233,7 @@ describe('tagfilter is outermost in createEngine', () => {
    * Pinned because tagfilter.ts's caveat #2 tells future authors to rely on it.
    */
   it('createSpecEngine gets only the innermost link', () => {
-    const md = createSpecEngine(DEFAULT_OPTIONS, [applyTagfilter])
+    const md = createSpecEngine([applyTagfilter])
     appendsAScript(md)
     expect(md.render('<div>x</div>\n', {})).toContain('<script>alert(1)</script>')
   })

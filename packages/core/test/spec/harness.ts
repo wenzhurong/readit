@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { createSpecEngine, SEMANTIC_RULE_BY_EXTENSION, type Rule } from '../../src/engine.js'
-import { DEFAULT_OPTIONS } from '../../src/types.js'
 import knownFailures from './known-failures.json' with { type: 'json' }
 
 export interface SpecExample {
@@ -36,7 +35,7 @@ export function normalizeSpecHtml(html: string): string {
 const BASE_EXTENSIONS = new Set(['', 'disabled'])
 
 /**
- * L1 只测解析语义，所以走 createSpecEngine，且必须开 allowDangerousHtml（规格假定原始 HTML 透传）。
+ * L1 只测解析语义，所以走固定透传原始 HTML 的 createSpecEngine。
  *
  * `extension` 决定加载哪条 SEMANTIC 规则（见 engine.ts 的 `SEMANTIC_RULE_BY_EXTENSION`
  * 与它上面的文档注释）：`BASE_EXTENSIONS` 里的值一律用零扩展的基线引擎——这是
@@ -57,10 +56,7 @@ export function renderForSpec(markdown: string, extension: string, extraRules: r
         `in this file if it should render with zero SEMANTIC rules, like "disabled").`,
     )
   }
-  const md = createSpecEngine(
-    { ...DEFAULT_OPTIONS, allowDangerousHtml: true },
-    rule ? [rule, ...extraRules] : [...extraRules],
-  )
+  const md = createSpecEngine(rule ? [rule, ...extraRules] : [...extraRules])
   return md.render(markdown, {})
 }
 
