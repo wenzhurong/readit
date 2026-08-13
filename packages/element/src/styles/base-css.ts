@@ -116,6 +116,25 @@ export const BASE_CSS = `
 .readit-error-detail { margin: 4px 0 0; font-size: 12px; }
 .readit-error-detail:empty { display: none; }
 
+.highlight-source-mermaid[data-readit-mermaid-state="ready"] {
+  padding: 16px;
+  overflow: auto;
+}
+.highlight-source-mermaid[data-readit-mermaid-state="ready"] > svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+.readit-mermaid-error {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid #cf222e;
+  border-radius: 6px;
+  color: #cf222e;
+  white-space: normal;
+}
+
 /*
  * §0.1 G4：data-readit-pending 的可见样式——降级角标。属性由 Task 17 的
  * kernel.ts 设置在宿主元素自己身上（host.dataset.readitPending，见 kernel.ts

@@ -16,6 +16,7 @@ type Handle = ReturnType<typeof mount>
 
 export interface ReaditFixtureApi {
   mount(hostId: string, opts: MountOpts): string
+  mountWithMermaid(hostId: string, opts: MountOpts): string
   get(id: string): Handle
   destroy(id: string): void
   destroyAll(): void
@@ -57,6 +58,25 @@ const api: ReaditFixtureApi = {
     if (host === null) throw new Error(`fixture: no host #${hostId}`)
     const id = `h${(seq += 1)}`
     handles.set(id, mount(host, { onNavigate: (path: string) => { navigations.push(path) }, ...opts }))
+    return id
+  },
+  mountWithMermaid(hostId, opts) {
+    const host = document.getElementById(hostId)
+    if (host === null) throw new Error(`fixture: no host #${hostId}`)
+    const id = `h${(seq += 1)}`
+    handles.set(
+      id,
+      mount(host, {
+        onNavigate: (path: string) => { navigations.push(path) },
+        ...opts,
+        loadMermaid: async () => {
+          // 专用转发模块给 Rollup 一个稳定的 load-mermaid-* chunk 名，
+          // Playwright 才能在网络层真正截断这条懒加载边。
+          const { createMermaidRenderer } = await import('./load-mermaid.js')
+          return createMermaidRenderer()
+        },
+      }),
+    )
     return id
   },
   get(id) {

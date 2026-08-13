@@ -26,7 +26,8 @@
   src: url('/vendor/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-700-normal.woff2') format('woff2'); }
 
 #a::part(root), #c::part(root), #d::part(root),
-#a::part(content), #c::part(content), #d::part(content) {
+#a::part(content), #c::part(content), #d::part(content),
+#a::part(mermaid), #c::part(mermaid), #d::part(mermaid) {
   font-family: 'Noto Sans', sans-serif;
 }
 

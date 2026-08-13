@@ -32,9 +32,20 @@ export async function loadShot(page: Page, shot: Shot): Promise<string> {
 
   if (shot.instances === 1) {
     await page.evaluate(
-      ([value, theme]) => { window.readitFixture.mount('a', { value, mode: 'read', theme }) },
-      [markdown, shot.theme] as const,
+      ([value, theme, withMermaid]) => {
+        const opts = { value, mode: 'read' as const, theme }
+        if (withMermaid) window.readitFixture.mountWithMermaid('a', opts)
+        else window.readitFixture.mount('a', opts)
+      },
+      [markdown, shot.theme, shot.mermaid === true] as const,
     )
+    if (shot.mermaid === true) {
+      await page.waitForFunction(() =>
+        document.getElementById('a')?.shadowRoot
+          ?.querySelector('.highlight-source-mermaid')
+          ?.getAttribute('data-readit-mermaid-state') === 'ready',
+      )
+    }
     return '#a'
   }
 

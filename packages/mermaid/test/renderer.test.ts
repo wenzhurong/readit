@@ -29,7 +29,14 @@ describe('createMermaidRendererWith', () => {
     let releaseFonts: (() => void) | undefined
     Object.defineProperty(document, 'fonts', {
       configurable: true,
-      value: { ready: new Promise<void>((resolve) => (releaseFonts = resolve)) },
+      value: {
+        load: vi.fn(async (font: string) => {
+          events.push('font-load')
+          expect(font).toBe('18px Inter')
+          return []
+        }),
+        ready: new Promise<void>((resolve) => (releaseFonts = resolve)),
+      },
     })
     const initialize = vi.fn((_: Parameters<MermaidAdapter['initialize']>[0]) =>
       events.push('initialize'),
@@ -43,15 +50,23 @@ describe('createMermaidRendererWith', () => {
       const rule = document.head.querySelector<HTMLStyleElement>('[data-readit-mermaid-measure]')
       expect(rule?.textContent).toContain('position:absolute')
       expect(rule?.textContent).toContain('left:-99999px')
+      expect(rule?.textContent).toContain('font-family:Inter!important')
+      expect(rule?.textContent).toContain('letter-spacing:normal!important')
+      expect(rule?.textContent).toContain(`#d${id} *`)
       expect(rule?.textContent).not.toContain('display:none')
       expect(source).toBe('flowchart LR\nA --> B')
       return { svg: '<svg><script>bad()</script><text>safe</text></svg>', bindFunctions }
     })
     const mermaid: MermaidAdapter = { initialize, render }
     const sanitizer: SvgSanitizer = {
-      sanitize(dirty) {
+      sanitize(dirty, config) {
         events.push('sanitize')
         expect(dirty).toContain('<script>')
+        expect(config).toEqual({
+          USE_PROFILES: { svg: true, svgFilters: true, html: true },
+          ADD_TAGS: ['foreignObject'],
+          HTML_INTEGRATION_POINTS: { 'annotation-xml': true, foreignobject: true },
+        })
         return '<svg><text>safe</text></svg>'
       },
     }
@@ -67,6 +82,7 @@ describe('createMermaidRendererWith', () => {
       config: initialize.mock.calls[0]?.[0],
       events,
       state: target.dataset['readitMermaidState'],
+      bound: target.dataset['readitMermaidBound'],
       hasSafeSvg: target.querySelector('svg text')?.textContent,
       hasScript: target.querySelector('script') !== null,
       tempRemoved: document.querySelector('[id^="dreadit-mermaid-"]') === null,
@@ -81,8 +97,9 @@ describe('createMermaidRendererWith', () => {
         theme: 'default',
         themeVariables: { fontSize: '18px' },
       },
-      events: ['initialize', 'render', 'sanitize', 'bind'],
+      events: ['font-load', 'initialize', 'render', 'sanitize', 'bind'],
       state: 'ready',
+      bound: 'true',
       hasSafeSvg: 'safe',
       hasScript: false,
       tempRemoved: true,

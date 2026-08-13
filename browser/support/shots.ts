@@ -8,6 +8,7 @@ export interface Shot {
   readonly content: string
   readonly theme: 'light' | 'dark'
   readonly instances: 1 | 2
+  readonly mermaid?: true
 }
 
 export const HOSTS = ['visual', 'hostile'] as const
@@ -16,7 +17,7 @@ export const SHOTS: readonly Shot[] = [
   { name: 'kitchen-sink-light', content: 'kitchen-sink.md', theme: 'light', instances: 1 },
   { name: 'kitchen-sink-dark', content: 'kitchen-sink.md', theme: 'dark', instances: 1 },
   { name: 'code-and-tables-light', content: 'code-and-tables.md', theme: 'light', instances: 1 },
-  { name: 'code-and-tables-dark', content: 'code-and-tables.md', theme: 'dark', instances: 1 },
   { name: 'alerts-and-footnotes-light', content: 'alerts-and-footnotes.md', theme: 'light', instances: 1 },
+  { name: 'mermaid-light', content: 'mermaid.md', theme: 'light', instances: 1, mermaid: true },
   { name: 'two-instances-light-dark', content: 'kitchen-sink.md', theme: 'light', instances: 2 },
 ]
