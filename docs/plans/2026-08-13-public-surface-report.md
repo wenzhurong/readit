@@ -180,3 +180,191 @@ $ npm run typecheck
   manifest 所有字段重新包装成“公共符号审计”。
 - 可变性探针检查了 4 个公开数组/对象；没有递归证明整个发布模块图深冻结，因此不把发现
   表述成“全部模块级可变状态的完整清单”。
+
+## 批次二：T3（2026-08-13）
+
+**状态**：完成，等待确认后再进入批次三。
+
+**本批提交**：`6214d5b`（T3）。
+
+### 实现
+
+`readFrontmatterOptions(src)` 不再恒返回 `{}`。新增
+`packages/core/src/frontmatter-options.ts` 作为不依赖 DOM/markdown-it 的共享纯模块：
+
+- `parseFrontmatter()` 是可见表格渲染与宿主选项读取共用的唯一 YAML 路径；
+- 继续逐字使用 `load(yaml, { schema: CORE_SCHEMA })`，解析错误统一折成不抛异常的结果；
+- 只识别文档第 1 行开始、由现有规则同形 `---[ \t]*` 围出的 frontmatter；
+- 只读顶层扁平键 `readit-inline-math`；
+- 只接受精确小写字面量 `github | strict | off`，不负责与应用/API 默认值合并；
+- `render()` 不调用本函数，因此 frontmatter 键仍显示在表格里，也不会被 Phase A 隐式应用。
+
+`packages/core/src/rules/frontmatter.ts` 改为从该模块导入同一份 parser 与 fence 判断；原有
+`yamlErrorMessage` 内部导出继续从规则模块转发，避免无关的内部兼容性变化。
+`packages/core/src/index.ts` 只再导出宿主需要的 `readFrontmatterOptions`。
+
+大小写裁决：`Off` 返回 `{}`。理由是 `InlineMathMode` 和 SPEC §8.6 都只定义三个小写
+字面量；自动 lower-case 会在没有契约依据时发明第二套合法配置拼写，还会让拼写错误静默生效。
+
+### 先红后绿
+
+先只改测试、保留 no-op 实现。实际红灯：
+
+```text
+$ npx vitest run packages/core/test/rules/frontmatter.test.ts packages/core/test/smoke.test.ts
+frontmatter.test.ts (27 tests | 4 failed)
+  × reads the exact off literal
+  × reads the exact strict literal
+  × reads the exact github literal
+  × reads without consuming the key or making render() apply it implicitly
+
+AssertionError: expected {} to deeply equal { inlineMath: 'off' }
+Test Files  1 failed | 1 passed (2)
+Tests       4 failed | 28 passed (32)
+```
+
+实现后的目标绿灯：
+
+```text
+$ npx vitest run packages/core/test/rules/frontmatter.test.ts packages/core/test/smoke.test.ts
+Test Files  2 passed (2)
+Tests       32 passed (32)
+```
+
+最终连同 Phase A await 门复核：
+
+```text
+$ npx vitest run packages/core/test/rules/frontmatter.test.ts packages/core/test/smoke.test.ts packages/core/test/no-await-on-render-path.test.ts
+Test Files  3 passed (3)
+Tests       55 passed (55)
+```
+
+### 边界情形逐条实测
+
+| 输入 | 实测结果 |
+|---|---|
+| 无 frontmatter | `{}` |
+| 有 frontmatter、无键 | `{}` |
+| `readit-inline-math: off` | `{ inlineMath: 'off' }` |
+| `readit-inline-math: strict` | `{ inlineMath: 'strict' }` |
+| `readit-inline-math: github` | `{ inlineMath: 'github' }` |
+| 非法值 `yes` | `{}` |
+| 大小写不同 `Off` | `{}`（严格字面量策略） |
+| 损坏 YAML `[off` | `{}`，不抛异常 |
+| 嵌套 `readit: { inline-math: off }` 的等价块写法 | `{}` |
+| 正文后部才出现同名围栏/键 | `{}` |
+
+渲染隔离用例使用：
+
+```text
+---
+readit-inline-math: off
+title: T
+---
+
+$x$
+```
+
+一次对象断言同时实测：读取结果为 `{inlineMath:'off'}`；读取前后 `render(src)` 逐字相等；
+输出仍含 `<th>readit-inline-math</th>`；默认 `render(src)` 仍输出
+`<math-renderer class="js-inline-math"...>`，证明它没有擅自应用 frontmatter 的 `off`。
+
+### 每条新增断言的故障注入证据
+
+1. **合法值与端到端读取**：原 no-op 实现已让 `off/strict/github` 和综合断言 4 条全红，
+   输出见“先红后绿”。
+2. **全部负例**：临时让函数恒返回 `{inlineMath:'off'}`，实际 27 条中 9 条失败：
+
+   ```text
+   × returns an empty object for no frontmatter
+   × returns an empty object for frontmatter without the key
+   × returns an empty object for invalid value
+   × returns an empty object for different case
+   × returns an empty object for malformed YAML
+   × returns an empty object for nested key
+   × returns an empty object for same text below the opening line
+   × reads the exact strict literal
+   × reads the exact github literal
+   Tests  9 failed | 18 passed (27)
+   ```
+
+3. **读取不得污染渲染选项**：临时让该读取对综合用例改写
+   `DEFAULT_OPTIONS.inlineMath = 'off'`，断言实际收到：
+
+   ```diff
+   - "outputUnchanged": true,
+   - "renderStillUsesItsDefault": true,
+   + "outputUnchanged": false,
+   + "renderStillUsesItsDefault": false,
+   ```
+
+4. **键必须继续可见**：临时让 `render()` 从 HTML 删除该 `<th>`，断言实际收到：
+
+   ```diff
+   - "keyStillVisible": true,
+   + "keyStillVisible": false,
+   ```
+
+上述故障代码均已撤销；提交前在 `packages/core/src` / `test` 搜索 `__probe` 与两段故障特征，
+没有残留。
+
+### 分发边界的中途失败与修复
+
+第一版把公共函数直接从 `rules/frontmatter.ts` 再导出。目标测试通过，但第一次完整
+`npm test` 在 readit 的构建 global setup 正确失败：
+
+```text
+Error: 发布产物里残留了裸模块说明符，装包方解析不了（它的 dependencies 是空的）：
+[types] cjs/types/packages/core/src/rules/frontmatter.d.ts → markdown-it
+[types] types/packages/core/src/rules/frontmatter.d.ts → markdown-it
+```
+
+原因：公共声明闭包因此走进规则文件的 `import type { MarkdownIt, Token } from 'markdown-it'`。
+修法不是给发布包补依赖，而是把共享 YAML 能力移到不依赖 markdown-it 的
+`frontmatter-options.ts`；规则与公共 API 各自只依赖它。随后 `npm run build` 通过，产物
+`frontmatter-options.d.ts` 只引用包内相对 `./types.js`，T2 公共接口测试仍为 6/6。
+
+### 完整回归与不变量
+
+```text
+$ npm test
+Test Files  77 passed (77)
+Tests       2711 passed (2711)
+Duration    11.88s
+
+$ npm run typecheck
+根 tsc + browser/ + @readit/core/editor/element/highlight/math/readit：零错误
+```
+
+相对批次一的 2700：新增边界/隔离用例 11 条，删除 smoke 中钉住 no-op 的 1 条，净增 10；
+新增 `frontmatter-options.ts` 又被枚举式 `no-await-on-render-path.test.ts` 自动生成 1 条扫描，
+合计精确增加 11 条。
+
+| 不变量 | 批次二实测 | 结果 |
+|---|---:|---|
+| 语料精确匹配 | **56/68** | 不变 |
+| 棘轮台账条目 | **12** | 不变 |
+| CommonMark | **649 + 3** | 不变 |
+| GFM | **658 + 14** | 不变 |
+| `TEMPORARY` 计数 | **0** | 不变 |
+
+### 与任务书前提不符的地方
+
+- 任务书所说的 `CORE_SCHEMA` 解析能力与错误处理确实存在，且实测可复用。
+- 任务书没有说明“直接从规则文件再导出”会扩大发布声明闭包；完整构建门发现后，改为
+  共享纯模块。契约与任务范围未改变，这是实现落点的订正。
+- 批次一发现的可变 `DEFAULT_OPTIONS` 仍存在且仍在原 6 任务范围之外；本批的故障注入
+  反而证明新隔离断言能抓到读取函数利用这条可变性污染渲染的情况。
+- 除上述已报告项外，无新的任务书前提偏差。
+
+### 自审：验证广度由谁选、边界在哪
+
+- 任务书表格里的 8 类边界全部枚举；另加“键只在正文后部出现”以钉住文档起点边界。
+- 大小写策略由本次实现者裁决，不是 oracle 实测；选择依据是现有类型与 SPEC 的精确字面量，
+  因此报告只声称“契约严格匹配”，不声称 GitHub 或其他 YAML 工具一定同样处理。
+- fence 只接受与现有渲染规则相同的 `---` + 可选空白；未扩展到 YAML 的 `...` 结束符，
+  因为可见渲染路径也不接受它，扩大读取面会让两条路径分叉。
+- 测试覆盖字符串输入与当前 YAML schema，不声称枚举了 js-yaml 能构造的所有对象图；
+  非 mapping、数组、损坏输入在实现中统一走 `{}`，现有规则套件继续保护 schema 安全副作用。
+- 读取为按行线性扫描，未单独做超大文档性能基准；它不做 I/O、DOM、网络、时间或随机操作，
+  且新增源文件已被 no-await 枚举门实际收录。
