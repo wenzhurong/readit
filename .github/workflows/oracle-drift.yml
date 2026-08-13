@@ -1,12 +1,21 @@
 name: oracle-drift
 
-# SPEC 13.4: nightly, allowed to fail loudly. A non-empty diff under
-# packages/core/test/fixtures/ means GitHub changed its renderer. That is
-# upstream-drift intelligence, not maintenance tax, so it opens a PR instead
-# of silently going stale.
+# 手动触发，不再有定时。2026-08-12 由项目所有者裁定（SPEC §13.4 已同步）。
+#
+# 指标调整：项目要的是「产出与 GitHub 的 Markdown 阅读器**高度相似**」，
+# GitHub 的输出被选作最高参考标准——但**不需要长期保持逐字节一致**。
+# 保真度对着 packages/core/test/fixtures/ 这份**钉住的快照**衡量，
+# 而不是对着实时的 GitHub。快照本身仍是从真 oracle 抓来的，只是不再每天重抓。
+#
+# 为什么留着这条 workflow 而不是删掉：机器还有用，只是不该每天叫人。
+# 想主动看一眼 GitHub 有没有变（发版前、收到渲染差异的反馈时、
+# 或要重钉快照时），在 Actions 页面手动跑一次即可 —— 它照旧会刷新 fixture、
+# 掩掉三个每次请求都变的随机量、只在真 drift 上开 PR 并附诊断产物。
+#
+# 定时版本此前每天报错，根因是仓库级「Allow GitHub Actions to create and
+# approve pull requests」开关关着（workflow 里的 permissions 覆盖不了它）。
+# 那个开关已打开，所以手动跑现在能真的开出 PR。
 on:
-  schedule:
-    - cron: '17 4 * * *'
   workflow_dispatch:
 
 permissions:
