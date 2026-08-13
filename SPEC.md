@@ -782,25 +782,39 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 |---|---|---|
 | **M1** | Phase A 引擎 + L1 + 归一化器 + L2 + oracle 刷新脚本 | 672/672 GFM 减白名单；语料**全部通过，或失配已具名入棘轮台账并附不可修的理由**（见 §15 第 10 条） |
 | **M2** | 美元护栏 + 数学 | 159 条护栏语料 154 对、5 条具名偏离；数学黄金文件 + **顺序置换测试**过 |
-| **M3** | element + Shadow DOM + L3b + 高亮双默认 | 敌意宿主 fixture 下渲染不变（**未达成，见下**）；同页两实例测试过（达成） |
+| **M3** | element + Shadow DOM + L3b + 高亮双默认 | 敌意宿主 fixture 下渲染不变（**达成**，2026-08-12 修复后，见下）；同页两实例测试过（达成） |
 | **M4** | 编辑器 + 滚动同步 + `mode:'plain'` 档 | IME 组合测试过（**若 Playwright 无法复现真实输入法行为，降级为手工验证并具名记录为覆盖缺口**——见计划二设计 §4.4） |
 | **M5** | Mermaid | 结构断言 + 截图；**不入字节快照** |
 | **M6** | 壳：文件关联、单实例、`readit://`、导航、查找、文件监听、更新器 | 双平台**真引擎**冒烟 |
 | **M7** | 签名分发 | 见下 |
 
-⚠️ **M3 的「敌意宿主 fixture 下渲染不变」验收线：未达成（2026-08-09 批次 5 实测，本条 2026-08-11 补记）。**
-`browser/element/hostile-isolation.spec.ts` 里对应的那条测试用 `test.fail()` 标着——
-也就是说**这条验收线被它自己的测试证明为假**，Chromium 与 WebKit 上都按预期失败。
+⚠️ **M3 的「敌意宿主 fixture 下渲染不变」验收线：曾未达成，2026-08-12 已修复并达成（D2-20）。**
 
-成因：`:host` 对五个继承属性缺重置——`letter-spacing` / `word-spacing` / `font-style` /
-`text-align` / `text-transform`。github-markdown-css 只在 `.markdown-body` 自身显式设了
-`color` / `font-family` / `font-size` / `line-height` / `word-wrap`，这几项因为在 shadow 树内
-有显式值而正确挡住了继承；上面那五项它从不设，于是宿主页面的样式**穿透进 shadow 树**。
+这条线一度**被它自己的测试证明为假**——`browser/element/hostile-isolation.spec.ts`
+对应的用例带着 `test.fail()`，Chromium 与 WebKit 上都按预期失败。`test.fail()` 现已移除，
+两个引擎真绿；L4 的逐像素比对同期从零基线走到全绿，是同一件事的第二个独立证据。
 
-影响面：只影响排版观感（字距、词距、斜体、对齐、大小写变换），不影响内容、
-不影响安全边界、不改变 DOM 结构。修法明确（给 `:host` 补这五项重置），
-未在计划二落地是因为它跨批次、且改 `base-css.ts` 会牵动 L4 视觉基线。
-**记为 D2-20**，见 `docs/plans/2026-08-08-plan2-debt.md`。
+成因是继承属性缺边界重置——**继承穿过 shadow 边界，挡它的从来不是 Shadow DOM，
+是一次显式重置**。修复过程本身推翻了两处原始判断，值得留档：
+
+1. **原记为「五项」，实际九项里要重置八项。** 那五项抄自 `browser/support/visual.ts`
+   的 `PROPS` 采样表，而那张表漏了 `font-variant-numeric`（探针看不见，截图看得见）；
+   `tab-size` 与 `text-size-adjust` 也不在敌意表里——它们来自 Tailwind Preflight
+   （敌意页加载、干净页不加载），是 L4 的逐像素比对逼出来的。
+2. **重置落点不是 `:host` 而是 `.readit-root`。** 按 CSS Scoping 的跨树层叠，
+   宿主的 `* { … !important }` 会压过 shadow 树里 `:host` 的普通声明，挂 `:host`
+   就得跟着写 `!important`，等于跟宿主打军备竞赛；`.readit-root` 在 shadow 树内部，
+   宿主的 `*` 够不到它。这与 github-markdown-css 挡住 color/font-family/line-height
+   的机理一致（它把那三项设在 `.markdown-body` 自己身上）。
+
+**一条具名豁免**：`font-family` **故意不重置**。在根上写死族栈会跟 L4 的字体钉法打架
+（`visual-fonts.css` 靠 `::part(root)`/`::part(content)` 钉 `'Noto Sans'` + 文档级
+`@font-face` 接管族名），实测会让基线生不出来。残留缺口：真实宿主用
+`* { font-family: … !important }` 时，界面外壳（错误面板标题等）的字体会跟宿主走；
+正文不受影响。守卫 `packages/element/test/base-css.test.ts` 从 `hostile-extra.css`
+**反推**重置清单，豁免表的长度本身也被一条断言钉住。
+
+详见 `docs/plans/2026-08-08-plan2-debt.md` 的 D2-20（已还清）与 D2-22（残留 2px，未还）。
 
 ⚠️ **M3 / M4 共同的一条缺口：§13.2 自己定的「真引擎才算验收」从未满足（本条 2026-08-11 补记）。**
 §13.2 原文要求「验收门必须包含真 WKWebView（macOS runner）与真 WebView2（Windows runner）
