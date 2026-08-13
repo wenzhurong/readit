@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import MarkdownIt from 'markdown-it'
+import { readFrontmatterOptions, render } from '../../src/index.js'
 import { applyFrontmatter, renderFrontmatterTable } from '../../src/rules/frontmatter.js'
 
 function md() {
@@ -43,6 +44,44 @@ const HUGO_QUICKSTART_YAML = [
 ].join('\n')
 
 describe('frontmatter', () => {
+  describe('readFrontmatterOptions', () => {
+    it.each([
+      ['no frontmatter', '# readit-inline-math: off\n'],
+      ['frontmatter without the key', '---\ntitle: T\n---\n'],
+      ['invalid value', '---\nreadit-inline-math: yes\n---\n'],
+      // InlineMathMode 与 SPEC 都只定义小写字面量；接受 Off 会悄悄发明第二套配置拼写。
+      ['different case', '---\nreadit-inline-math: Off\n---\n'],
+      ['malformed YAML', '---\nreadit-inline-math: [off\n---\n'],
+      ['nested key', '---\nreadit:\n  inline-math: off\n---\n'],
+      ['same text below the opening line', 'body\n\n---\nreadit-inline-math: off\n---\n'],
+    ])('returns an empty object for %s', (_name, src) => {
+      expect(readFrontmatterOptions(src)).toEqual({})
+    })
+
+    it.each(['off', 'strict', 'github'] as const)('reads the exact %s literal', (inlineMath) => {
+      expect(readFrontmatterOptions(`---\nreadit-inline-math: ${inlineMath}\n---\n`)).toEqual({ inlineMath })
+    })
+
+    it('reads without consuming the key or making render() apply it implicitly', () => {
+      const src = '---\nreadit-inline-math: off\ntitle: T\n---\n\n$x$\n'
+      const before = render(src)
+      const options = readFrontmatterOptions(src)
+      const after = render(src)
+
+      expect({
+        options,
+        outputUnchanged: after === before,
+        keyStillVisible: after.includes('<th>readit-inline-math</th>'),
+        renderStillUsesItsDefault: after.includes('<math-renderer class="js-inline-math"'),
+      }).toEqual({
+        options: { inlineMath: 'off' },
+        outputUnchanged: true,
+        keyStillVisible: true,
+        renderStillUsesItsDefault: true,
+      })
+    })
+  })
+
   it('reproduces the GitHub blob-view table byte-for-byte', () => {
     expect(renderFrontmatterTable(HUGO_QUICKSTART_YAML)).toBe(HUGO_QUICKSTART_ORACLE)
   })

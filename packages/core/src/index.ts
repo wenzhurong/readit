@@ -1,6 +1,6 @@
 import { createEngine } from './engine.js'
 import { DEFAULT_OPTIONS } from './types.js'
-import type { InlineMathMode, RenderOptions, RenderResult } from './types.js'
+import type { RenderOptions, RenderResult } from './types.js'
 import type { ReaditEnv } from './rules/math-inline.js'
 
 export { DEFAULT_OPTIONS, GITHUB_EMOJI_BASE } from './types.js'
@@ -47,15 +47,4 @@ export function renderWithExplain(
 
 export { prepare, scan, DEFAULT_LOADERS } from './prepare.js'
 export type { Loaders, ScanResult } from './prepare.js'
-
-/**
- * 纯函数，由宿主调用后把结果作为选项传入 render（SPEC §8.6 纯度约束）。
- * 当前恒返回 {}；frontmatter 解析由后续任务实现。
- * 本函数永不修改 src，frontmatter 仍照常渲染成表格。
- */
-export function readFrontmatterOptions(
-  src: string,
-): { inlineMath?: InlineMathMode } {
-  void src
-  return {}
-}
+export { readFrontmatterOptions } from './frontmatter-options.js'

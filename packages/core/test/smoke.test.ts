@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_OPTIONS,
   prepare,
-  readFrontmatterOptions,
   render,
   renderWithExplain,
 } from '../src/index.js'
@@ -76,11 +75,5 @@ describe('core skeleton', () => {
       ...DEFAULT_OPTIONS,
       inlineMath: 'off',
     })
-  })
-
-  it('readFrontmatterOptions returns an empty object', () => {
-    expect(readFrontmatterOptions('---\nreadit-inline-math: off\n---\n')).toEqual(
-      {},
-    )
   })
 })
