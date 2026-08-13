@@ -1,5 +1,6 @@
 import { DEFAULT_LOADERS, prepare as corePrepare, render as coreRender, scan as coreScan } from '@readit/core'
 import type { Highlighter, InlineMathMode, RenderOptions, ScanResult } from '@readit/core'
+import type { MermaidRenderer } from '@readit/mermaid'
 import { memoizeHighlighter } from './highlight-memo.js'
 
 /**
@@ -61,11 +62,13 @@ export const DEBOUNCE_MS = 16
 export const DEBOUNCE_MS_HIGHLIGHT = 40
 
 /** 还缺、且还有可能补上的能力。渲染仍然照常发生，只是降级。 */
-export type PendingCapability = 'math' | 'highlight'
+export type PendingCapability = 'math' | 'highlight' | 'mermaid'
 
 export interface RerenderHost {
   /** 把整块 HTML 写进 DOM。element 只有一条注入路径（setHtml），由调用方接进来。 */
   paint(html: string): void
+  /** Phase A HTML 落地后，把其中的 mermaid 占位符原地水合。 */
+  hydrateMermaid(renderer: MermaidRenderer): void
   /**
    * 降级必须可见（SPEC §12）：把「仍然缺席」的能力名交给宿主，由它落成
    * 宿主元素上的 data-readit-pending。空数组表示都到齐了。
@@ -85,6 +88,8 @@ export interface RerenderDeps {
    * 是一个已经完成的选择，不该报进 pending。
    */
   loadHighlighter: (() => Promise<Highlighter>) | null
+  /** Mermaid 与高亮同样由宿主注入，元素包对它只有类型边。 */
+  loadMermaid: (() => Promise<MermaidRenderer>) | null
   setTimer(fn: () => void, ms: number): number
   clearTimer(handle: number): void
   requestFrame(fn: () => void): number
@@ -101,13 +106,17 @@ export interface Rerenderer {
   destroy(): void
 }
 
-/** 浏览器里的真实 deps。loadHighlighter 由宿主给，其余全是标准 API 与 core 的导出。 */
-export function browserDeps(loadHighlighter: (() => Promise<Highlighter>) | null): RerenderDeps {
+/** 浏览器里的真实 deps。两个可选重能力由宿主给，其余全是标准 API 与 core 的导出。 */
+export function browserDeps(
+  loadHighlighter: (() => Promise<Highlighter>) | null,
+  loadMermaid: (() => Promise<MermaidRenderer>) | null = null,
+): RerenderDeps {
   return {
     render: (src, opts) => coreRender(src, opts),
     scan: (src, inlineMath) => coreScan(src, inlineMath),
     prepare: (src, opts) => corePrepare(src, opts, DEFAULT_LOADERS),
     loadHighlighter,
+    loadMermaid,
     setTimer: (fn, ms) => globalThis.setTimeout(fn, ms) as unknown as number,
     clearTimer: (handle) => {
       globalThis.clearTimeout(handle)
@@ -135,6 +144,7 @@ export function createRerenderer(
   // 对字节零影响。
   const initialHighlighter = options.highlighter ?? null
   let highlighter = initialHighlighter === null ? null : memoizeHighlighter(initialHighlighter)
+  let mermaid: MermaidRenderer | null = null
   const inflight = new Set<PendingCapability>()
   const failed = new Set<PendingCapability>()
   let timer: number | null = null
@@ -145,6 +155,7 @@ export function createRerenderer(
     const out: PendingCapability[] = []
     if (found.needsMath && math === null) out.push('math')
     if (found.needsHighlight && highlighter === null && deps.loadHighlighter !== null) out.push('highlight')
+    if (found.needsMermaid && mermaid === null && deps.loadMermaid !== null) out.push('mermaid')
     return out
   }
 
@@ -169,12 +180,20 @@ export function createRerenderer(
             math = resolved.math
           })
         }, fail)
-      } else {
+      } else if (cap === 'highlight') {
         const load = deps.loadHighlighter
         if (load === null) continue
         void load().then((h) => {
           done(() => {
             highlighter = memoizeHighlighter(h)
+          })
+        }, fail)
+      } else {
+        const load = deps.loadMermaid
+        if (load === null) continue
+        void load().then((renderer) => {
+          done(() => {
+            mermaid = renderer
           })
         }, fail)
       }
@@ -188,6 +207,7 @@ export function createRerenderer(
     const want = missing(found)
     host.setPending(want)
     host.paint(deps.render(value, { ...options, math, highlighter }))
+    if (found.needsMermaid && mermaid !== null) host.hydrateMermaid(mermaid)
     if (want.length > 0) kick(want)
   }
 

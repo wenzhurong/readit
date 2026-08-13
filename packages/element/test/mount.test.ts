@@ -49,6 +49,7 @@ describe('mount 的默认值', () => {
       emojiBase: 'https://github.githubassets.com/images/icons/emoji/',
       onNavigate: null,
       loadHighlighter: null,
+      loadMermaid: null,
     })
   })
 
@@ -226,6 +227,43 @@ describe('data-readit-pending：降级可见性的另一半', () => {
     // 已经完成的选择，不该被角标提醒——DOC 带一个 ```js 围栏块。
     const host = makeHost()
     const kernel = createKernel(host, resolveMountOptions({ value: DOC, highlighter: null }))
+    expect(host.hasAttribute('data-readit-pending')).toBe(false)
+    kernel.destroy()
+  })
+
+  it('mermaid 加载期间宿主报 pending，Phase A 源码与公开 part 仍可见', () => {
+    const host = makeHost()
+    const kernel = createKernel(
+      host,
+      resolveMountOptions({
+        value: '```mermaid\nflowchart LR\nA --> B\n```\n',
+        loadMermaid: () => new Promise(() => {}),
+      }),
+    )
+    const diagram = kernel.content.querySelector('.highlight-source-mermaid')
+    expect(host.getAttribute('data-readit-pending')).toBe('mermaid')
+    expect(diagram?.getAttribute('part')).toBe('mermaid')
+    expect(diagram?.querySelector('pre')?.textContent).toContain('flowchart LR')
+    kernel.destroy()
+  })
+
+  it('mermaid 能力到货后水合当前 content，并清掉 pending', async () => {
+    const host = makeHost()
+    const hydrate = vi.fn(async (root: ParentNode) => {
+      const diagram = root.querySelector<HTMLElement>('.highlight-source-mermaid')
+      diagram?.replaceChildren(document.createElementNS('http://www.w3.org/2000/svg', 'svg'))
+      return []
+    })
+    const kernel = createKernel(
+      host,
+      resolveMountOptions({
+        value: '```mermaid\nflowchart LR\nA --> B\n```\n',
+        loadMermaid: async () => ({ hydrate }),
+      }),
+    )
+    await waitFor(() => kernel.content.querySelector('svg') !== null)
+    expect(hydrate).toHaveBeenCalledWith(kernel.content)
+    expect(kernel.content.querySelector('svg')).not.toBeNull()
     expect(host.hasAttribute('data-readit-pending')).toBe(false)
     kernel.destroy()
   })

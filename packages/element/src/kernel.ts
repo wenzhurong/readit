@@ -21,6 +21,7 @@ export const DEFAULT_MOUNT_OPTIONS: MountOptions = {
   emojiBase: GITHUB_EMOJI_BASE,
   onNavigate: null,
   loadHighlighter: null,
+  loadMermaid: null,
 }
 
 export function resolveMountOptions(opts?: Partial<MountOptions>): MountOptions {
@@ -158,6 +159,9 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
   // （56/68 那条基线），所以属性只能在注入之后补。
   afterRender.push(() => {
     for (const pre of content.querySelectorAll('pre')) pre.setAttribute('part', 'code-block')
+    for (const diagram of content.querySelectorAll('.highlight-source-mermaid')) {
+      diagram.setAttribute('part', 'mermaid')
+    }
   })
 
   const navigation = createNavigation(
@@ -196,7 +200,7 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
       highlighter: opts.highlighter,
       emojiBase: opts.emojiBase,
     },
-    deps: browserDeps(opts.loadHighlighter),
+    deps: browserDeps(opts.loadHighlighter, opts.loadMermaid),
     measure: (el) => (el as HTMLElement).offsetTop,
     disposers,
     onPending(pending: readonly PendingCapability[]): void {

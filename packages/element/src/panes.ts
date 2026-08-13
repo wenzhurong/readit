@@ -1,5 +1,6 @@
 import type { RenderOptions } from '@readit/core'
 import type { Editor, EditorKind, EditorOptions } from '@readit/editor'
+import type { MermaidRenderer } from '@readit/mermaid'
 import { addListener, type Disposers } from './disposers.js'
 import {
   createRerenderer,
@@ -79,6 +80,9 @@ export function createPanes(opts: PanesOptions): Panes {
       synthesizeHtmlAnchors(opts.content, value)
       sync?.invalidate()
       opts.onPainted?.()
+    },
+    hydrateMermaid(renderer: MermaidRenderer) {
+      void renderer.hydrate(opts.content)
     },
     setPending(pending) {
       opts.onPending(pending)

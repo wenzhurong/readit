@@ -155,6 +155,7 @@ function noopSchedulingDeps(timedRender: RerenderDeps['render'], loadHighlighter
     scan,
     prepare: () => new Promise<RenderOptions>(() => {}),
     loadHighlighter,
+    loadMermaid: null,
     setTimer: () => 0,
     clearTimer: () => {},
     requestFrame: () => 0,
@@ -169,7 +170,7 @@ function noopSchedulingDeps(timedRender: RerenderDeps['render'], loadHighlighter
 function measureRealisticEditing(options: Partial<RenderOptions>): { perFile: Record<string, number>; merged: number[] } {
   const perFile: Record<string, number> = {}
   const merged: number[] = []
-  const host: RerenderHost = { paint: () => {}, setPending: () => {} }
+  const host: RerenderHost = { paint: () => {}, hydrateMermaid: () => {}, setPending: () => {} }
 
   for (const file of FILES) {
     const original = readFileSync(join(CORPUS, file), 'utf8')

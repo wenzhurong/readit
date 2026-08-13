@@ -1,4 +1,5 @@
 import type { Highlighter, MathRenderer } from '@readit/core/types'
+import type { MermaidRenderer } from '@readit/mermaid'
 
 export type Mode = 'read' | 'source' | 'split' | 'plain'
 export type Theme = 'auto' | 'light' | 'dark'
@@ -26,6 +27,12 @@ export interface MountOptions {
    * 「等真的用到再去拿」的懒加载路径。
    */
   loadHighlighter: (() => Promise<Highlighter>) | null
+  /**
+   * Mermaid Phase B 水合器的异步加载器。与 loadHighlighter 一样由宿主
+   * 注入，以便重依赖只在文档首次出现 mermaid 围栏时才下载。
+   * null 表示宿主选择只显示 Phase A 源码，不计入 pending。
+   */
+  loadMermaid: (() => Promise<MermaidRenderer>) | null
 }
 
 export interface MountHandle {

@@ -70,6 +70,7 @@ const ALLOWED: Record<PackageName, Partial<Record<PackageName, readonly ImportKi
   '@readit/element': {
     '@readit/core': ['value', 'type', 'dynamic'],
     '@readit/highlight': ['type'],
+    '@readit/mermaid': ['type'],
     '@readit/editor': ['type', 'dynamic'],
   },
   // Task 9 落地：readit 是发布外观包，src/{core,element,editor,plugins/math,

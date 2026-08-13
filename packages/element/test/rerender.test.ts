@@ -1,5 +1,6 @@
 import { render, scan, prepare } from '@readit/core'
 import type { Highlighter, MathRenderer, RenderOptions } from '@readit/core'
+import type { MermaidRenderer } from '@readit/mermaid'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   DEBOUNCE_MS,
@@ -17,10 +18,14 @@ function harness() {
   let next = 1
   const painted: string[] = []
   const pending: PendingCapability[][] = []
+  const hydrated: MermaidRenderer[] = []
 
   const host: RerenderHost = {
     paint(html) {
       painted.push(html)
+    },
+    hydrateMermaid(renderer) {
+      hydrated.push(renderer)
     },
     setPending(p) {
       pending.push([...p])
@@ -33,6 +38,8 @@ function harness() {
       supports: () => true,
     }),
   )
+  const fakeMermaid: MermaidRenderer = { hydrate: vi.fn(async () => []) }
+  const loadMermaid = vi.fn(async (): Promise<MermaidRenderer> => fakeMermaid)
 
   const fakeMath: MathRenderer = { render: (tex, display) => `<i data-d="${String(display)}">${tex}</i>` }
   const prepareSpy = vi.fn(
@@ -48,6 +55,7 @@ function harness() {
     scan,
     prepare: prepareSpy,
     loadHighlighter,
+    loadMermaid,
     setTimer(fn, ms) {
       const id = next++
       timers.set(id, { fn, ms })
@@ -71,8 +79,11 @@ function harness() {
     deps,
     painted,
     pending,
+    hydrated,
     prepareSpy,
     loadHighlighter,
+    loadMermaid,
+    fakeMermaid,
     timerCount: () => timers.size,
     frameCount: () => frames.size,
     runTimers() {
@@ -226,7 +237,7 @@ describe('C1：加载到的 highlighter 被记忆化包裹（集成验证，不�
   })
 })
 
-describe('新构造探测：第一次敲出 $', () => {
+describe('按需能力探测：数学、高亮与 Mermaid', () => {
   let h: ReturnType<typeof harness>
   beforeEach(() => {
     h = harness()
@@ -305,6 +316,55 @@ describe('新构造探测：第一次敲出 $', () => {
     await vi.waitFor(() => {
       expect(h.painted.at(-1)).toContain('<span class="fake">')
     })
+    r.destroy()
+  })
+
+  it('mermaid 加载期间先落 Phase A 源码并报 pending，能力到货后再水合', async () => {
+    const deferred: { resolve: ((renderer: MermaidRenderer) => void) | null } = { resolve: null }
+    const loadMermaid = vi.fn(
+      () =>
+        new Promise<MermaidRenderer>((resolve) => {
+          deferred.resolve = resolve
+        }),
+    )
+    const deps: RerenderDeps = { ...h.deps, loadMermaid }
+    const r = createRerenderer(h.host, deps, {}, '')
+    r.setValue('```mermaid\nflowchart LR\nA --> B\n```\n')
+
+    expect(h.pending.at(-1)).toEqual(['mermaid'])
+    expect(loadMermaid).toHaveBeenCalledTimes(1)
+    expect(h.painted.at(-1)).toContain('highlight-source-mermaid')
+    expect(h.painted.at(-1)).toContain('flowchart LR')
+    expect(h.hydrated).toEqual([])
+
+    deferred.resolve?.(h.fakeMermaid)
+    await vi.waitFor(() => {
+      expect(h.hydrated).toEqual([h.fakeMermaid])
+    })
+    expect(h.pending.at(-1)).toEqual([])
+    r.destroy()
+  })
+
+  it('宿主没给 mermaid 加载器时只保留 Phase A，不把已完成的产品选择报成 pending', () => {
+    const deps: RerenderDeps = { ...h.deps, loadMermaid: null }
+    const r = createRerenderer(h.host, deps, {}, '')
+    r.setValue('```mermaid\nflowchart LR\nA --> B\n```\n')
+    expect(h.pending.at(-1)).toEqual([])
+    expect(h.painted.at(-1)).toContain('flowchart LR')
+    expect(h.hydrated).toEqual([])
+    r.destroy()
+  })
+
+  it('mermaid 加载失败后不重试，pending 与 Phase A 源码都保留', async () => {
+    const loadMermaid = vi.fn(() => Promise.reject(new Error('chunk offline')))
+    const deps: RerenderDeps = { ...h.deps, loadMermaid }
+    const r = createRerenderer(h.host, deps, {}, '')
+    r.setValue('```mermaid\nflowchart LR\nA --> B\n```\n')
+    await vi.waitFor(() => expect(loadMermaid).toHaveBeenCalledTimes(1))
+    r.setValue('```mermaid\nflowchart LR\nA --> C\n```\n')
+    expect(loadMermaid).toHaveBeenCalledTimes(1)
+    expect(h.pending.at(-1)).toEqual(['mermaid'])
+    expect(h.painted.at(-1)).toContain('A --&gt; C')
     r.destroy()
   })
 })
