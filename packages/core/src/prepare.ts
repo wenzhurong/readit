@@ -14,25 +14,21 @@ export interface Loaders {
   highlighter: null | (() => Promise<{ createHighlighter(): Highlighter }>)
 }
 
-export const DEFAULT_LOADERS: Loaders = {
+export const DEFAULT_LOADERS: Readonly<Loaders> = Object.freeze({
   math: () => import('@readit/math'),
   highlighter: null,
-}
-
-const FENCE_INFO = /^ {0,3}(?:`{3,}|~{3,})[ \t]*([A-Za-z0-9][A-Za-z0-9+#._-]*)/gm
-const DOLLAR = /\$/
-const DOLLAR_DOLLAR = /\$\$/
+})
 
 /**
  * Conservative prescan. It may over-report (a `$` inside a code span still asks for math);
  * it must never under-report, because render() has no way to load anything.
  */
 export function scan(src: string, inlineMath: InlineMathMode): ScanResult {
+  const fenceInfo = /^ {0,3}(?:`{3,}|~{3,})[ \t]*([A-Za-z0-9][A-Za-z0-9+#._-]*)/gm
   const languages: string[] = []
   let needsMermaid = false
   let fenceMath = false
-  FENCE_INFO.lastIndex = 0
-  for (let m = FENCE_INFO.exec(src); m !== null; m = FENCE_INFO.exec(src)) {
+  for (let m = fenceInfo.exec(src); m !== null; m = fenceInfo.exec(src)) {
     const info = m[1]!
     if (info === 'mermaid') {
       needsMermaid = true
@@ -42,7 +38,7 @@ export function scan(src: string, inlineMath: InlineMathMode): ScanResult {
       languages.push(info)
     }
   }
-  const needsMath = fenceMath || DOLLAR_DOLLAR.test(src) || (inlineMath !== 'off' && DOLLAR.test(src))
+  const needsMath = fenceMath || src.includes('$$') || (inlineMath !== 'off' && src.includes('$'))
   return { needsMath, needsMermaid, needsHighlight: languages.length > 0, languages }
 }
 
@@ -53,7 +49,7 @@ export function scan(src: string, inlineMath: InlineMathMode): ScanResult {
 export async function prepare(
   src: string,
   opts: Partial<RenderOptions> = {},
-  loaders: Loaders = DEFAULT_LOADERS,
+  loaders: Readonly<Loaders> = DEFAULT_LOADERS,
 ): Promise<RenderOptions> {
   const resolved: RenderOptions = { ...DEFAULT_OPTIONS, ...opts }
   const found = scan(src, resolved.inlineMath)

@@ -45,14 +45,14 @@ export interface RenderOptions {
   emojiBase: string
 }
 
-export const DEFAULT_OPTIONS: RenderOptions = {
+export const DEFAULT_OPTIONS: Readonly<RenderOptions> = Object.freeze({
   inlineMath: 'github',
   math: null,
   highlighter: null,
   allowDangerousHtml: false,
   explain: false,
   emojiBase: GITHUB_EMOJI_BASE,
-}
+})
 
 /** 美元护栏的判定日志条目 */
 export interface ExplainEntry {

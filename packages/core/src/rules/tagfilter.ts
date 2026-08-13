@@ -148,12 +148,14 @@ export const TAGFILTER_CORE_RULE = 'readit_tagfilter'
  * through a filter written for author HTML. Registering once keeps the core
  * rule where the extension belongs, on the author's raw chunks.
  *
- * A `WeakSet` rather than a flag on `md`: it is keyed by instance (two engines
- * are independent), it holds no strong reference, and it is registration-time
- * bookkeeping only — it is not read during rendering and cannot make one
- * `render()` differ from another. Phase A's determinism is untouched.
+ * The symbol flag lives on each `md` instance (two engines are independent)
+ * instead of in a module-level collection. It is registration-time bookkeeping
+ * only — it is not read during rendering and cannot make one `render()` differ
+ * from another. Keeping the flag on the owned instance also avoids shared
+ * mutable module state on Phase A's path.
  */
-const CORE_RULE_REGISTERED = new WeakSet<MarkdownIt>()
+const CORE_RULE_REGISTERED = Symbol('readit_tagfilter_core_registered')
+type RegisteredMarkdownIt = MarkdownIt & { [CORE_RULE_REGISTERED]?: true }
 
 /**
  * Apply the filter to raw-HTML `token.content`, as a core rule.
@@ -215,8 +217,9 @@ const CORE_RULE_REGISTERED = new WeakSet<MarkdownIt>()
  * `applyTagfilter` remains the single public entry point.
  */
 function registerRawContentFilter(md: MarkdownIt): void {
-  if (CORE_RULE_REGISTERED.has(md)) return
-  CORE_RULE_REGISTERED.add(md)
+  const registered = md as RegisteredMarkdownIt
+  if (registered[CORE_RULE_REGISTERED]) return
+  registered[CORE_RULE_REGISTERED] = true
   md.core.ruler.push(TAGFILTER_CORE_RULE, (state) => {
     const filter = (token: Token): void => {
       token.content = filterDisallowedTags(token.content)
