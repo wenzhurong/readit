@@ -368,3 +368,226 @@ $ npm run typecheck
   非 mapping、数组、损坏输入在实现中统一走 `{}`，现有规则套件继续保护 schema 安全副作用。
 - 读取为按行线性扫描，未单独做超大文档性能基准；它不做 I/O、DOM、网络、时间或随机操作，
   且新增源文件已被 no-await 枚举门实际收录。
+
+## 批次三：T4 + T5 + T6（2026-08-13）
+
+**状态**：完成；方案内 6 个任务全部结束。
+
+**本批提交**：`39b18ee`（T4）、`8d5ba7a`（T5）、`f9a50f5`（T6）。
+
+### T4 — Phase A 非异步纯度棘轮
+
+`packages/core/test/no-await-on-render-path.test.ts` 继续用原扫描保护 await/async/dynamic
+import，另用 TypeScript AST 对 `packages/core/src/**/*.ts` 的全部 24 个文件逐个生成三类测试：
+
+- 直接语法的 `Date.now`、`Math.random`、`new Date`；
+- `fs` / `node:fs` / `child_process` / `node:child_process` 的运行时静态 import、动态
+  import 或 `require`；
+- 顶层 `let`/`var`，以及以顶层变量为根的直接赋值、自增减、delete 和已列出的集合/数组
+  写方法。
+
+`prepare.ts` 只在原来的 await 半边豁免；上述三类扫描不豁免它。文件头写明静态证明边界，
+运行时另断言 `DEFAULT_OPTIONS`、`DEFAULT_LOADERS` 已冻结。
+
+这次不是只加测试，因为任务书所称“性质今天成立”与实测不符。实现同时做了三项订正：
+
+1. 两个公开默认对象改成 `Readonly<...>` 并 `Object.freeze()`；
+2. `scan()` 每次调用自行创建 fence 正则，不再写模块级 `FENCE_INFO.lastIndex`；美元判断改为
+   无状态的 `String.includes()`；
+3. tagfilter 的模块级可写 `WeakSet` 改为每个 MarkdownIt 实例上的私有 symbol 标记。
+
+**五类初始故障注入**：临时在 `types.ts` 加 `Date.now()`、运行时 `node:fs` import、顶层
+`let`，并同时解除两个默认对象的冻结。实际输出：
+
+```text
+$ npx vitest run packages/core/test/no-await-on-render-path.test.ts
+test/no-await-on-render-path.test.ts (98 tests | 5 failed)
+  × packages/core/src/types.ts contains no time or randomness
+    Received: ["line 70: Date.now"]
+  × packages/core/src/types.ts contains no synchronous I/O capability
+    Received: ["line 68: import node:fs"]
+  × packages/core/src/types.ts contains no direct module-state writes
+    Received: ["line 71: top-level let/var"]
+  × DEFAULT_OPTIONS is frozen public module state
+  × DEFAULT_LOADERS is frozen public module state
+Test Files  1 failed (1)
+Tests       5 failed | 93 passed (98)
+```
+
+**自审补出的 prepare 动态 import 探针**：第一版只抓静态 import/require；由于
+`prepare.ts` 在旧半边允许动态 import，这会留下交叉漏洞。补上 AST 分支后，临时加入
+`void import('node:fs')`，实际输出：
+
+```text
+$ npx vitest run packages/core/test/no-await-on-render-path.test.ts
+test/no-await-on-render-path.test.ts (98 tests | 1 failed)
+  × packages/core/src/prepare.ts contains no synchronous I/O capability
+    Received: ["line 65: import node:fs"]
+Test Files  1 failed (1)
+Tests       1 failed | 97 passed (98)
+```
+
+全部探针撤销后的最终绿灯：
+
+```text
+$ npx vitest run packages/core/test/no-await-on-render-path.test.ts
+Test Files  1 passed (1)
+Tests       98 passed (98)
+```
+
+### T5 — dir-auto 两条路径同策略守卫
+
+已确认 `rawshape.ts` 继续直接从 `heading.ts` import `OCTICON_LINK`，没有重做已还清部分。
+`DIR_AUTO_TOKENS` 与 `DIR_AUTO_TAGS` 仅从 core 内部规则模块导出给测试；测试中的显式映射为：
+
+```text
+paragraph_open   -> p
+heading_open     -> h1, h2, h3, h4, h5, h6
+bullet_list_open -> ul
+ordered_list_open -> ol
+```
+
+一条断言精确比较映射的 token keys 与 Markdown 路径集合，另一条精确比较映射的 tag values
+与 raw HTML 路径集合。两个方向分别故障注入：
+
+```text
+# 只给 DIR_AUTO_TOKENS 加 __probe_open
+Test Files  1 failed (1)
+Tests       1 failed | 5 passed (6)
+Received 多出 "__probe_open"
+
+# 恢复 token，只给 DIR_AUTO_TAGS 加 __probe
+Test Files  1 failed (1)
+Tests       1 failed | 5 passed (6)
+Received 多出 "__probe"
+```
+
+恢复后的相关路径：
+
+```text
+$ npx vitest run packages/core/test/rules/dirauto.test.ts packages/core/test/rules/rawshape.test.ts
+Test Files  2 passed (2)
+Tests       51 passed (51)
+```
+
+### T6 — 内部清理三小件
+
+1. `createSpecEngine` 删除未读取的 `opts: RenderOptions` 与 `void opts`，签名只保留可选
+   `rules`；更新 integration、spec harness、tagfilter 三个真实调用点及相关注释。
+2. 删除 `extract-gfm-autolink-examples.mjs`。全仓 `rg` 找到的名字只在本方案、旧债务表和
+   旧实施计划中作为文档记录；脚本、manifest、源码与测试均无执行引用。现役能力由
+   `fetch-specs.ts:parseGfmSpec` 承担，并有 `fetch-specs.test.ts`。
+3. 保留 `scanDollars` / `replaceEmoji` 的内部 export，因为前者是 R0–R8 的 110 行核心，
+   后者的交替 text/raw 分片也是独立契约；分别补 4 条和 3 条直接单元测试。美元测试精确钉
+   单/双 delimiter offsets、mask、UTF-16 astral offset 与 explain log；emoji 测试钉 Unicode
+   同片、custom raw 分片及 unknown-candidate latch。
+
+**七条新断言的故障注入**：临时让 `scanDollars` 对 direct-case probe 恒返回 `[]`，让
+`replaceEmoji` 对 probe 恒返回原文。实际输出：
+
+```text
+$ npx vitest run packages/core/test/rules/math-inline.test.ts packages/core/test/rules/emoji.test.ts
+math-inline.test.ts (27 tests | 4 failed)
+  × reports single and display delimiter widths
+  × ignores a masked opener without shifting later offsets
+  × counts astral characters as two UTF-16 code units
+  × writes exact flattened-run offsets to the supplied decision log
+emoji.test.ts (17 tests | 3 failed)
+  × keeps Unicode replacements in the surrounding text fragment
+  × splits custom markup into alternating text and raw fragments
+  × latches after an unknown candidate before replacing the next known one
+Test Files  2 failed (2)
+Tests       7 failed | 37 passed (44)
+```
+
+恢复后连同三个 `createSpecEngine` 调用路径和 `parseGfmSpec`：
+
+```text
+$ npx vitest run packages/core/test/rules/math-inline.test.ts \
+    packages/core/test/rules/emoji.test.ts packages/core/test/integration.test.ts \
+    packages/core/test/rules/tagfilter.test.ts packages/core/test/spec/fetch-specs.test.ts
+Test Files  5 passed (5)
+Tests       97 passed (97)
+```
+
+### 完整回归
+
+重写/折叠最终提交后的最终树实测：
+
+```text
+$ npm test
+Test Files  77 passed (77)
+Tests       2794 passed (2794)
+Duration    11.76s
+
+$ npm run typecheck
+根 tsc + browser/ + @readit/core/editor/element/highlight/math/readit：零错误
+
+$ npm run build
+vite-node packages/readit/build.ts：退出码 0
+
+$ npx vitest run packages/readit/test/public-surface.test.ts
+Test Files  1 passed (1)
+Tests       6 passed (6)
+```
+
+`npm test` 期间照常打印 `GITHUB_TOKEN is required...`：字符串来自测试导入的
+`oracle-refresh.ts` 静态提示，不是网络请求；进程最终退出码为 0。相对批次二的 2711，
+T4 对 24 个源码文件新增三类扫描并加两个冻结用例，共 +74；T5 +2；T6 +7；合计恰为
+**+83 = 2794**。
+
+第一次辅助计数命令错误地读取不存在的 `packages/core/test/corpus-manifest.json`，在 typecheck
+已通过后以 `ENOENT` 退出。纠正为复用 `corpus-harness.ts` 的目录规则（排除 adversarial /
+inline-math）后，得到下列实际值；这个辅助命令错误没有被包装成成功。
+
+### 四条不变量实测
+
+```json
+{
+  "corpusExactMatches": 56,
+  "corpusTotal": 68,
+  "knownMismatchEntries": 12,
+  "commonmarkPassing": 649,
+  "commonmarkWhitelist": 3,
+  "gfmPassing": 658,
+  "gfmWhitelist": 14,
+  "temporary": 0
+}
+```
+
+| 不变量 | 批次三实测 | 结果 |
+|---|---:|---|
+| 语料精确匹配 | **56/68** | 不变 |
+| 棘轮台账条目 | **12** | 不变 |
+| CommonMark | **649 + 3** | 不变 |
+| GFM | **658 + 14** | 不变 |
+| `TEMPORARY` 计数 | **0** | 不变 |
+
+### 与任务书前提不符的地方
+
+- T4 的“性质今天成立”不成立：除批次一已报告的两个可变公开默认对象外，实测还发现
+  `prepare.ts` 写模块级 global regex 的 `lastIndex`，tagfilter 写模块级 `WeakSet`。三类
+  问题均已在 T4 清掉，而不是写一条对现状假绿的守卫。
+- T6 的“全仓零引用”若按字面包含文档并不成立：当前方案和两个历史计划会提到孤儿脚本；
+  实测成立的是零可执行/manifest 引用。删除不会切断任何命令或 fixture 生产路径。
+- `createSpecEngine` 不只在 integration 测试出现；另有 spec harness 与 tagfilter 单测两个
+  调用点。任务书只用 integration 证明函数是活的，并未明确声称它是唯一调用方，但实现已
+  按全仓枚举更新三处。
+- T5 所述 `OCTICON_LINK` 已共享、两个测试接缝均有生产调用方等其余前提均与实测一致。
+
+### 自审：验证广度由谁选、边界在哪
+
+- T4 的源码广度来自对 `packages/core/src` 的递归枚举，不是手选文件；新增文件会自动进入
+  三类扫描。禁止语法的广度由本次实现者选择：能抓直接时间/随机调用、四个 Node I/O 模块
+  的三种运行时加载形态、顶层变量的直接写；抓不到 alias、computed/eval、第三方内部状态、
+  Deno/Bun 等其他运行时 API，或藏在 opaque factory 里的状态。该边界已写在测试头部。
+- `Object.freeze` 检查只覆盖 core 发布根入口的两个公开默认容器，且是浅冻结；两者当前成员
+  是 primitive/null/function，没有嵌套可写配置对象。本批没有顺手冻结 element 的
+  `DEFAULT_MOUNT_OPTIONS`，因为它不在 Phase A 纯函数契约内。
+- T5 的 exact equality 能证明两份代码集合没有越过显式映射漂移；映射本身仍由实现者依据
+  两份现有实测策略写定，不证明 GitHub oracle 永远仍是这一组标签。
+- T6 对调用点与脚本引用使用全仓 `rg` 枚举；direct test 输入由实现者选择，不是 R0–R8 或
+  emoji 字典的完整枚举。`scanDollars` 的完整规则广度仍由既有间接 R0–R9、explain、159 例
+  corpus 承担；新测试只证明 exported seam 本身被直接接线且关键返回形状可观察。
+- 本批未改保真度台账、规格白名单或 oracle fixture；三向 ratchet 与全部规格套件在最终
+  `npm test` 中实际通过，没有通过重钉换绿。
