@@ -8,3 +8,12 @@ export {
   type TextModel,
   type TextSegment,
 } from './model.js'
+export {
+  FIND_CSS,
+  createFindController,
+  type FindController,
+  type FindControllerOptions,
+  type FindDirection,
+  type FindOptions,
+  type FindResult,
+} from './controller.js'
