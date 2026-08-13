@@ -1,5 +1,6 @@
 import type { Highlighter, MathRenderer } from '@readit/core/types'
 import type { MermaidRenderer } from '@readit/mermaid'
+import type { FindOptions, FindResult } from '@readit/find'
 
 export type Mode = 'read' | 'source' | 'split' | 'plain'
 export type Theme = 'auto' | 'light' | 'dark'
@@ -40,5 +41,7 @@ export interface MountHandle {
   getValue(): string
   setMode(mode: Mode): void
   setTheme(theme: Theme): void
+  /** With no query, opens and focuses the built-in find bar. */
+  find(query?: string, options?: FindOptions): FindResult
   destroy(): void
 }

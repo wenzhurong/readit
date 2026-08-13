@@ -15,7 +15,7 @@ export { DEFAULT_MOUNT_OPTIONS } from './kernel.js'
 
 export function mount(host: HTMLElement, opts?: Partial<MountOptions>): MountHandle {
   const kernel = createKernel(host, resolveMountOptions(opts))
-  // 只暴露 P4 的五个方法：内核上的 root / disposers / onAfterRender 是内部接缝，
+  // 只暴露 M6 的六个方法：内核上的 root / disposers / onAfterRender 是内部接缝，
   // 一旦从公共句柄漏出去就再也收不回来。
   return {
     setValue: (value: string): void => {
@@ -28,6 +28,7 @@ export function mount(host: HTMLElement, opts?: Partial<MountOptions>): MountHan
     setTheme: (theme): void => {
       kernel.setTheme(theme)
     },
+    find: (query, options) => kernel.find(query, options),
     destroy: (): void => {
       kernel.destroy()
     },

@@ -45,6 +45,10 @@
       "types": "./dist/plugins/highlight.d.ts",
       "import": "./dist/plugins/highlight.js"
     },
+    "./plugins/find": {
+      "types": "./dist/plugins/find.d.ts",
+      "import": "./dist/plugins/find.js"
+    },
     "./plugins/mermaid": {
       "types": "./dist/plugins/mermaid.d.ts",
       "import": "./dist/plugins/mermaid.js"
@@ -60,6 +64,7 @@
     "@arethetypeswrong/cli": "0.18.5",
     "@readit/core": "0.0.0",
     "@readit/editor": "0.0.0",
+    "@readit/find": "0.0.0",
     "@readit/element": "0.0.0",
     "@readit/highlight": "0.0.0",
     "@readit/math": "0.0.0",

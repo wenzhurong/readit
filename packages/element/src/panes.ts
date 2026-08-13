@@ -50,6 +50,7 @@ export interface Panes {
   getValue(): string
   setValue(value: string): void
   setMode(mode: Mode): Promise<void>
+  scrollSourceToLine(line: number): void
   destroy(): void
 }
 
@@ -82,7 +83,7 @@ export function createPanes(opts: PanesOptions): Panes {
       opts.onPainted?.()
     },
     hydrateMermaid(renderer: MermaidRenderer) {
-      void renderer.hydrate(opts.content)
+      void renderer.hydrate(opts.content).finally(() => opts.onPainted?.())
     },
     setPending(pending) {
       opts.onPending(pending)
@@ -199,6 +200,9 @@ export function createPanes(opts: PanesOptions): Panes {
     async setMode(next) {
       if (destroyed) return
       await applyMode(next)
+    },
+    scrollSourceToLine(line) {
+      editor?.scrollToLine(line)
     },
     destroy() {
       if (destroyed) return

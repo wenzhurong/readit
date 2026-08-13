@@ -58,15 +58,10 @@ describe('mount 的默认值', () => {
     expect(resolveMountOptions({ mode: 'split' }).theme).toBe('auto')
   })
 
-  /**
-   * MountHandle 上没有 find()——查找属 M6（设计文档 §9 修订 2）。留空壳挨过评审
-   * 批评，所以这条把「不存在」也钉住：宿主 typeof 检查得到 undefined，而不是一个
-   * 永远返回空的方法。
-   */
-  it('MountHandle 恰好是 P4 的五个方法，没有 find', () => {
+  it('MountHandle 恰好是 M6 的六个方法，find 是有行为的公共方法', () => {
     const handle = mount(makeHost(), { value: DOC })
-    expect(Object.keys(handle).sort()).toEqual(['destroy', 'getValue', 'setMode', 'setTheme', 'setValue'])
-    expect((handle as unknown as Record<string, unknown>)['find']).toBeUndefined()
+    expect(Object.keys(handle).sort()).toEqual(['destroy', 'find', 'getValue', 'setMode', 'setTheme', 'setValue'])
+    expect(handle.find('hello')).toEqual({ query: 'hello', total: 1, current: 1 })
     handle.destroy()
   })
 })
@@ -305,6 +300,7 @@ describe('destroy 之后', () => {
     expect(() => handle.setValue('x')).toThrow(/已经 destroy/)
     expect(() => handle.setMode('split')).toThrow(/已经 destroy/)
     expect(() => handle.setTheme('dark')).toThrow(/已经 destroy/)
+    expect(() => handle.find('x')).toThrow(/已经 destroy/)
   })
 
   it('destroy 可以重复调用', () => {

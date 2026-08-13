@@ -21,6 +21,7 @@
     "../element/src/**/*.ts",
     "../highlight/src/**/*.ts",
     "../editor/src/**/*.ts",
+    "../find/src/**/*.ts",
     "../mermaid/src/**/*.ts"
   ]
 }

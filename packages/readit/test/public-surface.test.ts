@@ -19,6 +19,7 @@ const EXPECTED_SUBPATHS = [
   './editor',
   './element',
   './package.json',
+  './plugins/find',
   './plugins/highlight',
   './plugins/math',
   './plugins/mermaid',
@@ -39,6 +40,14 @@ const EXPECTED_JS_EXPORTS: Readonly<Record<string, readonly string[]>> = {
   './editor': ['createEditor'],
   './element': ['DEFAULT_MOUNT_OPTIONS', 'DEFAULT_TAG', 'defineReadit', 'mount'],
   './plugins/highlight': ['createShikiHighlighter', 'createStarryNightHighlighter'],
+  './plugins/find': [
+    'FIND_CSS',
+    'buildTextModel',
+    'createFindController',
+    'findTextMatches',
+    'lineAtOffset',
+    'rangeForMatch',
+  ],
   './plugins/math': ['TEX_PACKAGES', 'createMathRenderer'],
   './plugins/mermaid': ['createMermaidRenderer'],
 }

@@ -16,6 +16,7 @@ const ESM_ENTRIES = [
   { out: 'editor', in: join(HERE, 'src/editor.ts') },
   { out: 'plugins/math', in: join(HERE, 'src/plugins/math.ts') },
   { out: 'plugins/highlight', in: join(HERE, 'src/plugins/highlight.ts') },
+  { out: 'plugins/find', in: join(HERE, 'src/plugins/find.ts') },
   { out: 'plugins/mermaid', in: join(HERE, 'src/plugins/mermaid.ts') },
 ] as const
 
@@ -36,6 +37,7 @@ const WORKSPACE_TYPE_TARGETS: Readonly<Record<string, string>> = {
   '@readit/element/styles': 'packages/element/src/styles.js',
   '@readit/highlight': 'packages/highlight/src/index.js',
   '@readit/editor': 'packages/editor/src/index.js',
+  '@readit/find': 'packages/find/src/index.js',
 }
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -209,7 +211,7 @@ export async function buildDist(): Promise<void> {
   rmSync(DIST, { recursive: true, force: true })
   mkdirSync(DIST, { recursive: true })
 
-  // 1. ESM 六入口 + 代码分割。splitting 让 element → editor 的动态 import 落在包内相对
+  // 1. ESM 七入口 + 代码分割。splitting 让 element → editor 的动态 import 落在包内相对
   //    路径上，宿主不需要解析任何裸说明符，五个大件仍是互相独立的动态 import（§2.1）。
   const esmResult = await esbuild.build({
     entryPoints: [...ESM_ENTRIES],

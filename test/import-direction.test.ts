@@ -75,9 +75,10 @@ const ALLOWED: Record<PackageName, Partial<Record<PackageName, readonly ImportKi
     '@readit/highlight': ['type'],
     '@readit/mermaid': ['type'],
     '@readit/editor': ['type', 'dynamic'],
+    '@readit/find': ['value', 'type'],
   },
   // Task 9 落地：readit 是发布外观包，src/{core,element,editor,plugins/math,
-  // plugins/highlight,plugins/mermaid}.ts 各自对应一个 `export * from '@readit/…'`，
+  // plugins/highlight,plugins/find,plugins/mermaid}.ts 各自对应一个 `export * from '@readit/…'`，
   // 是静态值导出（esbuild 在构建期整体内联，不是运行时的裸 import）。
   readit: {
     '@readit/core': ['value'],
@@ -86,6 +87,7 @@ const ALLOWED: Record<PackageName, Partial<Record<PackageName, readonly ImportKi
     '@readit/highlight': ['value'],
     '@readit/math': ['value'],
     '@readit/mermaid': ['value'],
+    '@readit/find': ['value'],
   },
 }
 

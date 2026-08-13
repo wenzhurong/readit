@@ -1,4 +1,12 @@
 import { GITHUB_EMOJI_BASE } from '@readit/core'
+import {
+  FIND_CSS,
+  createFindController,
+  lineAtOffset,
+  type FindController,
+  type FindOptions,
+  type FindResult,
+} from '@readit/find'
 import { createDisposers, type Disposers } from './disposers.js'
 import { createRoot, ownerView, type RootContext } from './shadow.js'
 import { createNavigation, type NavigationController } from './navigate.js'
@@ -79,6 +87,7 @@ export interface Kernel {
   getMode(): Mode
   setMode(mode: Mode): void
   setTheme(theme: Theme): void
+  find(query?: string, options?: FindOptions): FindResult
   destroy(): void
 }
 
@@ -147,13 +156,17 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
     // 文本重复了两份——两张都 adopt 等于把这份规则体在 adoptedStyleSheets 里
     // 保留两份，纯粹的浪费，不是正确性需要。data-theme 仍然写在宿主上：它是
     // ::part 与 --readit-* 消费者看得见的公开状态。
-    root.setStyles([resolved === 'dark' ? DARK_CSS : LIGHT_CSS, BASE_CSS])
+    root.setStyles([
+      resolved === 'dark' ? DARK_CSS : LIGHT_CSS,
+      `${BASE_CSS}\n${FIND_CSS}`,
+    ])
   }
 
   const theme = createThemeController(host, view, opts.theme, applyStyles, disposers)
   applyStyles(theme.resolved)
 
   const afterRender: Array<() => void> = []
+  let finder: FindController | null = null
 
   // part="code-block" 是 SPEC §9.2 的永久公开 API，但 Phase A 的输出字节是冻结的
   // （56/68 那条基线），所以属性只能在注入之后补。
@@ -179,6 +192,11 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
   // 装饰外链与应用挂起的 #hash 都要等 HTML 进了 DOM 才有意义。
   afterRender.push(() => {
     navigation.afterRender()
+  })
+  // Active queries must be rebound after every Phase A repaint and after
+  // Mermaid swaps its source <pre> for a fresh SVG subtree.
+  afterRender.push(() => {
+    finder?.refresh()
   })
 
   // CodeMirror 的样式注入目标：shadow 模式下是 ShadowRoot 本身（container 就是它），
@@ -216,6 +234,18 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
     },
   })
 
+  finder = createFindController({
+    owner: host,
+    mount: root.root,
+    target: () => content,
+    // split has a complete, visible preview DOM; source/plain must use the
+    // document string because CodeMirror virtualizes offscreen lines.
+    source: () => (mode === 'source' || mode === 'plain' ? panes.getValue() : null),
+    revealSource(match): void {
+      panes.scrollSourceToLine(lineAtOffset(panes.getValue(), match.start))
+    },
+  })
+
   const kernel: Kernel = {
     host,
     options: opts,
@@ -246,16 +276,22 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
       assertLive()
       mode = next
       root.root.setAttribute('data-mode', next)
-      void panes.setMode(next)
+      void panes.setMode(next).then(() => finder?.refresh())
     },
     setTheme(next: Theme): void {
       assertLive()
       theme.set(next)
     },
+    find(query?: string, options?: FindOptions): FindResult {
+      assertLive()
+      return finder!.find(query, options)
+    },
     destroy(): void {
       if (destroyed) return
       destroyed = true
       // 先断内容再拆监听：反过来的话最后一次事件可能打到半拆的状态上。
+      finder?.destroy()
+      finder = null
       panes.destroy()
       clearError()
       afterRender.length = 0

@@ -96,6 +96,7 @@ describe('exports 映射就是 SPEC §9.3 的那张表', () => {
       './editor': { types: './dist/editor.d.ts', import: './dist/editor.js' },
       './plugins/math': { types: './dist/plugins/math.d.ts', import: './dist/plugins/math.js' },
       './plugins/highlight': { types: './dist/plugins/highlight.d.ts', import: './dist/plugins/highlight.js' },
+      './plugins/find': { types: './dist/plugins/find.d.ts', import: './dist/plugins/find.js' },
       './plugins/mermaid': { types: './dist/plugins/mermaid.d.ts', import: './dist/plugins/mermaid.js' },
       './styles.css': './dist/readit.css',
       './package.json': './package.json',
@@ -130,7 +131,7 @@ describe('CSS 双形态：一个源，两种交付', () => {
   })
 
   it('全 dist 不出现 CSS module script —— 那会把 CSS import 属性的支持强加给每个宿主打包器', () => {
-    for (const rel of ['core.js', 'element.js', 'editor.js', 'plugins/math.js', 'plugins/highlight.js', 'plugins/mermaid.js']) {
+    for (const rel of ['core.js', 'element.js', 'editor.js', 'plugins/math.js', 'plugins/highlight.js', 'plugins/find.js', 'plugins/mermaid.js']) {
       const text = read(rel)
       expect(text, rel).not.toMatch(/with\s*\{\s*type\s*:\s*["']css["']\s*\}/)
       expect(text, rel).not.toMatch(/(?<![@\w])(?:from|import)\s*\(?\s*["'][^"']*\.css["']/)
@@ -225,5 +226,16 @@ describe('Mermaid 留在独立插件边界，不污染其他入口', () => {
     // esbuild minify 后当前静态闭包约 664 KB；钉数量级而非精确字节，既能排除
     // 空壳/替身，也不把 Mermaid 的补丁版本或压缩细节变成无意义的破坏性变更。
     expect(closure.length).toBeGreaterThan(500_000)
+  })
+})
+
+describe('find 插件是零依赖的小型浏览器能力', () => {
+  it('产物含 Custom Highlight 与 mark 降级，但不含被禁的原生查找捷径', () => {
+    const closure = bundleClosure('plugins/find.js')
+    expect(closure).toContain('readit-find-current')
+    expect(closure).toContain('data-readit-find')
+    expect(closure).not.toContain('window.find')
+    expect(closure).not.toContain("execCommand('FindString')")
+    expect(closure.length).toBeLessThan(20_000)
   })
 })

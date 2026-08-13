@@ -51,14 +51,13 @@ describe('SPEC 与实现同步', () => {
     expect(spec).toMatch(/`'plain'`[^\n]*textarea|textarea[^\n]*`'plain'`/)
   })
 
-  it('§9.4 的 mount() 返回对象不含 find —— 它属 M6', () => {
+  it('§9.4 的 mount() 返回对象包含已经落地的 find', () => {
     // 把 mount(el, {…}) 签名与紧随其后的 -> {…} 合并成一次匹配，避免命中
     // SPEC 里更早出现的另一处同形状文本（见文件头注释）。
     const call = spec.match(/mount\(el, \{[\s\S]{0,400}?\}\)\s*->\s*\{[^}]*\}/)
     expect(call, 'SPEC §9.4 应有 mount() 签名 + 返回对象').not.toBeNull()
-    expect(call![0]).not.toContain('find')
-    // 且必须写明它去哪了，否则读者会以为是遗漏
-    expect(spec).toMatch(/find[^\n]*M6|M6[^\n]*find/)
+    expect(call![0]).toContain('find')
+    expect(spec).toMatch(/find\(query\?[^\n]*FindResult/)
   })
 
   it('§9.2 的 ::part() 名单包含 M5 钉死的 mermaid part', () => {

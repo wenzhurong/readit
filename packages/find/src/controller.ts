@@ -278,6 +278,14 @@ export function createFindController(options: FindControllerOptions): FindContro
   const paint = (): void => {
     const target = options.target()
     painter.clear(target)
+    // Most mounts have no active query. Do not traverse a freshly hydrated
+    // MathJax/Mermaid tree merely to rediscover that an empty query has no
+    // matches; those trees can contain thousands of text-bearing SVG nodes.
+    if (query === '') {
+      matches = []
+      updateUi()
+      return
+    }
     const source = options.source()
     if (source !== null) {
       matches = findTextMatches(source, query, { caseSensitive })

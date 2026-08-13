@@ -236,7 +236,7 @@ const html = render(src, opts)
 | `@readit/highlight` | 高亮 adapter + 两个实现 | @wooorm/starry-night **3.10.0** / shiki **4.4.2** |
 | `@readit/editor` | CodeMirror 源码模式（懒加载） | @codemirror/view **6.43.8**、state **6.7.1**、language **6.12.4**、commands **6.10.4**、lang-markdown **6.5.2**、**style-mod >=4.1.2** |
 | `@readit/mermaid` | 图表（Phase B，懒加载） | mermaid **11.16.1**、dompurify **3.4.13** |
-| `@readit/find` | 查找（Phase B）—— M6 | 无依赖 |
+| `@readit/find` | 查找（Phase B）—— M6（已落地） | 无依赖 |
 | `shell` | Tauri 桌面壳 | tauri **2.11.5**、tauri-plugin-single-instance **2.4.3** |
 
 ### 5.1 体积预算（实测）
@@ -532,14 +532,19 @@ mount(el, {
   value, mode: 'read'|'source'|'split'|'plain', shadow: true, theme: 'auto',
   baseUrl, inlineMath: 'github', math: null, highlighter, emojiBase, onNavigate,
   loadHighlighter, loadMermaid,
-}) -> { setValue, getValue, setMode, setTheme, destroy }
+}) -> { setValue, getValue, setMode, setTheme, find, destroy }
 ```
 
 **四个模式。** `read` 只读渲染；`source` 用 CodeMirror 编辑源码；`split` 左源码右预览；**`'plain'` 是轻量编辑档——纯 textarea，不加载 CodeMirror**，给「想能改字但不想付 176,654 B」的嵌入方。
 
 ⚠️ 本条于 2026-08-09 修订。原文的 `mode` 联合类型只有三个取值，而 §14 的 M4 里程碑行写着交付「`mode:'plain'` 档」——**`'plain'` 从未被定义过，也不在联合类型里**。这是一处真矛盾，且正是计划一栽过两次的那类：实现者对着一个含义不明的词自己猜。
 
-**`find` 不在返回对象里，它属 M6**（`@readit/find`，见 §11.3）。计划一有过一个 `readFrontmatterOptions` 长期是「公共 API 里的永久 no-op」，宿主读了签名接进管线、静默拿不到任何东西。加方法是向后兼容的，留空壳不是。
+**M6 已把 `find` 加入返回对象**（`@readit/find`，见 §11.3），签名为
+`find(query?: string, options?: { direction?: 'next'|'previous', caseSensitive?: boolean }): FindResult`，
+其中 `FindResult = { query: string, total: number, current: number }`，`current` 从 1 开始、
+无命中时为 0。无参调用打开并聚焦组件自带的查找栏；传查询串则执行或导航查找，
+空串清除查询。计划一有过一个 `readFrontmatterOptions` 长期是「公共 API 里的永久
+no-op」，宿主读了签名接进管线、静默拿不到任何东西；本接口直到实现完整行为后才加入。
 
 **`setValue()` 在 CodeMirror 组合期间的语义（`source`/`split` 档；`plain` 档是原生 `<textarea>`，不受影响）。** 若宿主在用户正处于输入法组合过程中调用 `setValue()`，写入被推迟到 `compositionend` 才落地，落地时是**整体替换文档**——不是把新值拼接在组合结果之后，也不会保留用户刚提交的那段输入法文本。也就是说：若外部 `setValue()` 恰好在用户提交组合文本的同一时刻落地，那段刚提交的文字会被静默覆盖。
 
@@ -624,7 +629,8 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 
 ### 11.3 查找
 
-**归属：M6。** 查找的实现（`@readit/find`、CSS Custom Highlight API、shadow root 内的 `::highlight` 规则）不在计划二范围内；`mount()` 的返回对象在 M6 之前不含 `find`。
+**归属：M6，已落地。** 实现在零依赖的 `@readit/find` 中，`mount()` 的返回对象已含
+`find`；组件内置的查找栏由无参 `find()` 唤起，桌面壳只负责把 Cmd+F 绑定到这个方法。
 
 **Shadow DOM 不是问题**——三个引擎的原生 find-in-page 都会遍历 open（乃至 closed）shadow root，WebKit 自 2017 年起如此。
 

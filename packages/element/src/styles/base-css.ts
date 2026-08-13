@@ -103,6 +103,9 @@ export const BASE_CSS = `
   border: 0;
   resize: none;
 }
+.readit-source {
+  height: 100%;
+}
 .readit-source .cm-editor {
   height: 100%;
 }

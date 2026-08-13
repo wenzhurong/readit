@@ -21,7 +21,8 @@
  */
 import { BASE_CSS } from './styles/base-css.js'
 import { DARK_CSS, LIGHT_CSS } from './styles/theme-css.js'
+import { FIND_CSS } from '@readit/find'
 
-export const ELEMENT_CSS: string = [LIGHT_CSS, DARK_CSS, BASE_CSS].join('\n')
+export const ELEMENT_CSS: string = [LIGHT_CSS, DARK_CSS, BASE_CSS, FIND_CSS].join('\n')
 
-export const LIGHT_DOM_CSS: string = [LIGHT_CSS, BASE_CSS].join('\n')
+export const LIGHT_DOM_CSS: string = [LIGHT_CSS, BASE_CSS, FIND_CSS].join('\n')
