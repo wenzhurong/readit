@@ -236,6 +236,14 @@ function result(query: string, matches: readonly TextMatch[], current: number): 
   return { query, total: matches.length, current: current < 0 ? 0 : current + 1 }
 }
 
+function deepestActiveElement(doc: Document): HTMLElement | null {
+  let active: Element | null = doc.activeElement
+  while (active?.shadowRoot?.activeElement !== undefined && active.shadowRoot.activeElement !== null) {
+    active = active.shadowRoot.activeElement
+  }
+  return active instanceof HTMLElement ? active : null
+}
+
 export function createFindController(options: FindControllerOptions): FindController {
   const doc = options.mount.ownerDocument
   const view = doc.defaultView
@@ -268,6 +276,7 @@ export function createFindController(options: FindControllerOptions): FindContro
   let current = -1
   let caseSensitive = false
   let destroyed = false
+  let returnFocus: HTMLElement | null = null
 
   const updateUi = (): void => {
     count.textContent = current < 0 ? `0 / ${matches.length}` : `${current + 1} / ${matches.length}`
@@ -332,6 +341,8 @@ export function createFindController(options: FindControllerOptions): FindContro
   }
 
   const open = (): void => {
+    const active = deepestActiveElement(doc)
+    if (active !== input) returnFocus = active
     options.owner.dataset['readitFindOpen'] = 'true'
     input.focus()
     input.select()
@@ -343,8 +354,11 @@ export function createFindController(options: FindControllerOptions): FindContro
   }
 
   const hide = (): void => {
+    const focus = returnFocus
+    returnFocus = null
     delete options.owner.dataset['readitFindOpen']
     clear()
+    if (focus?.isConnected === true) focus.focus({ preventScroll: true })
   }
 
   const onInput = (): void => {

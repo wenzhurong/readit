@@ -10,6 +10,7 @@ import {
 } from './watch-reload.js'
 import { connectUpdateNotice } from './updates.js'
 import { connectExternalLinks } from './external-links.js'
+import { connectFindShortcut } from './find-shortcut.js'
 
 interface DocumentPayload {
   readonly path: string
@@ -50,6 +51,7 @@ const stopExternalLinks = connectExternalLinks(host, {
   openExternal: (url) => invoke('open_external', { url }),
   showFeedback: (message) => displayError(new Error(message)),
 })
+const stopFindShortcut = connectFindShortcut(window, () => handle)
 
 function showDocument(documentPayload: DocumentPayload): void {
   currentDocumentPath = documentPayload.path
@@ -146,6 +148,7 @@ window.addEventListener('beforeunload', () => {
   watchedDocumentReloader.destroy()
   stopUpdateNotice?.()
   stopExternalLinks()
+  stopFindShortcut()
   stopObservingResources?.()
   handle?.destroy()
 })

@@ -12,6 +12,7 @@ import { editorContractCases, runAllCases } from '../../packages/editor/test/con
 import { createSetHtml, readEnv } from '../../packages/element/src/set-html.js'
 import { connectExternalLinks } from '../../shell/src/external-links.js'
 import { rewriteLocalResources } from '../../shell/src/resources.js'
+import { connectFindShortcut } from '../../shell/src/find-shortcut.js'
 
 type MountOpts = NonNullable<Parameters<typeof mount>[1]>
 type Handle = ReturnType<typeof mount>
@@ -26,6 +27,7 @@ export interface ReaditFixtureApi {
   connectShellExternalLinks(hostId: string): void
   shellExternalLinkState(): { opened: readonly string[]; feedback: readonly string[] }
   probeShellResourceRewrite(): string | null
+  connectShellFindShortcut(handleId: string): void
   defineReadit(tag?: string): void
   /**
    * Task 17：跑 packages/editor/test/contract.ts 那张 P2 契约表——两个实现
@@ -58,6 +60,7 @@ const navigations: string[] = []
 const shellExternalOpened: string[] = []
 const shellExternalFeedback: string[] = []
 const shellExternalStops = new Map<string, () => void>()
+let shellFindStop: (() => void) | null = null
 let seq = 0
 
 const api: ReaditFixtureApi = {
@@ -101,6 +104,8 @@ const api: ReaditFixtureApi = {
     handles.clear()
     for (const stop of shellExternalStops.values()) stop()
     shellExternalStops.clear()
+    shellFindStop?.()
+    shellFindStop = null
   },
   navigations,
   connectShellExternalLinks(hostId) {
@@ -127,6 +132,11 @@ const api: ReaditFixtureApi = {
     root.innerHTML = '<img src="images/a b.png">'
     rewriteLocalResources(root)
     return root.querySelector('img')?.getAttribute('src') ?? null
+  },
+  connectShellFindShortcut(handleId) {
+    if (!handles.has(handleId)) throw new Error(`fixture: no handle ${handleId}`)
+    shellFindStop?.()
+    shellFindStop = connectFindShortcut(window, () => handles.get(handleId) ?? null)
   },
   defineReadit,
   async runEditorContract(kind) {

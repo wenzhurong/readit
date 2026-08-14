@@ -167,22 +167,43 @@ describe('源码模型与内置 UI', () => {
   it('无参 find 打开并聚焦嵌套查找栏，按钮与 Escape 驱动同一状态机', () => {
     enableCustomHighlights()
     const { controller, owner } = fixture()
+    const returnTarget = document.createElement('button')
+    owner.before(returnTarget)
+    returnTarget.focus()
     expect(FIND_CSS).toContain('::highlight(readit-find)')
     expect(FIND_CSS).toContain(':host([data-readit-find-open])')
 
     controller.find()
-    expect(owner.dataset['readitFindOpen']).toBe('true')
     const ui = controller.element.shadowRoot!
     const input = ui.querySelector<HTMLInputElement>('input')!
+    const opened = {
+      state: owner.dataset['readitFindOpen'],
+      focused: ui.activeElement === input,
+    }
     input.value = 'alpha'
     input.dispatchEvent(new Event('input'))
-    expect(ui.querySelector('output')?.textContent).toBe('1 / 2')
     ui.querySelector<HTMLButtonElement>('[data-find-next]')!.click()
-    expect(ui.querySelector('output')?.textContent).toBe('2 / 2')
+    input.setSelectionRange(2, 2)
+    controller.find()
+    const reopened = {
+      count: ui.querySelector('output')?.textContent,
+      selection: [input.selectionStart, input.selectionEnd],
+    }
 
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-    expect(owner.dataset['readitFindOpen']).toBeUndefined()
-    expect(registry.has('readit-find')).toBe(false)
+    expect({
+      opened,
+      reopened,
+      closed: {
+        state: owner.dataset['readitFindOpen'],
+        highlighted: registry.has('readit-find'),
+        focusRestored: document.activeElement === returnTarget,
+      },
+    }).toEqual({
+      opened: { state: 'true', focused: true },
+      reopened: { count: '2 / 2', selection: [0, 5] },
+      closed: { state: undefined, highlighted: false, focusRestored: true },
+    })
     controller.destroy()
   })
 })
