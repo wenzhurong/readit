@@ -208,7 +208,108 @@
 - `@readit/find` 体积门钉小于 20 KB 的数量级并禁止两个原生捷径字符串，不是精确字节快照；
   实测 gzip 3176 B 另行记录。
 
+## Phase C 第一批 — macOS 壳 C1–C3
+
+前置裁决提交：`d6a7137 docs(plan3): lock Phase C acceptance boundary`
+
+- 产品下限落为 **macOS 14 + Safari ≥ 17.2**；真 WKWebView Mermaid 下界仍待手工矩阵，
+  若测出更高版本才通过则上调发布门槛。
+- 新建 `docs/plans/2026-08-13-m6-manual-acceptance.md`，保留双击、二次启动、Cmd+F、
+  原子保存、真 WKWebView Mermaid、安装/启动/稳态资源六项。当前全部未勾选，M6 真机
+  验收仍未达成。
+
+### C1 — 异步且按当前文档目录收口的资源协议
+
+提交：`4d936e4 feat(shell): scope async resource protocol`
+
+落地内容：
+
+- 新建独立于 `spike/tauri-probe` 的正式 `shell/src-tauri`，固定 Tauri 2.11.5；
+  `register_asynchronous_uri_scheme_protocol("readit", ...)` 在独立线程读盘并响应。
+- 协议根随当前 Markdown 文档切换，只允许访问该文档目录内已存在的普通文件；普通、
+  percent-encoded、反斜杠父目录穿越与 encoded absolute path 均拒绝，解析后的 symlink
+  若越出根目录返回 403。
+- CSP 同时列出 `readit:` 与 `http://readit.localhost`；资源响应带 MIME、`no-store` 与
+  CORS 头。正式图标由仓库内 SVG 源生成，不复用 throwaway spike 的产物。
+
+先红后绿与负向证据：
+
+- 空解析器首次运行：10 条最终测试中的路径/作用域四类实际 **4 failed / 2 passed**；
+  实现后 C1 定向 **10/10 通过**。
+- 分别破坏“尚无当前文档”的错误类型、两个 CSP origin、成功状态、MIME、响应体、CORS、
+  404 与 400 映射，相应断言逐项变红；恢复后 Rust test 与 `clippy -D warnings` 均通过。
+
+### C2 — 文件关联、Opened 持久交接与正式前端
+
+提交：`d16d731 feat(shell): persist and open associated documents`
+
+落地内容：
+
+- `bundle.fileAssociations` 声明 `md` / `markdown`、`Viewer`、`rank: Default`；bundle 的
+  `minimumSystemVersion` 为 14.0。
+- `RunEvent::Opened` 先把 file URL 转成路径存入 `Arc<AppState>` 的 FIFO，再发唤醒事件；
+  前端先注册监听、再通过 `take_pending_path` 排空队列，因此 Opened 早于 Ready/Window 时
+  也不会丢文档。
+- `open_document` 在阻塞线程读盘、拒绝非 Markdown 与非 UTF-8；读盘成功后才切换 C1 的
+  资源根，失败导航不会弄坏当前文档图片。
+- 正式 Vite 前端消费 `readit/element`，数学沿 element 既有 `prepare()` 懒加载，Mermaid
+  与高亮由宿主动态加载；23 个自定义 emoji 构建时复制到本地 `/emoji/`。
+- 相对图片/音视频 URL 重写到 `readit://localhost/`；MutationObserver 覆盖数学/高亮等
+  异步重绘。OS 新开文档通过真实 anchor click 交给 element 既有历史控制器，不在壳里
+  重造前进/后退栈。
+
+先红后绿与负向证据：
+
+- AppState/打开/关联实现前 Rust 定向 **4/4 红**；前端资源与路由桩首次运行
+  **3 failed / 1 passed**，接线后 Rust C1+C2 **14/14**、前端 **5/5**。
+- 临时移除资源根切换后，读盘与 payload 断言仍通过、协议响应从 200 变 503；临时用
+  lossy UTF-8 后非法字节断言变红。
+- 分别把关联扩展改成 `mdx`、role 改成 `Editor`、rank 改成 `None`，三处断言各自变红；
+  移除 shell 的根 Vitest project 后 CI 接线断言变红。
+- 临时允许 `..` 与断开 MutationObserver 后，两类前端断言同时变红；恢复后全仓
+  **82 文件 / 2826 通过**。
+- 真实执行 `tauri build --bundles app` 后读取 `.app/Contents/Info.plist`：
+  `CFBundleTypeExtensions = [md, markdown]`、`CFBundleTypeRole = Viewer`、
+  `LSHandlerRank = Default`、`LSMinimumSystemVersion = 14.0`。
+
+### C3 — 单实例与二次调用路由
+
+提交：`3beb49a feat(shell): route second launches into open window`
+
+落地内容：
+
+- `tauri-plugin-single-instance` 精确固定 **2.4.3**，并是 Builder 上第一个注册的插件。
+- 首次 CLI 启动与插件回调共用裸 argv 解析：跳过 argv[0]、flag 与 URL 形参数；相对路径
+  按发起进程的 cwd 解析；不把 Windows 路径喂给 URL parser。
+- 二次调用把 Markdown 路径压入同一 AppState 队列、唤醒前端，并 show / unminimize /
+  focus `main` 窗口；前端再通过 C2 的 anchor click 路由进 element 历史。
+
+先红后绿与负向证据：
+
+- argv 队列桩首次运行实际 **1/1 红**（0 路径而非 2）；实现后 C1–C3 Rust
+  **16/16 通过**。
+- 临时不按第二进程 cwd 解析时，断言得到裸 `relative file.md` 而非绝对路径；临时允许
+  URL 形参数时队列从 2 变 3，两次均实际变红。
+- 插件版本改为语义等价但不符合固定文本的 manifest 写法时精确固定断言变红；在首个
+  `.plugin(` 之前注入故障标记时注册顺序断言变红。
+- 加入插件后重新生成 release `.app` 成功；Rust `clippy --all-targets -- -D warnings`、
+  shell Vitest **5/5**、shell TypeScript 均零错误。
+
+## Phase C 第一批最终验证
+
+| 命令 / 检查 | 实际结果 |
+|---|---|
+| `cargo test --offline --manifest-path shell/src-tauri/Cargo.toml` | **16 通过 / 0 失败** |
+| `cargo clippy --offline --manifest-path shell/src-tauri/Cargo.toml --all-targets -- -D warnings` | 退出码 0 |
+| `npm test --workspace=readit-shell-frontend` | **2 文件 / 5 通过** |
+| `npm run typecheck` | 根、browser 与 9 个 workspace 全部零错误 |
+| `npm test` | **82 文件 / 2826 通过 / 0 失败** |
+| `npm run build --workspace=readit-shell-frontend` | 退出码 0，离线 emoji 已复制 |
+| `tauri build --bundles app` | release `readit.app` 生成成功 |
+| `git diff --check` | 退出码 0 |
+
 ## 阶段边界
 
-Phase A 与 Phase B 完成。Phase C 未开始；开始前仍须把 §2.2 的最终 macOS/Safari 下限和
-§2.3 的自动化/手工验收分界裁决清楚。
+Phase A、Phase B 与 Phase C 第一批 C1–C3 完成。**按计划在批次边界停止**：C4 文件监听、
+C5 更新器、C6 外部链接和 C7 Cmd+F 尚未开始；六项真机清单也尚未执行。因此这不是
+“M6 已验收”，只是 C1–C3 的实现与可自动化验证完成。
