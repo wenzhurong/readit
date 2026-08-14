@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:perf": "npm run test:perf --workspaces --if-present",
     "build": "vite-node packages/readit/build.ts",
-    "typecheck": "tsc --noEmit && tsc -p browser --noEmit && npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run build && tsc --noEmit && tsc -p browser --noEmit && npm run typecheck --workspaces --if-present",
     "corpus:diff": "tsx packages/core/scripts/corpus-diff.ts",
     "oracle:refresh": "tsx packages/core/scripts/oracle-refresh.ts",
     "oracle:manifest": "tsx packages/core/scripts/build-oracle-manifest.ts",

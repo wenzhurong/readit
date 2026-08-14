@@ -61,8 +61,16 @@ describe('typecheck actually covers the whole repo', () => {
     // the offline gate itself did not even compile until the root tsconfig was added.
     // browser/ is a fourth island: not a workspace, and it needs the DOM lib, so it carries its
     // own tsconfig and its own invocation. Without this line nothing would check it either.
+    // 开头那个 `npm run build` 不是顺手加的：`shell/` 这个工作区 import 的是**发布外观包**
+    // （`readit/element`、`readit/plugins/*`），它们解析到 packages/readit/dist 的 .d.ts，
+    // 而 dist 是 gitignored、由构建产生的。少了它，干净 clone 上 tsc 直接报
+    // TS2307 Cannot find module 'readit/element'——2026-08-14 CI 上就是这么红的，
+    // 而本机因为有残留 dist 一直是绿的。**那是「本地绿只因为脏工作树」的典型**。
+    //
+    // 让壳消费发布面是刻意的（它是第一个真实消费者，等于给分发面做 dogfood），
+    // 所以修法是补构建顺序，不是把壳改成 import 工作区源码。构建实测 ~5s。
     expect(pkg.scripts.typecheck).toBe(
-      'tsc --noEmit && tsc -p browser --noEmit && npm run typecheck --workspaces --if-present',
+      'npm run build && tsc --noEmit && tsc -p browser --noEmit && npm run typecheck --workspaces --if-present',
     )
   })
 
