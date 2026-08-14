@@ -17,6 +17,9 @@ export const SHOTS: readonly Shot[] = [
   { name: 'kitchen-sink-light', content: 'kitchen-sink.md', theme: 'light', instances: 1 },
   { name: 'kitchen-sink-dark', content: 'kitchen-sink.md', theme: 'dark', instances: 1 },
   { name: 'code-and-tables-light', content: 'code-and-tables.md', theme: 'light', instances: 1 },
+  // 深色 × 表格/代码块/任务列表的唯一覆盖点。kitchen-sink.md 这三样一个都没有，
+  // 所以删了它就等于把 color-scheme 那一面的视觉回归保护清零（见 visual-wiring.test.ts）。
+  { name: 'code-and-tables-dark', content: 'code-and-tables.md', theme: 'dark', instances: 1 },
   { name: 'alerts-and-footnotes-light', content: 'alerts-and-footnotes.md', theme: 'light', instances: 1 },
   { name: 'mermaid-light', content: 'mermaid.md', theme: 'light', instances: 1, mermaid: true },
   { name: 'two-instances-light-dark', content: 'kitchen-sink.md', theme: 'light', instances: 2 },

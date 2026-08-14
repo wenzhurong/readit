@@ -699,7 +699,7 @@ Mermaid 的已发布 Safari / 真 WKWebView 矩阵仍是 M6 的具名手工验�
 | **L2b 数学黄金文件** | 自家冻结黄金文件，锁死 `@mathjax/src` 与字体包版本。**必须是顺序置换测试**，不只是重复测试（§7.3） | 本地 |
 | **L3 DOM 断言** | linkedom。oracle 够不着的：数学输出、mermaid 容器、相对路径解析、锚点桥接、卫生化、高亮语言映射 | 本地 |
 | **L3b Shadow DOM 挂载** | **真浏览器里挂进 open shadow root 跑同一批断言。** 没有这层，"可嵌入"是唯一一条零覆盖的锁定需求。必测：同页两个实例（style-mod 的 bug 只在这现形）、CodeMirror 里的中日韩输入法组合 | CI |
-| **L4 视觉回归** | Playwright 1.62.1，**≤12 张**，只在 `mcr.microsoft.com/playwright:v1.62.1-noble` 里生成基线，自托管 woff2，`animations:'disabled'`，`maxDiffPixelRatio: 0.002`，`deviceScaleFactor: 1`。**外加敌意宿主 fixture**（页面加载 Tailwind Preflight + Bootstrap Reboot）证明隔离是真的 | CI |
+| **L4 视觉回归** | Playwright 1.62.1，**≤12 张基线**（"张"= 基线 PNG 个数，**不是**比对次数——一个场景只产一张，干净页与敌意页共用它做隔离等式；2026-08-13 曾按"比对次数"读，把场景上限压到 6，结果加 mermaid 时挤掉了唯一覆盖"深色 × 表格/代码块/任务列表"的那张，代价没人称量），只在 `mcr.microsoft.com/playwright:v1.62.1-noble` 里生成基线，自托管 woff2，`animations:'disabled'`，`maxDiffPixelRatio: 0.002`，`deviceScaleFactor: 1`。**外加敌意宿主 fixture**（页面加载 Tailwind Preflight + Bootstrap Reboot）证明隔离是真的 | CI |
 
 ### 13.1 归一化器（9 步，与刷新脚本共用）
 

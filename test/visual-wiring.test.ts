@@ -39,7 +39,19 @@ describe('L4 的截图预算', () => {
     // 干净页与敌意页共用同一个基线文件名，所以「敌意宿主下渲染不变」是逐像素的等式，
     // 不是「敌意页像它自己那张」——后者两张一起漂移也照样绿。
     expect(HOSTS).toEqual(['visual', 'hostile'])
-    expect(SHOTS.length * HOSTS.length).toBeLessThanOrEqual(12)
+    // SPEC §13.2 的预算是「≤12 **张**视觉回归截图」，这里按**基线张数**读，不按比对次数。
+    //
+    // 2026-08-13 这条曾写成 `SHOTS.length * HOSTS.length <= 12`，把上限压到 6 个场景。
+    // 加 mermaid 场景时它被这条挡住，于是 code-and-tables-dark 被删掉腾位置——
+    // 而那是当时**唯一**覆盖「深色主题 × 表格/代码块/任务列表」的基线
+    // （kitchen-sink.md 里这三样一个都没有）。任务列表复选框、<pre> 滚动条、表单控件
+    // 都由 UA 按 color-scheme 渲染，正是批次 5 那次 color-scheme 回退的作用面——
+    // 保护那一类回归的唯一一张基线就这么没了，而且没人称量过这个代价。
+    //
+    // 按基线张数读的理由：一个 shot 只产出**一张** PNG，两个宿主共用它；
+    // 敌意页那一次不是第二张截图，是拿同一张做隔离断言（见本用例上面那段注释）。
+    // 上面那条 `pngs.length <= 12` 断言的也正是张数——两处现在读法一致。
+    expect(SHOTS.length).toBeLessThanOrEqual(12)
   })
 
   it('基线落在 playwright.config.ts 声明的目录里', () => {
