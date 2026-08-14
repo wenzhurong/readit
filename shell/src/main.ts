@@ -9,6 +9,7 @@ import {
   type WatchedDocumentChange,
 } from './watch-reload.js'
 import { connectUpdateNotice } from './updates.js'
+import { connectExternalLinks } from './external-links.js'
 
 interface DocumentPayload {
   readonly path: string
@@ -44,6 +45,11 @@ function displayError(error: unknown): void {
   status.dataset.kind = 'error'
   status.textContent = error instanceof Error ? error.message : String(error)
 }
+
+const stopExternalLinks = connectExternalLinks(host, {
+  openExternal: (url) => invoke('open_external', { url }),
+  showFeedback: (message) => displayError(new Error(message)),
+})
 
 function showDocument(documentPayload: DocumentPayload): void {
   currentDocumentPath = documentPayload.path
@@ -139,6 +145,7 @@ window.addEventListener('beforeunload', () => {
   for (const stop of stopListening) stop()
   watchedDocumentReloader.destroy()
   stopUpdateNotice?.()
+  stopExternalLinks()
   stopObservingResources?.()
   handle?.destroy()
 })

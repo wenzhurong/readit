@@ -10,6 +10,8 @@ import { editorContractCases, runAllCases } from '../../packages/editor/test/con
 // `readEnv` 这两个函数本身有没有把 EXTRA_ELEMENTS/TIER2_EXTRA_TAGS 真的接上，
 // 不重新实现一遍消毒器接线。
 import { createSetHtml, readEnv } from '../../packages/element/src/set-html.js'
+import { connectExternalLinks } from '../../shell/src/external-links.js'
+import { rewriteLocalResources } from '../../shell/src/resources.js'
 
 type MountOpts = NonNullable<Parameters<typeof mount>[1]>
 type Handle = ReturnType<typeof mount>
@@ -21,6 +23,9 @@ export interface ReaditFixtureApi {
   destroy(id: string): void
   destroyAll(): void
   readonly navigations: string[]
+  connectShellExternalLinks(hostId: string): void
+  shellExternalLinkState(): { opened: readonly string[]; feedback: readonly string[] }
+  probeShellResourceRewrite(): string | null
   defineReadit(tag?: string): void
   /**
    * Task 17：跑 packages/editor/test/contract.ts 那张 P2 契约表——两个实现
@@ -50,6 +55,9 @@ export interface ReaditFixtureApi {
 
 const handles = new Map<string, Handle>()
 const navigations: string[] = []
+const shellExternalOpened: string[] = []
+const shellExternalFeedback: string[] = []
+const shellExternalStops = new Map<string, () => void>()
 let seq = 0
 
 const api: ReaditFixtureApi = {
@@ -91,8 +99,35 @@ const api: ReaditFixtureApi = {
   destroyAll() {
     for (const handle of handles.values()) handle.destroy()
     handles.clear()
+    for (const stop of shellExternalStops.values()) stop()
+    shellExternalStops.clear()
   },
   navigations,
+  connectShellExternalLinks(hostId) {
+    const host = document.getElementById(hostId)
+    if (host === null) throw new Error(`fixture: no host #${hostId}`)
+    shellExternalStops.get(hostId)?.()
+    shellExternalStops.set(
+      hostId,
+      connectExternalLinks(host, {
+        async openExternal(url) {
+          shellExternalOpened.push(url)
+        },
+        showFeedback(message) {
+          shellExternalFeedback.push(message)
+        },
+      }),
+    )
+  },
+  shellExternalLinkState() {
+    return { opened: [...shellExternalOpened], feedback: [...shellExternalFeedback] }
+  },
+  probeShellResourceRewrite() {
+    const root = document.createElement('div')
+    root.innerHTML = '<img src="images/a b.png">'
+    rewriteLocalResources(root)
+    return root.querySelector('img')?.getAttribute('src') ?? null
+  },
   defineReadit,
   async runEditorContract(kind) {
     const scratch = document.createElement('div')

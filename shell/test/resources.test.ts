@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   observeLocalResources,
   rewriteLocalResources,
@@ -34,6 +34,12 @@ describe('readit resource URLs', () => {
 
   it('rewrites supported resource attributes in a rendered subtree', () => {
     const root = document.createElement('div')
+    const selectors: string[] = []
+    const querySelectorAll = root.querySelectorAll.bind(root)
+    vi.spyOn(root, 'querySelectorAll').mockImplementation((selector: string) => {
+      selectors.push(selector)
+      return querySelectorAll(selector)
+    })
     root.innerHTML =
       '<img src="images/a b.png"><video poster="cover.png"><source src="movie.webm"></video>' +
       '<img src="https://example.com/remote.png">'
@@ -52,6 +58,13 @@ describe('readit resource URLs', () => {
     expect(root.querySelectorAll('img')[1]?.getAttribute('src')).toBe(
       'https://example.com/remote.png',
     )
+    expect(selectors.slice(0, 5)).toEqual([
+      'img[src]',
+      'source[src]',
+      'audio[src]',
+      'video[src]',
+      'video[poster]',
+    ])
   })
 
   it('rewrites resources added by an asynchronous element repaint', async () => {

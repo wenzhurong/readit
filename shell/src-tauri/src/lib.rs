@@ -1,4 +1,5 @@
 mod document;
+mod external;
 mod protocol;
 mod updater;
 mod watcher;
@@ -83,6 +84,13 @@ pub fn run() {
             handle_second_instance(app, args, cwd)
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // The plugin's default JS injection also opens mailto:/tel: for _blank links.
+        // Disable it so the narrower http(s)-only command is the sole authority.
+        .plugin(
+            tauri_plugin_opener::Builder::new()
+                .open_js_links_on_click(false)
+                .build(),
+        )
         .manage(state)
         .manage(PendingUpdate::default())
         .register_asynchronous_uri_scheme_protocol("readit", move |_context, request, responder| {
@@ -94,6 +102,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             take_pending_path,
             open_document,
+            external::open_external,
             updater::check_for_update,
             updater::install_update
         ])
@@ -127,5 +136,34 @@ mod tests {
             .map(|(index, _)| &source[index..])
             .expect("the shell must register the single-instance plugin");
         assert!(first_plugin.starts_with(".plugin(tauri_plugin_single_instance::init("));
+    }
+
+    #[test]
+    fn external_opener_is_pinned_without_broad_js_link_injection() {
+        let manifest = include_str!("../Cargo.toml");
+        let source = include_str!("lib.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("lib.rs must contain production code before tests");
+        assert_eq!(
+            (
+                manifest.contains("tauri-plugin-opener = \"=2.5.4\""),
+                production.contains(".open_js_links_on_click(false)"),
+                production.contains("external::open_external"),
+            ),
+            (true, true, true)
+        );
+    }
+
+    #[test]
+    fn main_capability_grants_only_the_event_listener_lifecycle() {
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/main.json"))
+                .expect("main capability must be valid JSON");
+        assert_eq!(
+            capability["permissions"],
+            serde_json::json!(["core:event:allow-listen", "core:event:allow-unlisten"])
+        );
     }
 }

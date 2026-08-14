@@ -51,8 +51,8 @@ export function toReaditResourceUrl(raw: string): string | null {
 
 export function rewriteLocalResources(root: ParentNode): void {
   for (const [selector, attribute] of RESOURCE_ATTRIBUTES) {
-    const elements = [...root.querySelectorAll<HTMLElement>(`[${attribute}]${selector}`)]
-    if (root instanceof HTMLElement && root.matches(`[${attribute}]${selector}`)) {
+    const elements = [...root.querySelectorAll<HTMLElement>(`${selector}[${attribute}]`)]
+    if (root instanceof HTMLElement && root.matches(`${selector}[${attribute}]`)) {
       elements.unshift(root)
     }
     for (const element of elements) {
