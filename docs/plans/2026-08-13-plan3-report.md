@@ -441,3 +441,125 @@ Phase C 第二批 **C4 与 C5 完成**，在获批批次边界停止；**C6 外�
 六项真机清单仍全部未勾选，其中“真实编辑器原子保存”不能由上述自动化 rename 测试替代，
 安装/启动/稳态资源也不能由本地 bundle 构建替代。因此当前仍不是“M6 已验收”，也不是
 “M7 已完成”。
+
+## Phase C 第三批：C6–C7
+
+执行基线（开始本批、尚未改代码时）：`npm test` 为 **84 文件 / 2832 通过**；只有既有的
+无 `GITHUB_TOKEN` 提示。四条不变量为语料 **68 / 精确相等 56**、mismatch 台账 **12**、
+CommonMark **649 通过 / 3 个永久失败**、GFM **658 通过 / 14 个永久失败**，`TEMPORARY`
+仍为 **0**。
+
+### C6 — 外部网页链接交给系统浏览器
+
+提交：`08c0644 feat(shell): safely hand web links to the system browser`
+
+落地内容：
+
+- 精确固定 `tauri-plugin-opener = "=2.5.4"`。壳在 window capture 阶段接住经过 Shadow DOM
+  composed path 的 `target="_blank"` 点击，只有规范化后的 `http:` / `https:` URL 才调用
+  Tauri command；Rust command 在真正调用系统 opener 前再次独立校验，不能靠前端判定充当
+  本地能力边界。
+- `javascript:`、`file:`、`data:`、`vscode:`、大小写混淆的 `JavaScript:`、协议相对 URL
+  以及 `mailto:` 都被拒绝，并展示可见错误。`mailto:` 是有意拒绝：本任务只授权网页
+  `http(s)`，没有顺手扩大“文档内容触发本地系统行为”的范围。
+- 禁用 opener 插件较宽的默认 JS 点击注入：`.open_js_links_on_click(false)`；能力文件只授予
+  前端已在使用的 `core:event:allow-listen` / `allow-unlisten`。前端和 Rust 两层都没有广泛
+  opener ACL。
+- 真 WKWebView 探针同时发现了两处既有壳问题：缺能力文件时 UI 只显示
+  `Command plugin:event|listen not allowed by ACL`；补上最小事件能力后又暴露 `[src]img` 是
+  非法 selector。后者改为 `img[src]`，并加入真实浏览器合同，避免 happy-dom 的宽松解析
+  再次遮住错误。
+
+先红后绿与负向证据：
+
+- 实现前，壳测试因 `external-links.js` 不存在而红，Rust 因 `external` 模块不存在而红；浏览器
+  fixture 也因缺少桥接 API 不能编译。
+- 临时放行所有 scheme 后，JS 的六组拒绝断言与 Rust 的六组拒绝断言全部变红，且红灯明确
+  显示 opener 被调用、拒绝反馈缺失；恢复双层 allowlist 后通过。
+- 临时改成一律拒绝并扩大候选链接范围后，合法 http(s)、相对链接、hash、selector、浏览器
+  端四条集成以及 Rust 合法路径/最小 ACL 合同都出现预期红灯。
+- 故障注入还发现测试自身的假绿：插件配置测试原先扫描整个 `lib.rs`，测试源码里自己的
+  `.open_js_links_on_click(false)` 字符串会遮住生产代码被改成 `true`。把扫描边界收窄到
+  `#[cfg(test)]` 之前后，同一故障真实变红；恢复后 Rust **28/28**、壳 **19/19**、链接集成
+  Chromium + WebKit **4/4** 通过。
+
+真实 `.app` 的 `target="_blank"` 行为证据：
+
+- C6 前（只补到应用能显示的最小事件 ACL 后），点击现有 https `_blank` 链接，readit 仍停在
+  `tauri://localhost`，系统浏览器进程元数据没有变化；实际默认行为是**什么都不做**，不是在
+  WebView 内跳转。
+- C6 后重新构建并签名 `.app`，同一链接点击后 readit 仍停在 `tauri://localhost`，已运行的
+  Google Chrome `useCount` 从 **2401** 增到 **2403**；系统浏览器确实被唤起，文档没有离开
+  readit。临时探针文档随后删除，没有进入提交。
+
+### C7 — Cmd+F 唤起已有文档查找器
+
+提交：`996c7ef feat(shell): route Cmd+F to the document finder`
+
+选择与实现：
+
+- 采用 **window capture 阶段的 JS `keydown` 桥接**，而不是原生菜单。捕获发生在事件进入
+  element Shadow DOM 或 CodeMirror 之前，严格只认没有 Ctrl/Alt/Shift 的 Meta+F，然后调用
+  当前 `MountHandle.find()`；因此不在壳里复制查找 UI，也不会打开 CodeMirror 自己的
+  `.cm-search`。
+- 当前壳固定只有一个 `#reader` 和一个模块级活动 handle，不存在同一壳窗口内多个 mounted
+  reader 之间的选择问题；fixture 则显式传入目标 handle。若将来壳支持多实例，需要把
+  `currentHandle()` 扩展为基于深层焦点的选择器，不能把现有单实例前提外推。
+- 已打开时再次 Cmd+F 会复用同一个查找栏、重新聚焦并全选查询；Escape 关闭、清空查询和
+  高亮，并把焦点恢复到唤起前的文档元素（包括嵌套 Shadow DOM 内的 CodeMirror）。
+- 代价是没有新增原生 `Edit > Find…` 菜单；若焦点完全不在 WebView，JS 桥也不会收到快捷键。
+  真 macOS 应用的物理 Cmd+F 仍属于人工清单，Playwright 的 `Meta+f` 不能替代该验收。
+
+先红后绿与负向证据：
+
+- 临时的实现前双引擎探针在 `source` / `split` 共 **4/4** 证明原行为：Meta+F 不打开 readit
+  查找栏，也不打开 `.cm-search`，CodeMirror 继续持有焦点。正式测试最初分别因缺
+  `find-shortcut.js`、缺 fixture API、Escape 不恢复焦点而红。
+- 临时让快捷键 bridge no-op 后，壳捕获/重复两条红，Chromium 的 read/source/split 三条
+  集成全部红；改成一次性调用后，单元和浏览器的“再次 Cmd+F”都从期望 2 次得到 1 次。
+- 临时吞掉 chord guard 后，Ctrl+F、Meta+Shift+F、Meta+G 被错误拦截并调用三次，负向合同红；
+  临时取消 listener 移除后 teardown 合同从期望 0 次得到 1 次。
+- 临时取消焦点恢复后，find 控制器与浏览器 Escape 断言分别红；临时让 source 模式不提供
+  文档模型后，视口外针的计数从 `1 / 1` 变为 `0 / 0`。这些故障全部恢复后，壳 **23/23**、
+  find 控制器 **7/7**、C7 Chromium + WebKit **6/6** 通过。
+- Source 集成先证明目标文本不在 CodeMirror 当前虚拟 DOM，再经查找栏从完整 source 模型命中
+  并等待 scroller 实际滚动；split 模式同样证明查找栏胜出且 Escape 把焦点还给 CodeMirror。
+
+## Phase C 第三批最终验证
+
+| 命令 / 检查 | 实际结果 |
+|---|---|
+| `npm test` | **86 文件 / 2844 通过 / 0 失败**；既有无 GitHub token 提示不影响离线通过 |
+| `npm run typecheck` | 根、browser 与所有 workspace 全部零错误 |
+| `npm test --workspace=readit-shell-frontend` | **6 文件 / 23 通过** |
+| `npm run test:browser` | Chromium + WebKit **66 通过 / 2 按引擎能力跳过 / 0 失败** |
+| `npm run test:perf` | **5 通过 / 1 个校准专用项跳过**，32.52 秒 |
+| 四个 core spec/corpus Vitest 文件 | **4 文件 / 1416 通过** |
+| `cargo test --manifest-path shell/src-tauri/Cargo.toml` | **28 通过 / 0 失败** |
+| `cargo clippy --manifest-path shell/src-tauri/Cargo.toml --all-targets --all-features -- -D warnings` | 退出码 0 |
+| 签名 Tauri app / updater bundle | arm64 `.app`、8,137,278-byte tar.gz 与 404-byte `.sig` 均生成 |
+| `codesign --verify --deep --strict --verbose=2` | 退出码 0；`Signature=adhoc`、无 TeamIdentifier、未公证 |
+| `git diff --check` | 退出码 0 |
+
+不变量收尾实测仍为：语料总数 / 精确相等 **68 / 56**、mismatch 台账 **12**、CommonMark
+**649 通过 / 3 个永久失败**、GFM **658 通过 / 14 个永久失败**、`TEMPORARY` **0**。
+
+`npm audit --json` 实测仍为 **2 high / 0 critical**：直接依赖 `js-yaml 4.1.0` 和 Vite →
+PostCSS 链路的 `nanoid 3.3.17`；本批没有改 lockfile，也没有把依赖升级混入功能提交。
+`cargo-audit` 仍未安装，故没有把 Rust advisory 数据库审计写成通过；Rust 侧实际完成的是
+精确版本检查、编译、测试与 clippy。
+
+## 第三批证据边界与阶段边界
+
+**实际运行得到的结论**：C6 在真实 arm64 Tauri `.app` / WKWebView 中观察了修复前后
+`target="_blank"` 的差异，并验证系统浏览器接管；Chromium、WebKit、Vitest、Rust、性能、
+语料与严格 codesign 检查均实际运行；包含 C7 最终前端的 updater bundle 与 minisign
+`.sig` 也实际重新生成。
+
+**不能据此声称的结论**：没有以物理键盘在真 macOS 应用里执行 Cmd+F，也没有原生
+`Edit > Find…` 菜单可验；自动化 `Meta+f` 只验证 WebView 收到事件之后的行为。Intel、
+GitHub Actions、线上 Release/updater 安装重启以及 Developer ID notarization 也仍未执行。
+
+Phase C 的自动化任务 **C1–C7 至此全部完成**。六项真机人工清单保持全部未勾选，需由用户
+在目标 Mac 上实际执行；因此当前边界是“Phase C 自动化齐备”，**不是 M6 已验收**，也不是
+**M7 已完成**。本批按获批边界停止，没有推送远端。
