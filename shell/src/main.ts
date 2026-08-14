@@ -8,6 +8,7 @@ import {
   createWatchedDocumentReloader,
   type WatchedDocumentChange,
 } from './watch-reload.js'
+import { connectUpdateNotice } from './updates.js'
 
 interface DocumentPayload {
   readonly path: string
@@ -25,6 +26,9 @@ function requireElement(selector: string): HTMLElement {
 
 const host = requireElement('#reader')
 const status = requireElement('#status')
+const updateNotice = requireElement('#update')
+const updateMessage = requireElement('#update-message')
+const installUpdate = requireElement('#install-update') as HTMLButtonElement
 
 let handle: MountHandle | null = null
 let stopObservingResources: (() => void) | null = null
@@ -33,6 +37,7 @@ let draining = false
 let drainAgain = false
 let currentDocumentPath: string | null = null
 const stopListening: Array<() => void> = []
+let stopUpdateNotice: (() => void) | null = null
 
 function displayError(error: unknown): void {
   status.hidden = false
@@ -116,9 +121,24 @@ void (async () => {
   await drainPendingDocuments()
 })().catch(displayError)
 
+void connectUpdateNotice(
+  {
+    notice: updateNotice,
+    message: updateMessage,
+    button: installUpdate,
+  },
+  {
+    check: () => invoke('check_for_update'),
+    install: () => invoke('install_update'),
+  },
+).then((stop) => {
+  stopUpdateNotice = stop
+})
+
 window.addEventListener('beforeunload', () => {
   for (const stop of stopListening) stop()
   watchedDocumentReloader.destroy()
+  stopUpdateNotice?.()
   stopObservingResources?.()
   handle?.destroy()
 })

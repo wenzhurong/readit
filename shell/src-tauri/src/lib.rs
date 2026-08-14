@@ -1,5 +1,6 @@
 mod document;
 mod protocol;
+mod updater;
 mod watcher;
 
 use std::sync::Arc;
@@ -7,6 +8,7 @@ use std::sync::Arc;
 use document::{AppState, DocumentPayload};
 use serde::Serialize;
 use tauri::{Emitter, Manager, Runtime};
+use updater::PendingUpdate;
 
 const DOCUMENTS_PENDING_EVENT: &str = "readit-documents-pending";
 const DOCUMENT_CHANGED_EVENT: &str = "readit-document-changed";
@@ -80,14 +82,21 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             handle_second_instance(app, args, cwd)
         }))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
+        .manage(PendingUpdate::default())
         .register_asynchronous_uri_scheme_protocol("readit", move |_context, request, responder| {
             let state = Arc::clone(&protocol_state);
             std::thread::spawn(move || {
                 responder.respond(state.resources.response_for(request.uri().path()));
             });
         })
-        .invoke_handler(tauri::generate_handler![take_pending_path, open_document])
+        .invoke_handler(tauri::generate_handler![
+            take_pending_path,
+            open_document,
+            updater::check_for_update,
+            updater::install_update
+        ])
         .build(tauri::generate_context!())
         .expect("failed to build readit");
 

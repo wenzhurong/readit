@@ -9,6 +9,10 @@
     <main id="app">
       <div id="reader" aria-live="polite"></div>
       <p id="status">请从 Finder 打开一个 Markdown 文件。</p>
+      <aside id="update" hidden aria-live="polite">
+        <span id="update-message"></span>
+        <button id="install-update" type="button">安装并重启</button>
+      </aside>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
