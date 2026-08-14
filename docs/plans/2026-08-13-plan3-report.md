@@ -308,6 +308,12 @@
 | `tauri build --bundles app` | release `readit.app` 生成成功 |
 | `git diff --check` | 退出码 0 |
 
+依赖审计的已知未处理项：`npm audit --json` 实际报告 **2 high / 0 critical**。两项都不是
+本批新增依赖：一项是 `packages/core` 直接固定的 `js-yaml 4.1.0`（当前建议修复到 4.3.1），
+另一项是既有 `vite → postcss → nanoid 3.3.17` 的传递依赖。按 C1–C3 批次边界，本批没有
+擅自升级核心解析依赖或重写 lockfile 来混入安全维护；发布前需单独开具名修复批次并跑完整
+语料/快照回归。
+
 ## 阶段边界
 
 Phase A、Phase B 与 Phase C 第一批 C1–C3 完成。**按计划在批次边界停止**：C4 文件监听、
