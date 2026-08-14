@@ -1,12 +1,20 @@
 mod document;
 mod protocol;
+mod watcher;
 
 use std::sync::Arc;
 
 use document::{AppState, DocumentPayload};
+use serde::Serialize;
 use tauri::{Emitter, Manager, Runtime};
 
 const DOCUMENTS_PENDING_EVENT: &str = "readit-documents-pending";
+const DOCUMENT_CHANGED_EVENT: &str = "readit-document-changed";
+
+#[derive(Clone, Serialize)]
+struct DocumentChangedPayload {
+    path: String,
+}
 
 #[tauri::command]
 fn take_pending_path(state: tauri::State<'_, Arc<AppState>>) -> Option<String> {
@@ -15,13 +23,25 @@ fn take_pending_path(state: tauri::State<'_, Arc<AppState>>) -> Option<String> {
 
 #[tauri::command]
 async fn open_document(
+    app: tauri::AppHandle,
     path: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<DocumentPayload, String> {
     let state = Arc::clone(state.inner());
-    tauri::async_runtime::spawn_blocking(move || state.open_document(std::path::Path::new(&path)))
-        .await
-        .map_err(|error| format!("document read task failed: {error}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        state.open_document_with_watcher(std::path::Path::new(&path), move |changed| {
+            if let Some(path) = changed.to_str() {
+                let _ = app.emit(
+                    DOCUMENT_CHANGED_EVENT,
+                    DocumentChangedPayload {
+                        path: path.to_owned(),
+                    },
+                );
+            }
+        })
+    })
+    .await
+    .map_err(|error| format!("document read task failed: {error}"))?
 }
 
 fn announce_pending_documents<R: Runtime>(app: &tauri::AppHandle<R>) {

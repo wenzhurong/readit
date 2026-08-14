@@ -6,7 +6,7 @@ use std::{
 
 use serde::Serialize;
 
-use crate::protocol::ResourceRoot;
+use crate::{protocol::ResourceRoot, watcher::DocumentWatcher};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +19,7 @@ pub(crate) struct DocumentPayload {
 pub(crate) struct AppState {
     pub(crate) resources: ResourceRoot,
     pending: Mutex<VecDeque<PathBuf>>,
+    watcher: Mutex<Option<DocumentWatcher>>,
 }
 
 impl AppState {
@@ -70,7 +71,14 @@ impl AppState {
         self.enqueue_paths(paths)
     }
 
-    pub(crate) fn open_document(&self, path: &Path) -> Result<DocumentPayload, String> {
+    pub(crate) fn open_document_with_watcher<F>(
+        &self,
+        path: &Path,
+        on_change: F,
+    ) -> Result<DocumentPayload, String>
+    where
+        F: Fn(PathBuf) + Send + Sync + 'static,
+    {
         let canonical = path
             .canonicalize()
             .map_err(|error| format!("cannot open {}: {error}", path.display()))?;
@@ -89,6 +97,22 @@ impl AppState {
             .ok_or_else(|| format!("document path is not valid UTF-8: {}", canonical.display()))?
             .to_owned();
 
+        let mut active_watcher = self
+            .watcher
+            .lock()
+            .map_err(|_| "document watcher lock poisoned".to_owned())?;
+        let replacement = if active_watcher
+            .as_ref()
+            .is_some_and(|watcher| watcher.watches(&canonical))
+        {
+            None
+        } else {
+            Some(
+                DocumentWatcher::new(&canonical, on_change)
+                    .map_err(|error| format!("cannot watch {}: {error}", canonical.display()))?,
+            )
+        };
+
         // Change the protocol scope only after the new document has been read successfully.
         // A failed navigation must leave the currently visible document's images working.
         self.resources.set_document(&canonical).map_err(|error| {
@@ -97,7 +121,15 @@ impl AppState {
                 canonical.display()
             )
         })?;
+        if let Some(watcher) = replacement {
+            *active_watcher = Some(watcher);
+        }
         Ok(DocumentPayload { path, source })
+    }
+
+    #[cfg(test)]
+    fn open_document(&self, path: &Path) -> Result<DocumentPayload, String> {
+        self.open_document_with_watcher(path, |_| {})
     }
 }
 

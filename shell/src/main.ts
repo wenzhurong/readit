@@ -4,6 +4,10 @@ import { mount, type MountHandle } from 'readit/element'
 import './styles.css'
 import { routeDocumentOpen } from './navigation.js'
 import { observeLocalResources } from './resources.js'
+import {
+  createWatchedDocumentReloader,
+  type WatchedDocumentChange,
+} from './watch-reload.js'
 
 interface DocumentPayload {
   readonly path: string
@@ -11,6 +15,7 @@ interface DocumentPayload {
 }
 
 const DOCUMENTS_PENDING_EVENT = 'readit-documents-pending'
+const DOCUMENT_CHANGED_EVENT = 'readit-document-changed'
 
 function requireElement(selector: string): HTMLElement {
   const element = document.querySelector<HTMLElement>(selector)
@@ -26,6 +31,8 @@ let stopObservingResources: (() => void) | null = null
 let navigationTail: Promise<void> = Promise.resolve()
 let draining = false
 let drainAgain = false
+let currentDocumentPath: string | null = null
+const stopListening: Array<() => void> = []
 
 function displayError(error: unknown): void {
   status.hidden = false
@@ -34,6 +41,7 @@ function displayError(error: unknown): void {
 }
 
 function showDocument(documentPayload: DocumentPayload): void {
+  currentDocumentPath = documentPayload.path
   document.title = `${documentPayload.path.split('/').pop() ?? 'readit'} — readit`
   status.hidden = true
   status.removeAttribute('data-kind')
@@ -69,6 +77,12 @@ function queueNavigation(path: string): Promise<void> {
   return next
 }
 
+const watchedDocumentReloader = createWatchedDocumentReloader(
+  () => currentDocumentPath,
+  queueNavigation,
+  displayError,
+)
+
 async function drainPendingDocuments(): Promise<void> {
   if (draining) {
     drainAgain = true
@@ -91,13 +105,20 @@ async function drainPendingDocuments(): Promise<void> {
 }
 
 void (async () => {
-  await listen(DOCUMENTS_PENDING_EVENT, () => {
-    void drainPendingDocuments().catch(displayError)
-  })
+  stopListening.push(
+    await listen(DOCUMENTS_PENDING_EVENT, () => {
+      void drainPendingDocuments().catch(displayError)
+    }),
+    await listen<WatchedDocumentChange>(DOCUMENT_CHANGED_EVENT, (event) => {
+      watchedDocumentReloader.handle(event.payload)
+    }),
+  )
   await drainPendingDocuments()
 })().catch(displayError)
 
 window.addEventListener('beforeunload', () => {
+  for (const stop of stopListening) stop()
+  watchedDocumentReloader.destroy()
   stopObservingResources?.()
   handle?.destroy()
 })
