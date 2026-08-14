@@ -26,12 +26,21 @@ impl AppState {
         let paths = urls
             .into_iter()
             .filter_map(|url| url.to_file_path().ok())
-            .filter_map(|path| path.canonicalize().ok())
-            .filter(|path| is_markdown(path));
+            .filter_map(|path| path.canonicalize().ok());
+        self.enqueue_paths(paths);
+    }
+
+    fn enqueue_paths(&self, paths: impl IntoIterator<Item = PathBuf>) -> usize {
+        let paths = paths
+            .into_iter()
+            .filter(|path| is_markdown(path))
+            .collect::<Vec<_>>();
+        let count = paths.len();
         self.pending
             .lock()
             .expect("pending document lock poisoned")
             .extend(paths);
+        count
     }
 
     pub(crate) fn take_pending_path(&self) -> Option<String> {
@@ -42,6 +51,23 @@ impl AppState {
             }
         }
         None
+    }
+
+    pub(crate) fn enqueue_argv(&self, args: &[String], cwd: &Path) -> usize {
+        let paths = args.iter().skip(1).filter_map(|raw| {
+            // These are OS argv strings, not URLs. In particular, do not feed a Windows
+            // `C:\Users\...` path through a URL parser; just reject actual URL-shaped args.
+            if raw.starts_with('-') || raw.contains("://") {
+                return None;
+            }
+            let path = PathBuf::from(raw);
+            Some(if path.is_absolute() {
+                path
+            } else {
+                cwd.join(path)
+            })
+        });
+        self.enqueue_paths(paths)
     }
 
     pub(crate) fn open_document(&self, path: &Path) -> Result<DocumentPayload, String> {
@@ -142,6 +168,31 @@ mod tests {
             state.take_pending_path().unwrap(),
             second.canonicalize().unwrap().to_str().unwrap()
         );
+        assert_eq!(state.take_pending_path(), None);
+    }
+
+    #[test]
+    fn second_instance_uses_raw_argv_paths_relative_to_its_cwd() {
+        let tree = TempTree::new();
+        let cwd = tree.path().join("working directory");
+        fs::create_dir_all(&cwd).unwrap();
+        let relative = cwd.join("relative file.md");
+        let absolute = tree.path().join("absolute.markdown");
+        fs::write(&relative, "relative").unwrap();
+        fs::write(&absolute, "absolute").unwrap();
+        let state = AppState::default();
+        let args = vec![
+            "readit.md".to_owned(),
+            "relative file.md".to_owned(),
+            absolute.to_str().unwrap().to_owned(),
+            "--flag".to_owned(),
+            "https://example.com/not-local.md".to_owned(),
+            "notes.txt".to_owned(),
+        ];
+
+        assert_eq!(state.enqueue_argv(&args, &cwd), 2);
+        assert_eq!(state.take_pending_path().as_deref(), relative.to_str());
+        assert_eq!(state.take_pending_path().as_deref(), absolute.to_str());
         assert_eq!(state.take_pending_path(), None);
     }
 

@@ -4,7 +4,7 @@ mod protocol;
 use std::sync::Arc;
 
 use document::{AppState, DocumentPayload};
-use tauri::Manager;
+use tauri::{Emitter, Manager, Runtime};
 
 const DOCUMENTS_PENDING_EVENT: &str = "readit-documents-pending";
 
@@ -24,12 +24,42 @@ async fn open_document(
         .map_err(|error| format!("document read task failed: {error}"))?
 }
 
+fn announce_pending_documents<R: Runtime>(app: &tauri::AppHandle<R>) {
+    let _ = app.emit(DOCUMENTS_PENDING_EVENT, ());
+}
+
+fn focus_main_window<R: Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+fn handle_second_instance<R: Runtime>(app: &tauri::AppHandle<R>, args: Vec<String>, cwd: String) {
+    let queued = app
+        .state::<Arc<AppState>>()
+        .enqueue_argv(&args, std::path::Path::new(&cwd));
+    if queued > 0 {
+        announce_pending_documents(app);
+    }
+    focus_main_window(app);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = Arc::new(AppState::default());
+    let initial_args = std::env::args().collect::<Vec<_>>();
+    let initial_cwd = std::env::current_dir().unwrap_or_default();
+    state.enqueue_argv(&initial_args, &initial_cwd);
     let protocol_state = Arc::clone(&state);
 
     let app = tauri::Builder::default()
+        // SPEC §10.1: this must remain the first plugin so a second process cannot race
+        // setup performed by any later plugin.
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            handle_second_instance(app, args, cwd)
+        }))
         .manage(state)
         .register_asynchronous_uri_scheme_protocol("readit", move |_context, request, responder| {
             let state = Arc::clone(&protocol_state);
@@ -44,14 +74,29 @@ pub fn run() {
     app.run(move |app_handle, event| {
         #[cfg(any(target_os = "macos", target_os = "ios"))]
         if let tauri::RunEvent::Opened { urls } = event {
-            use tauri::Emitter;
-
             app_handle
                 .state::<Arc<AppState>>()
                 .enqueue_opened_urls(urls);
             // If JS already exists this wakes it; if Opened precedes Ready/Window, the queue in
             // AppState is the durable handoff and the frontend drains it after mounting.
-            let _ = app_handle.emit(DOCUMENTS_PENDING_EVENT, ());
+            announce_pending_documents(app_handle);
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn single_instance_is_exactly_pinned_and_is_the_first_registered_plugin() {
+        let manifest = include_str!("../Cargo.toml");
+        assert!(manifest.contains("tauri-plugin-single-instance = \"=2.4.3\""));
+
+        let source = include_str!("lib.rs");
+        let first_plugin = source
+            .match_indices(".plugin(")
+            .next()
+            .map(|(index, _)| &source[index..])
+            .expect("the shell must register the single-instance plugin");
+        assert!(first_plugin.starts_with(".plugin(tauri_plugin_single_instance::init("));
+    }
 }
