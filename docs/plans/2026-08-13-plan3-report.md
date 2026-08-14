@@ -319,3 +319,125 @@
 Phase A、Phase B 与 Phase C 第一批 C1–C3 完成。**按计划在批次边界停止**：C4 文件监听、
 C5 更新器、C6 外部链接和 C7 Cmd+F 尚未开始；六项真机清单也尚未执行。因此这不是
 “M6 已验收”，只是 C1–C3 的实现与可自动化验证完成。
+
+## Phase C 第二批 — macOS 壳 C4–C5
+
+本节追加于第一批边界之后；上节“C4/C5 尚未开始”只描述第一批提交时的状态。
+
+### C4 — 原子替换后仍存活的文件监听
+
+提交：`6144b8e feat(shell): survive atomic document replacement`
+
+落地内容：
+
+- 精确固定 `notify 8.2.0`。监听目标不是可能被 rename 替换掉的文件 inode，而是文档的
+  父目录（非递归）；事件必须命中当前文档路径且不是纯 access/rescan 才会通知前端。
+- `AppState` 只在新文档已经成功读取并完成资源作用域切换后替换 watcher；打开失败不会
+  丢掉旧文档监听，重复打开同一路径则复用现有 watcher。
+- Rust 发出 `readit-document-changed`；前端只接受当前文档的事件，以 80 ms 窗口合并
+  burst，组件销毁时取消待执行刷新，避免重复读取和旧文档竞态。
+
+先红后绿与负向证据：
+
+- Rust 首次因 `DocumentWatcher` 尚不存在而红；前端首次因 `watch-reload.js` 尚不存在而红。
+- 临时让 Rust 事件过滤恒为 false 后，真实临时文件写入再 `fs::rename` 覆盖当前文档的
+  macOS FSEvents 测试在 5 秒超时并失败；恢复后 watcher 定向测试通过，并确认同目录 sibling
+  不会触发当前文档刷新。
+- 临时把前端事件处理改成 no-op 后，“burst 只刷新一次”断言从期望 1 得到 0；恢复后前端
+  定向 **7/7 通过**，当时 Rust 全套 **17/17 通过**。
+
+### C5 — 独立于 M7 的签名更新通道
+
+提交：`650aa50 feat(shell): add signed GitHub release updates`
+
+落地内容：
+
+- 精确固定并注册官方 `tauri-plugin-updater 2.10.1`；单实例插件仍保持第一个注册。
+  Rust `check_for_update` 持有待安装 update，只有用户点击“安装并重启”后
+  `install_update` 才下载、验签、安装并重启；检查失败或无更新时 UI 保持隐藏，不静默安装。
+- `createUpdaterArtifacts: true`、updater 公钥与固定的 GitHub Releases
+  `latest.json` endpoint 已写入配置。手动触发的 `release macOS` workflow 使用官方 Tauri
+  Action，为 `aarch64-apple-darwin` 与 `x86_64-apple-darwin` 生成草稿 Release 与 updater
+  manifest；工作流只引用两个 Actions secret 名称。
+- 维护者指南记录 updater minisign 与 Apple 代码签名的信任边界、secret 注入、密钥备份、
+  本机构建及发布步骤。当前 `signingIdentity: "-"` 只是 ad-hoc 签名，不提供 Developer ID、
+  notarization 或 Gatekeeper 分发信任，故没有把 M7 记成完成。
+- 最终加密私钥仅在 `/Users/mac08/.tauri/readit.key`，口令仅在 macOS 钥匙串；仓库只含
+  公钥与 secret 名。首次经 npm wrapper 生成时，wrapper 在日志中展开了 `-p` 参数；该对
+  密钥立即按泄露处理并轮换，旧材料被覆盖，最终提交、公钥与构建产物均使用全新密钥。
+
+先红后绿与负向证据：
+
+- workflow 不存在、前端 updates 模块不存在时，相应合同测试先红。
+- 临时关闭 `createUpdaterArtifacts` 并把 workflow 的手动触发改成 push 后，Rust 的两条 C5
+  配置/工作流合同测试 **2/2 红**；恢复后 **2/2 通过**。
+- 临时让“无更新/离线”显示 UI，并让“有更新”自动安装、状态错误且没有点击处理后，前端
+  四条合同测试 **4/4 红**；恢复后 **4/4 通过**。
+- 首次本地 release 故意只给 `TAURI_SIGNING_PRIVATE_KEY_PATH`，bundler 明确报
+  `public key found, no private key` 且没有生成签名；改用官方支持的
+  `TAURI_SIGNING_PRIVATE_KEY=/Users/mac08/.tauri/readit.key` 后成功生成
+  `readit.app.tar.gz`（8,055,134 bytes）及 `.sig`（404 bytes）。
+- 对生成的 `.app` 执行 `codesign --verify --deep --strict --verbose=2` 成功；实际是 arm64、
+  `Signature=adhoc` 且无 TeamIdentifier，不把它描述成已公证或可公开分发的安装包。
+
+## Phase C 第二批最终验证
+
+| 命令 / 检查 | 实际结果 |
+|---|---|
+| `cargo test --manifest-path shell/src-tauri/Cargo.toml` | **19 通过 / 0 失败** |
+| `cargo clippy --manifest-path shell/src-tauri/Cargo.toml --all-targets -- -D warnings` | 退出码 0 |
+| `npm test --workspace=readit-shell-frontend` | **4 文件 / 11 通过** |
+| `npm run build --workspace=readit-shell-frontend` | 退出码 0 |
+| `npm run typecheck` | 根、browser 与 9 个 workspace 全部零错误 |
+| `npm test` | **84 文件 / 2832 通过 / 0 失败**；既有无 GitHub token 警告不影响离线通过 |
+| `npm run test:perf` | **5 通过 / 1 跳过**，32.16 秒 |
+| 四个 core spec/corpus Vitest 文件 | **4 文件 / 1416 通过** |
+| workflow YAML 解析 | Ruby 解析成功 |
+| updater release bundle + `codesign --verify` | arm64 本地签名产物生成，严格验证通过 |
+| `git diff --check` | 退出码 0 |
+
+四条不变量的批次收尾实测值：
+
+| 不变量 | 实测 |
+|---|---|
+| 语料总数 / 已纳入断言 | **68 / 56** |
+| mismatch 台账 | **12** |
+| CommonMark 已知失败 / 通过 | **3 / 649** |
+| GFM 已知失败 / 通过 | **14 / 658** |
+
+临时豁免计数为 **0**。本批没有改变上述值。
+
+依赖审计复跑仍为 **2 high / 0 critical**：既有 `js-yaml 4.1.0` 与既有链路中的
+`nanoid 3.3.17`，本批没有改动 npm lockfile，也没有把安全升级混入壳功能提交。
+本机没有安装 `cargo-audit`，因此只完成 Rust 精确版本检查、编译、测试和 clippy；没有把
+“未运行 Rust advisory 数据库审计”写成通过。
+
+## 第二批证据边界与前提偏差
+
+**实际运行得到的结论**：macOS 上真实触发了 temp-write + rename 的 FSEvents 路径；Rust、
+前端、全仓、语料与性能测试均实际运行；本机实际生成并验证了 arm64 updater bundle 与
+minisign `.sig`；workflow YAML 实际完成语法解析。
+
+**只来自配置或文档阅读、尚未端到端运行的结论**：Intel matrix、GitHub Actions、草稿
+Release、线上 `latest.json`、从已发布 Release 检查/下载/验签/安装/重启均未执行。工作流
+只验证了静态形状，不代表 Action 已成功运行；两个 GitHub Actions secrets 也尚未上传。
+
+与计划前提相比有三处执行细化或实测偏差：
+
+1. C4 计划只规定必须覆盖 atomic rename；实际选用父目录非递归监听，并在 JS 侧用 80 ms
+   合并事件，这是为适配 notify 对文件替换语义而选择的实现广度。
+2. Tauri CLI 生成密钥时提示过 `TAURI_SIGNING_PRIVATE_KEY_PATH`，但本次 bundler 实测不接受
+   该变量；官方文档所列的 `TAURI_SIGNING_PRIVATE_KEY` 可接受私钥文件路径并成功构建。
+3. npm wrapper 会回显带 `-p` 的展开命令；因此初始 keypair 作废并轮换，指南也明确禁止该
+   调用形状。除此之外，本批没有发现与 C4/C5 计划前提不符之处。
+
+自审的验证广度边界：C4 覆盖本机 FSEvents 与真实 rename，但没有替代“用真实编辑器保存”、
+网络文件系统或跨卷操作；C5 只实际构建当前 arm64 机器，没有实际跑 Intel runner、GitHub
+发布链路或完整 updater 安装重启。离线检查失败时不展示更新 UI 是有意的产品策略。
+
+## 第二批阶段边界
+
+Phase C 第二批 **C4 与 C5 完成**，在获批批次边界停止；**C6 外部链接与 C7 Cmd+F 未开始**。
+六项真机清单仍全部未勾选，其中“真实编辑器原子保存”不能由上述自动化 rename 测试替代，
+安装/启动/稳态资源也不能由本地 bundle 构建替代。因此当前仍不是“M6 已验收”，也不是
+“M7 已完成”。
