@@ -4,15 +4,17 @@
 
 **基线**：`186343a`
 
-**本报告范围**：Phase A（M5 Mermaid）与 Phase B（`@readit/find`）。Phase C 尚未开始。
+**本报告范围**：Phase A（M5 Mermaid）、Phase B（`@readit/find`）与 Phase C 分批记录。
 
 ## 裁决
 
 - Mermaid Phase A 输出采用用户指定的**分支 A**：继续输出本地
   `highlight-source-mermaid` 代码块，浏览器侧在同一 wrapper 内水合。四条
   D-MERMAID 记为永久架构性偏离，台账仍为 12 条。
-- Phase C 的 macOS 下限与手工验收边界尚未最终落文档；按计划要求，本批没有越过
-  Phase B。
+- Phase C 的产品下限采用用户确认的 **macOS 14 + Safari ≥ 17.2**。这不是 Mermaid
+  真 WKWebView 下界已经测完；若手工矩阵测出更高下限，发布门槛随之上调。
+- Phase C 采用“可可靠自动化的自动化 + 六项具名真机清单”的分界；清单见
+  `docs/plans/2026-08-13-m6-manual-acceptance.md`，未实际勾选前不记 M6 真机验收通过。
 
 ## Phase A — M5 Mermaid
 

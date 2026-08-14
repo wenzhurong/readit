@@ -574,7 +574,15 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 
 ### 10.2 macOS 的 WebKit 版本
 
-⚠️ **不要写"最低 macOS 14 即得现代 WebKit"**。macOS 14 出厂是 Safari 17.0；Safari 26 是可选的独立更新，不是 OS 版本下限能保证的。发布门槛写成公式：**macOS 14 + Safari ≥ max(17.2, measured Mermaid/WKWebView floor)**。其中 17.2 是 CSS Custom Highlight API 不走 `<mark>` 降级的既有下限；`measured Mermaid/WKWebView floor` 必须由已发布 Safari 对应的真 WKWebView 矩阵实测得出。Playwright WebKit 只作预筛，不能拿它的版本替代这个实测下限；在矩阵完成前不得把 `N` 猜成当前开发机版本或更低版本。
+**产品下限（2026-08-13 裁决）：macOS 14 + Safari ≥ 17.2。** 这不是“最低
+macOS 14 即得现代 WebKit”：macOS 14 出厂是 Safari 17.0，Safari 是独立更新，安装与
+发布说明必须同时检查这两个条件。17.2 是 CSS Custom Highlight API 不走 `<mark>` 降级的
+既有下限。
+
+Mermaid 的已发布 Safari / 真 WKWebView 矩阵仍是 M6 的具名手工验收项；在该矩阵完成前，
+**不得声称 17.2 已被实测证明为 Mermaid 的完整能力下界**。若真机矩阵测出更高下限，
+发布门槛必须上调为 `max(17.2, measured Mermaid/WKWebView floor)`。Playwright WebKit
+只作预筛，不能替代这项实测。
 
 ### 10.3 Mermaid 在 WKWebView 上：真实风险与真实缓解
 
