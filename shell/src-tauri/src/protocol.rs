@@ -20,7 +20,6 @@ pub(crate) struct ResourceRoot {
 }
 
 impl ResourceRoot {
-    #[allow(dead_code)]
     pub(crate) fn set_document(&self, document: &Path) -> std::io::Result<()> {
         let document = document.canonicalize()?;
         if !document.is_file() {

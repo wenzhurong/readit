@@ -6,7 +6,7 @@ export default defineConfig({
     // setupFiles) rather than replacing it — a flat `include` glob across
     // packages/*/test here would run those files under only *this* config,
     // silently dropping package-level settings such as chaiConfig.truncateThreshold.
-    projects: ['.', 'packages/*'],
+    projects: ['.', 'packages/*', 'shell'],
     // Root-level infrastructure tests (this file's own directory), not owned by
     // any package.
     include: ['test/**/*.test.ts'],

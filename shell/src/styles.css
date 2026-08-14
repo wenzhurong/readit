@@ -1,0 +1,36 @@
+:root {
+  color-scheme: light dark;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  background: Canvas;
+  color: CanvasText;
+}
+
+html,
+body,
+#app,
+#reader {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+}
+
+#reader {
+  min-height: 100vh;
+}
+
+#status {
+  max-width: 42rem;
+  margin: 20vh auto 0;
+  padding: 1rem 1.25rem;
+  color: GrayText;
+  text-align: center;
+}
+
+#status[data-kind='error'] {
+  color: #cf222e;
+}

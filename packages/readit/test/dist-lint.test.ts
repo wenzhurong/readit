@@ -62,6 +62,6 @@ describe('@arethetypeswrong', () => {
 describe('这两条门确实在 CI 里跑', () => {
   it('本 project 被根 vitest.config.ts 的 projects 收进默认 npm test', () => {
     const rootConfig = readFileSync(join(PKG_DIR, '../../vitest.config.ts'), 'utf8')
-    expect(rootConfig).toContain("projects: ['.', 'packages/*']")
+    expect(rootConfig).toContain("projects: ['.', 'packages/*', 'shell']")
   })
 })
