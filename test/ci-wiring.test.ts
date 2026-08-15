@@ -69,6 +69,21 @@ describe('typecheck actually covers the whole repo', () => {
     //
     // 让壳消费发布面是刻意的（它是第一个真实消费者，等于给分发面做 dogfood），
     // 所以修法是补构建顺序，不是把壳改成 import 工作区源码。构建实测 ~5s。
+    // 根 `build` 必须**委派进 workspace**，不能直接 `vite-node packages/readit/build.ts`。
+    //
+    // build.ts 里是 `import * as esbuild from 'esbuild'`，而 esbuild 只声明在
+    // packages/readit/package.json，根 package.json 没有它。从根启动 vite-node 时
+    // 裸说明符按根解析——npm 10 恰好把 esbuild 提升到了根 node_modules 所以能过，
+    // **npm 11 不提升就断**：`Cannot find package 'esbuild' imported from …/build.ts`。
+    // 2026-08-14 Windows 机器（Node 24.18.0 / npm 11.16.0）实测到这条；本机把根
+    // node_modules/esbuild 临时移走后逐字复现，改成委派后在同样条件下 exit 0。
+    //
+    // 换句话说：原写法隐式依赖包管理器的提升行为。委派进声明了该依赖的 workspace
+    // 之后，解析从 packages/readit/ 起步，跟 npm 版本无关。
+    // （vitest 的 globalSetup 一直是对的——它走 `import … from '../build.js'`，
+    //   import 发生在 packages/readit/test/ 内部，所以 npm test 在 Windows 上一直是绿的。）
+    expect(pkg.scripts.build).toBe('npm run build --workspace=readit')
+
     expect(pkg.scripts.typecheck).toBe(
       'npm run build && tsc --noEmit && tsc -p browser --noEmit && npm run typecheck --workspaces --if-present',
     )
