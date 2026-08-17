@@ -15,6 +15,7 @@
 ## 目录
 
 - [它是什么形状](#它是什么形状)
+- [安装与运行（macOS）](#安装与运行macos)
 - [保真度模型：与什么一致，以及为什么不是 100%](#保真度模型与什么一致以及为什么不是-100)
 - [架构：Phase A / Phase B](#架构phase-a--phase-b)
 - [包](#包)
@@ -45,6 +46,76 @@
 或只要组件。组件在 Shadow DOM 里，且有一条真浏览器测试证明它在**敌意宿主**
 （页面加载 Tailwind Preflight + Bootstrap Reboot + 一张专门与它作对的样式表）下
 渲染不变。
+
+---
+
+## 安装与运行（macOS）
+
+**目前还没有发布版。** 构建产物只带 **ad-hoc 签名**（`tauri.conf.json` 里的
+`signingIdentity: "-"`），**没有 Apple Developer ID、没有公证**——那属于 M7，尚未开始。
+这一节说明它对你意味着什么。
+
+### 自己构建：完全没有摩擦
+
+```bash
+npm install
+npm run build
+# 关掉 updater 产物，就不需要维护者的 minisign 私钥（有私钥的构建见 docs/releasing-macos.md）
+npm run tauri --workspace=readit-shell-frontend -- build --bundles app \
+  --config '{"bundle":{"createUpdaterArtifacts":false}}'
+```
+
+产物在 `shell/src-tauri/target/release/bundle/macos/readit.app`，拖进「应用程序」即可。
+
+**本地构建的产物不会被 Gatekeeper 拦。** 拦截的触发条件是文件带
+`com.apple.quarantine` 这个扩展属性，而它是**下载它的那个程序**（浏览器、邮件、
+AirDrop）打上去的——自己构建的东西身上没有，所以双击就开。
+
+> Apple Silicon 上「完全不签名」的二进制内核会直接拒绝加载，但 **ad-hoc 签名就满足
+> 这条要求**，而且免费、由构建自动完成。这一层早就过了，不花钱。
+
+### 如果你拿到的是别人构建的 `.app`
+
+下载会给它打上隔离标记，于是 Gatekeeper 介入，而这个应用没有 Developer ID——macOS
+会拒绝打开它。**macOS 15 起，右键 →「打开」这条老绕过路径已经被移除**，所以只有两条路：
+
+**路子一：系统设置（Apple 认可的路径）**
+
+1. 正常双击 `readit.app`，让它被拦一次
+2. 打开**系统设置 → 隐私与安全性**，滚到底部
+3. 那里会出现一行关于 readit 被阻止的提示，点**「仍要打开」**，按提示验证身份
+
+**路子二：手动摘掉隔离标记（命令行，更快）**
+
+```bash
+# 先看它到底有没有被隔离
+xattr -p com.apple.quarantine /Applications/readit.app
+
+# 只删这一个属性，递归
+xattr -dr com.apple.quarantine /Applications/readit.app
+```
+
+网上常见的 `xattr -cr` 也能用，但那是**清空全部扩展属性**的粗暴版；
+`-dr com.apple.quarantine` 只动该动的那一个。
+
+> **这两条路都是你在替 Apple 做那个信任判断。** Gatekeeper 的全部作用就是让你停下来
+> 想一下「这个二进制是谁编的」——绕过它意味着你自己为这个答案负责。对一个你能读到
+> 全部源码、并且可以自己构建的项目，这是个合理的选择；对随便从哪里下载的 `.app`，
+> 不是。
+
+### 让 `.md` 双击打开 readit
+
+**装上 readit 不会自动把 `.md` 抢过来。** macOS 有反劫持设计：新装的应用不会顶掉你
+已有的默认程序（本机原先归 Xcode）。要改：
+
+Finder 里选中任意 `.md` → `Cmd+I` → 「打开方式」选 readit → 点**「全部更改…」**。
+
+`.md` 与 `.markdown` 在 macOS 上映射到**同一个 UTI**（`net.daringfireball.markdown`），
+所以改一次两种扩展名一起生效。
+
+### Windows
+
+**没有 Windows 版**——不是没测，是没建，见[已知缺口](#已知缺口)。
 
 ---
 
@@ -256,7 +327,7 @@ cd shell/src-tauri && cargo test # Rust 侧
 | M3 | element + Shadow DOM + L3b + 高亮双默认 | ✅ |
 | M4 | 编辑器 + 滚动同步 + `plain` 档 | ✅ |
 | M5 | Mermaid | ✅ |
-| **M6** | 壳：关联、单实例、`readit://`、导航、查找、监听、更新器 | 🟡 **macOS 自动化齐备；六项真机手工验收未执行；Windows 壳未构建** |
+| **M6** | 壳：关联、单实例、`readit://`、导航、查找、监听、更新器 | 🟡 **macOS 六项真机验收已执行：5 项通过、1 项按规则留空**（下限区间无机器）；**Windows 壳未构建** |
 | M7 | 签名分发 | ⬜ |
 
 ---
@@ -266,9 +337,18 @@ cd shell/src-tauri && cargo test # Rust 侧
 **具名、有出处、可核验**——完整清单见 `docs/plans/2026-08-08-plan2-debt.md`。
 挑几条读者最该知道的：
 
-- **M6 未验收。** `docs/plans/2026-08-13-m6-manual-acceptance.md` 的六项
-  （双击关联、二次启动路由、物理 Cmd+F、原子保存、真 WKWebView Mermaid、
-  安装/启动/稳态内存）**全部未勾选**。自动化不能替代它们。
+- **产品下限区间从未被验证过。** 声明的下限是 macOS 14 + Safari ≥ 17.2，但唯一的
+  测试机是 **macOS 26.5.2 / Safari 26.5.2**。**这个风险是明确接受的**，不是遗漏——
+  裁决与理由写在 `docs/plans/2026-08-13-m6-manual-acceptance.md` 第 5 项。暴露面是那些
+  在 17.2 前后仍在演进的能力（CSS Custom Highlight API、CSS Scoping 跨树层叠、
+  `Element.setHTML()`），三条都有具名降级路径，所以**最坏情况预期是降级而非崩坏**——
+  但那是推理不是实测。只要出现一台 macOS 14–15 的机器就该补验。
+- **M6 真机验收已执行（2026-08-17），6 项里 5 项通过、第 5 项按清单自己的规则留空。**
+  这一轮**抓出四个真缺陷**（出货应用里语法高亮从未生效、Mermaid 长标签被裁、图层护栏
+  被 `classDef` 绕过、查找命中不滚进视野），**四个在库层、Rust 层、happy-dom 层乃至
+  Playwright 层都是绿的**。全部已修。自动化不能替代真机，这一轮是最直接的证据。
+- **壳没有模式切换入口**，`mount()` 不传 `mode`、全仓没有 `setMode` 调用——**M4 的编辑器
+  对应用用户不可达**，M6 的「四个大件同时」在壳内只能凑到三个。见台账 D2-28。
 - **Windows 壳不存在**——不是没测，是没建。`tauri.conf.json` 只有 macOS 段。
   引擎与浏览器层在 Windows 上已实测可用（见 `docs/windows-debug-report-2026-08-14.md`），
   但真 WebView2 仍是零覆盖。
