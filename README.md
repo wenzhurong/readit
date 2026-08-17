@@ -115,7 +115,29 @@ Finder 里选中任意 `.md` → `Cmd+I` → 「打开方式」选 readit → �
 
 ### Windows
 
-**没有 Windows 版**——不是没测，是没建，见[已知缺口](#已知缺口)。
+Windows 壳可以从源码构建为当前用户 NSIS 安装包；目前仍没有公开发布版或 OS 代码签名。
+在装好 Node ≥ 22、Rust stable、Visual Studio Build Tools（Desktop development with C++）
+和 WebView2 开发依赖后：
+
+```powershell
+npm install
+npm run build
+npm run tauri --workspace=readit-shell-frontend -- build --bundles nsis `
+  --config '{"bundle":{"createUpdaterArtifacts":false}}'
+```
+
+产物在 `shell/src-tauri/target/release/bundle/nsis/`。
+
+### 让 `.md` 双击打开 readit（Windows）
+
+安装器只把 readit 加入 `.md` / `.markdown` 的**打开方式**列表，**不会静默抢占**已有的
+默认程序，也不会改写 Windows 的 `UserChoice`。要设为默认应用，由用户在 Windows 中完成：
+
+1. 打开**设置 → 应用 → 默认应用**。
+2. 搜索 `.md`（需要时也单独搜索 `.markdown`）。
+3. 从候选应用中选择 readit。
+
+也可以在资源管理器中右键文件 → **打开方式 → 选择其他应用**，选 readit 并确认始终使用。
 
 ---
 
