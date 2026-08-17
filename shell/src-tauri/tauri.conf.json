@@ -24,6 +24,7 @@
   },
   "bundle": {
     "active": true,
+    "targets": ["nsis"],
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/icon.png",
@@ -46,6 +47,16 @@
     "macOS": {
       "minimumSystemVersion": "14.0",
       "signingIdentity": "-"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "minimumWebview2Version": null,
+      "nsis": {
+        "installMode": "currentUser"
+      }
     }
   },
   "plugins": {
