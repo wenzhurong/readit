@@ -166,6 +166,19 @@ view.destroy()
 `MountOptions` 的完整字段见 `packages/element/src/types.ts`；
 懒加载能力通过 `loadHighlighter` / `loadMermaid` 注入，默认 `null`（不加载）。
 
+`loadHighlighter` 收到一个 `languages` 形参——至今见过的全部围栏语言的并集，
+**必须透传下去**：
+
+```js
+loadHighlighter: async (languages) => {
+  const { createShikiHighlighter } = await import('readit/plugins/highlight')
+  return createShikiHighlighter({ langs: languages })
+},
+```
+
+不传 `langs` 得到的是空语言集，对任何语言 `supports()` 都是 `false`，
+于是每个代码块静默回落朴素 `<pre>`——不报错、不提示，看上去就像没有语法高亮。
+
 ### 样式与插件
 
 ```js
