@@ -85,23 +85,37 @@ function addMeasurementRule(
   id: string,
   fontFamily: string,
   fontSize: string,
+  lineHeight: string,
 ): HTMLStyleElement {
   const style = doc.createElement('style')
   style.dataset['readitMermaidMeasure'] = id
-  // id is generated above, fontSize is admitted only by the px grammar below,
-  // and fontFamily is the browser-serialized computed value. Mermaid creates
-  // #d<ID> in light DOM, so hostile inherited `* { ... !important }` rules can
-  // otherwise corrupt measurement even though they cannot enter the final
-  // shadow tree. Reset only the inherited properties that affect text metrics.
+  // id is generated above, fontSize/lineHeight are admitted only by the px
+  // grammar in renderOne, and fontFamily is the browser-serialized computed
+  // value. Mermaid creates #d<ID> in light DOM, so hostile inherited
+  // `* { ... !important }` rules can otherwise corrupt measurement even though
+  // they cannot enter the final shadow tree.
+  //
+  // `line-height` is taken from the render context rather than normalised to
+  // `normal`, and that asymmetry with the other properties below is the whole
+  // point: the measured box has to be as tall as the box the label will
+  // actually be painted into. The injected SVG lands inside
+  // `.highlight-source-mermaid`, which inherits `.markdown-body`'s
+  // `line-height: 1.5` (24px at the 16px base), while `normal` is ~1.15-1.2.
+  // Measuring at `normal` and painting at 1.5 under-reports label height by
+  // ~30%, and Mermaid sizes the foreignObject from the measurement, so long
+  // multi-line labels get clipped at the node border. The other properties
+  // stay normalised because they are hostile-CSS surface that the element's
+  // own reset already neutralises for the render side.
+  //
   // Mermaid creates #d<ID> itself because render() deliberately receives no
   // third argument; this rule makes that temporary div laid-out but offscreen.
   style.textContent =
     `#d${id}{position:absolute;left:-99999px;top:0;` +
     `font-family:${fontFamily}!important;font-size:${fontSize}!important;` +
-    'line-height:normal!important;letter-spacing:normal!important;' +
+    `line-height:${lineHeight}!important;letter-spacing:normal!important;` +
     'word-spacing:normal!important;font-style:normal!important;' +
     'font-variant-numeric:normal!important;text-transform:none!important}' +
-    `#d${id} *{font-family:inherit!important;line-height:normal!important;` +
+    `#d${id} *{font-family:inherit!important;line-height:${lineHeight}!important;` +
     'letter-spacing:normal!important;word-spacing:normal!important;' +
     'font-style:normal!important;font-variant-numeric:normal!important;' +
     'text-transform:none!important}'
@@ -127,6 +141,13 @@ export function createMermaidRendererWith(
     const fontFamily = computed?.fontFamily || 'system-ui, sans-serif'
     const rawFontSize = computed?.fontSize || '16px'
     const fontSize = /^\d+(?:\.\d+)?px$/.test(rawFontSize) ? rawFontSize : '16px'
+    // Computed line-height serialises to px in every engine we ship on, except
+    // when it is literally `normal`. Anything outside the px grammar falls back
+    // to `normal` rather than being interpolated into the stylesheet, matching
+    // how rawFontSize is handled — the value goes into CSS text, so the grammar
+    // check is what keeps it from being an injection point.
+    const rawLineHeight = computed?.lineHeight || 'normal'
+    const lineHeight = /^\d+(?:\.\d+)?px$/.test(rawLineHeight) ? rawLineHeight : 'normal'
     const colorScheme = computed?.colorScheme ?? ''
     const theme = colorScheme.split(/\s+/).includes('dark') ? 'dark' : 'default'
     const id = uniqueId(doc)
@@ -150,7 +171,7 @@ export function createMermaidRendererWith(
           theme,
           themeVariables: { fontSize },
         })
-        const measurementStyle = addMeasurementRule(doc, id, fontFamily, fontSize)
+        const measurementStyle = addMeasurementRule(doc, id, fontFamily, fontSize, lineHeight)
         try {
           // SPEC §10.3: exactly two arguments. Passing target as a third argument
           // takes Mermaid down its shadow-unaware document.getElementById path.

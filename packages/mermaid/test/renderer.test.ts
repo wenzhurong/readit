@@ -140,6 +140,45 @@ describe('createMermaidRendererWith', () => {
     })
   })
 
+  it('测量规则钉渲染上下文的行高而不是 normal，无法解析成 px 时才回落 normal', async () => {
+    // 长标签被裁的成因就在这里。注入后的 SVG 落在 .highlight-source-mermaid 里，
+    // 继承 .markdown-body 的 line-height: 1.5（16px 基准下 24px）；而测量若按
+    // `normal`（约 1.15–1.2）算，Mermaid 会把 foreignObject 按矮 ~30% 的高度定死，
+    // 多行标签就在节点边框处被切掉。两侧必须同值。
+    const seen: string[] = []
+    const withLineHeight = placeholder()
+    withLineHeight.style.lineHeight = '24px'
+    const withoutLineHeight = placeholder()
+
+    const mermaid: MermaidAdapter = {
+      initialize() {},
+      async render() {
+        seen.push(
+          document.head.querySelector<HTMLStyleElement>('[data-readit-mermaid-measure]')
+            ?.textContent ?? '',
+        )
+        return { svg: '<svg></svg>' }
+      },
+    }
+    await createMermaidRendererWith(mermaid, { sanitize: (svg) => svg }).hydrate(document)
+
+    const occurrences = (haystack: string, needle: string): number =>
+      haystack.split(needle).length - 1
+
+    expect({
+      targets: seen.length,
+      // 容器规则与 `#d<ID> *` 规则两处都要带上，后者才是真正命中标签内层元素的那条
+      pinnedBoth: occurrences(seen[0] ?? '', 'line-height:24px!important'),
+      pinnedLeaksNormal: (seen[0] ?? '').includes('line-height:normal!important'),
+      fallbackBoth: occurrences(seen[1] ?? '', 'line-height:normal!important'),
+    }).toEqual({
+      targets: 2,
+      pinnedBoth: 2,
+      pinnedLeaksNormal: false,
+      fallbackBoth: 2,
+    })
+  })
+
   it('keeps source visible and resolves with a named error state on invalid syntax', async () => {
     const source = 'flowchart LR\nA[[[ --> ???'
     const target = placeholder(source)
