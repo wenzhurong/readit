@@ -215,12 +215,92 @@ function createPainter(view: Window): Painter {
   }
 }
 
-function revealRange(range: Range, scroller: HTMLElement): void {
-  const match = range.getBoundingClientRect()
-  const viewport = scroller.getBoundingClientRect()
-  if (match.height <= 0 || viewport.height <= 0) return
-  if (match.top < viewport.top) scroller.scrollTop += match.top - viewport.top
-  else if (match.bottom > viewport.bottom) scroller.scrollTop += match.bottom - viewport.bottom
+const ELEMENT_NODE = 1
+const DOCUMENT_FRAGMENT_NODE = 11
+
+function isElement(node: Node): node is Element {
+  return node.nodeType === ELEMENT_NODE
+}
+
+/** ShadowRoot 的 parentNode 是 null，要靠 host 才能继续往上走。 */
+function shadowHost(node: Node): Element | null {
+  if (node.nodeType !== DOCUMENT_FRAGMENT_NODE) return null
+  const host = (node as ShadowRoot).host as Element | undefined
+  return host ?? null
+}
+
+/**
+ * 能不能真的纵向滚。**光看 overflow 不够**：`.readit-pane` 写着 `overflow: auto`，
+ * 但阅读模式下没有任何东西约束它的高度，它会撑满内容全高，scrollHeight 恰好等于
+ * clientHeight——不是滚动盒。给这种元素写 scrollTop 是静默无操作。
+ */
+function canScrollVertically(element: Element): boolean {
+  if (element.scrollHeight <= element.clientHeight + 1) return false
+  const overflowY = element.ownerDocument.defaultView?.getComputedStyle(element).overflowY
+  return overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay'
+}
+
+/**
+ * 命中所在位置到视口之间，所有真正能滚的盒子，由内向外。
+ *
+ * 文档滚动元素永远单独兜在最后：视口的溢出是从根元素传播上去的，它的计算
+ * overflowY 是 `visible`，用上面那个判据会把它错判成不能滚——而在自然文档流布局里
+ * 它恰恰是唯一能滚的那个。
+ */
+function scrollBoxes(node: Node, doc: Document): HTMLElement[] {
+  const boxes: HTMLElement[] = []
+  const scrolling = doc.scrollingElement
+  let current: Node | null = node
+  while (current !== null) {
+    // 只排除文档滚动元素（它在下面单独兜底）。**不要顺手把 body 也排掉**：
+    // `html,body{height:100%}` + `body{overflow:auto}` 这种布局里 body 才是滚动盒，
+    // 而此时 html 的 scrollHeight 等于 clientHeight，兜底那一步也不会命中——两边
+    // 都跳过就没人滚了。body 不是滚动盒时，下面的 overflow + scrollHeight 判据
+    // 本来就会把它排除，不需要额外的特判。
+    if (isElement(current) && current !== scrolling && canScrollVertically(current)) {
+      boxes.push(current as HTMLElement)
+    }
+    current = current.parentNode ?? shadowHost(current)
+  }
+  if (scrolling !== null && scrolling.scrollHeight > scrolling.clientHeight + 1) {
+    boxes.push(scrolling as HTMLElement)
+  }
+  return boxes
+}
+
+/** 盒子在视口坐标系里的可见带。文档滚动元素的可见带是视口本身，不是它的边界盒。 */
+function visibleBand(box: HTMLElement, doc: Document, view: Window): { top: number; bottom: number } {
+  if (box === doc.scrollingElement) return { top: 0, bottom: view.innerHeight }
+  const rect = box.getBoundingClientRect()
+  const top = rect.top + box.clientTop
+  return { top, bottom: top + box.clientHeight }
+}
+
+/**
+ * 把当前命中滚进视野。
+ *
+ * **滚动容器必须从命中本身推导，不能钉死成内容面板。** 原实现把传进来的 target
+ * 同时当作滚动容器和视口矩形，这只在「面板是一个被裁剪的溢出滚动盒」时成立——
+ * split 模式（根是 grid，面板被行高约束）确实如此，但阅读模式下面板会撑满内容
+ * 全高，桌面壳与任何自然文档流嵌入都是这种配置。2026-08-17 真机实测：面板
+ * scrollHeight 16051 = clientHeight 16051，而 HTML 是 16051/768。于是判据拿一个
+ * 16051px 高的盒子当视口，两个分支都不进，函数什么都不做——用户看到的就是
+ * 「命中会移动，但视口从不跟随」。
+ *
+ * 每滚一层都重算一次命中矩形，嵌套滚动容器才能正确复合。
+ */
+function revealRange(range: Range, target: HTMLElement): void {
+  const doc = target.ownerDocument
+  const view = doc.defaultView
+  if (view === null) return
+  for (const box of scrollBoxes(range.startContainer, doc)) {
+    const match = range.getBoundingClientRect()
+    if (match.height <= 0) return
+    const visible = visibleBand(box, doc, view)
+    if (visible.bottom - visible.top <= 0) continue
+    if (match.top < visible.top) box.scrollTop += match.top - visible.top
+    else if (match.bottom > visible.bottom) box.scrollTop += match.bottom - visible.bottom
+  }
 }
 
 function makeButton(doc: Document, label: string, text: string, attribute: string): HTMLButtonElement {

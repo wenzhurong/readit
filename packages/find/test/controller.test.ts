@@ -104,21 +104,58 @@ describe('Custom Highlight 主路径', () => {
     expect(registry.has('readit-find')).toBe(false)
   })
 
-  it('当前 Range 落在视口外时用边界盒手写滚动量', () => {
+  /** 让一个元素在 happy-dom 里真的看起来像溢出滚动盒。 */
+  function makeScrollable(el: HTMLElement, clientHeight: number, scrollHeight: number): void {
+    Object.defineProperty(el, 'clientHeight', { value: clientHeight, configurable: true })
+    Object.defineProperty(el, 'scrollHeight', { value: scrollHeight, configurable: true })
+    Object.defineProperty(el, 'clientTop', { value: 0, configurable: true })
+    el.style.overflowY = 'auto'
+  }
+
+  const matchRect = (top: number, bottom: number): DOMRect =>
+    ({ x: 0, y: 0, top, right: 50, bottom, left: 0, width: 50, height: bottom - top,
+       toJSON: () => ({}) }) as DOMRect
+
+  it('命中落在视口外时，滚的是真正能滚的那个祖先', () => {
     enableCustomHighlights()
     const { controller, target } = fixture()
+    // **这三行是这条测试的前提，不是布景。** 原来的版本没有它们，等于默认
+    // 「target 就是滚动容器」——而真引擎里阅读模式的面板会撑满内容全高，
+    // scrollHeight 恰好等于 clientHeight，根本不是滚动盒。那个隐含前提正是缺陷。
+    makeScrollable(target, 100, 500)
     target.scrollTop = 10
-    vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({
-      x: 0, y: 0, top: 100, right: 300, bottom: 200, left: 0, width: 300, height: 100,
-      toJSON: () => ({}),
-    })
-    vi.spyOn(Range.prototype, 'getBoundingClientRect').mockReturnValue({
-      x: 0, y: 0, top: 240, right: 50, bottom: 260, left: 0, width: 50, height: 20,
-      toJSON: () => ({}),
-    })
+    vi.spyOn(target, 'getBoundingClientRect').mockReturnValue(matchRect(100, 200))
+    vi.spyOn(Range.prototype, 'getBoundingClientRect').mockReturnValue(matchRect(240, 260))
 
     controller.find('alpha')
+    // 可见带 = rect.top + clientTop .. + clientHeight = 100..200；命中 240..260
+    // 在带下方，最小滚动量 60
     expect(target.scrollTop).toBe(70)
+    controller.destroy()
+  })
+
+  it('没有任何能滚的祖先时兜底滚文档——自然文档流布局下这是唯一能滚的东西', () => {
+    // 桌面壳与任何不给宿主定高的嵌入方都是这种配置：面板撑满内容全高，
+    // 视口的溢出从根元素传播上去，document 才是滚动容器。
+    enableCustomHighlights()
+    const { controller, target } = fixture()
+    const scrolling = document.scrollingElement as HTMLElement
+    Object.defineProperty(scrolling, 'clientHeight', { value: 768, configurable: true })
+    Object.defineProperty(scrolling, 'scrollHeight', { value: 16051, configurable: true })
+    scrolling.scrollTop = 0
+    // target 明确**不可滚**：撑满内容，scrollHeight === clientHeight
+    Object.defineProperty(target, 'clientHeight', { value: 16051, configurable: true })
+    Object.defineProperty(target, 'scrollHeight', { value: 16051, configurable: true })
+    target.style.overflowY = 'auto'
+    vi.spyOn(Range.prototype, 'getBoundingClientRect').mockReturnValue(matchRect(1000, 1020))
+
+    controller.find('alpha')
+
+    expect({
+      // 文档滚动元素的可见带是视口本身（0..768），不是它的边界盒
+      documentScrolled: scrolling.scrollTop,
+      targetUntouched: target.scrollTop,
+    }).toEqual({ documentScrolled: 1020 - 768, targetUntouched: 0 })
     controller.destroy()
   })
 })
