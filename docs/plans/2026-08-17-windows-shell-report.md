@@ -6,9 +6,14 @@
 
 ## 当前结论
 
-工作仍在推进中。W1–W3 已完成实现，W4 已补齐 Windows 路径、安全与长路径自动化，
-但真实 WebView2 窗口验收受当前桌面沙箱阻塞。W5–W6 尚未完成，因此此时还不能给出
-“完整符合预期、可正式发布”的结论。
+W1–W6 的仓库内实现已经完成：Windows 壳能生成当前用户 NSIS，文件关联采取不抢默认的
+Open With 策略，Windows `Ctrl+F` 进入 readit 文档查找，路径/目录联接/扩展长度路径已有
+自动化守卫，桌面发布工作流也已覆盖 macOS 双架构与 Windows x64。
+
+**实现和自动化表现符合本方案的预期，但当前证据不足以断言应用已能在普通 Windows 环境
+正常使用或正式发布。** 真实 WebView2 窗口、三种注册表初始状态、无 WebView2 的干净
+Windows 10、以及线上 Release/updater manifest 都没有跑通对应的真实环境。这里的结论是
+“工程链路已建立，真机发布门仍未通过”，不是“Windows 已验收通过”。
 
 测试主机为 Windows `10.0.26200.9168`、AMD64，已安装 Microsoft Edge WebView2 Runtime `151.0.4129.86`。干净 Windows 10 且没有 WebView2 Runtime 的场景尚未执行，不以当前主机结果代替该场景。
 
@@ -157,10 +162,53 @@ runner/target、两项 minisign secret、NSIS 偏好、串行 manifest 合并和
 本轮没有触发 GitHub Actions、创建 Release 或上传线上 `latest.json`，所以结论是工作流
 结构与本地守卫完成，不是线上发布链已经实跑。
 
-## 待完成
+## W6：文档、台账与收口验证
 
-- W2：实现已完成；三种初始注册表状态的运行时验证仍受沙箱阻塞。
-- W3：实现已完成；真实 WebView2 行为仍受 W4 的环境阻塞。
-- W4：路径、junction 与长路径自动化已完成；六项真实窗口验收仍需在非沙箱 Windows
-  会话补验。
-- W6：收口 README、SPEC、测试计划、债务与最终结论。
+- README 已改为桌面双平台口径，补齐 Windows 源码构建、非劫持默认程序步骤、M6 状态、
+  已知缺口和报告入口。
+- SPEC §11.3 记录 2026-08-18 的方案 B 修订，并把整组浏览器加速键被关闭的副作用和
+  “编译通过不等于真窗口通过”写入契约。
+- `docs/windows-test-plan.md` 不再声称 Windows 壳不存在，新增真 WebView2/NSIS 步骤；
+  D2-21 保持开启，D2-27 只记录文档打开路径面的部分证据，不用它冒充全仓长路径通过。
+- 发布文档收敛为 `docs/releasing-desktop.md`，明确 updater minisign 与两个 OS 的代码签名
+  是不同信任链，并要求草稿 Release 同时核对两个 Darwin 架构和 Windows NSIS 条目。
+
+### 四条不变量实测
+
+| 不变量 | 2026-08-18 实测 |
+|---|---|
+| `npm test` | **原命令未能在当前沙箱完成。** readit 的 global setup 内调用 esbuild、npm/Node 子进程时被系统以 `spawn EPERM` 拒绝。按原 project 配置拆开后，线程池内实际执行 `2862 passed / 0 product failures`；余下 6 条依赖子进程的断言分别用 shell 启动独立命令复现，全部通过，合计覆盖当前 2868 条行为检查。不能把等价拆跑写成“原命令通过”。 |
+| `cargo test` / clippy | Windows GNU 离线 vendor 下 `30 passed / 0 failed`；`cargo-clippy` 未安装且离线环境不能补装，故本轮没有新的 clippy 结论。 |
+| 债务台账条目数 | 16，未新增或删除；D2-21、D2-27 都仍开启。 |
+| `TEMPORARY` 标记 | 0（`known-failures.json` 全量检查）。 |
+
+拆跑中的关键补充结果：根级 100/100、core 2340/2340、element 247/247、shell
+39/39；其余 workspace 全绿。11 份 TypeScript 配置（根、browser、8 个包和 shell）均
+typecheck 通过。readit tarball 在仓库外的空宿主中离线安装成功，ESM/CJS 渲染字节一致，
+`require.resolve()` 命中 `dist/core.cjs`；`publint --strict` 和两个
+`@arethetypeswrong` profile 均通过。数学渲染 worker 由两个独立 shell 进程运行，得到相同
+SHA-256 `9bbbb2a88d1c6c49022f242f6c490c95cd94b500abb437e85bca7def4d0b40c8`。
+
+### 证据自审
+
+| 结论 | 证据口径 |
+|---|---|
+| NSIS/安装体积、Windows GNU 二进制、静默安装 | 本机实际构建和执行；不能泛化成 MSVC CI 或普通用户安装已通过 |
+| 路径归一化、扩展长度文档、junction 越界、Ctrl+F 路由、workflow 结构 | 自动化测试和代码编译；不是窗口交互或线上 Actions 证据 |
+| WebView2 真窗口 | 实际启动在 setup 阶段返回系统错误 5，窗口没有出现；因此六项均为未执行，而不是失败或通过 |
+| 文件关联三种状态 | 只完成配置/NSIS 脚本检查；HKCU 运行时写入被沙箱拦截，没有形成行为结论 |
+| Playwright Chromium | 来自 2026-08-14 Windows 报告的浏览器代理信号；本轮没有把它重写成 WebView2 信号 |
+| WebView2 bootstrapper、UserChoice、Tauri Action manifest 行为 | 配置/schema、方案资料和官方 Action 文档的阅读结论；无对应干净系统或线上 Release 实跑 |
+
+## 阶段边界与剩余工作
+
+1. 在普通交互式 Windows 会话执行唯一的 M6 六项清单，包括双击/第二进程、Ctrl+F、
+   两种保存刷新、Mermaid、5 次启动和 60 秒内存。
+2. 在允许写 HKCU 的环境分别验证无默认程序、已有其他默认程序、全新用户配置，并确认
+   卸载不删除其他应用的 Open With 项。
+3. 在无 WebView2 Runtime 的干净 Windows 10 验证 `downloadBootstrapper` 的联网、失败和
+   安装后行为；在 `LongPathsEnabled=1` 环境完成 D2-27 的深路径 clone/install/build。
+4. 手动触发一次 `release desktop` 草稿工作流，核对 Windows MSVC 构建、三个平台条目、
+   `.sig` 与单一 `latest.json`。本方案不推送、不创建线上 Release。
+5. M7 再处理 Authenticode、Apple Developer ID/公证和 SmartScreen/Gatekeeper 信任；
+   Windows ARM64 也仍在 v1 x64 边界之外。

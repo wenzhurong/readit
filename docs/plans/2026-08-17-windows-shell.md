@@ -181,7 +181,7 @@ D2-21 挂着：SPEC §13.2 自己定的「验收门必须包含真 WebView2 里�
 现有那份用 `tauri-apps/tauri-action@v1` + `dtolnay/rust-toolchain` + `Swatinem/rust-cache`，
 按 target 矩阵构建两个架构。
 
-**注意**：updater 的 minisign 签名与 OS 代码签名是两套独立信任链（`docs/releasing-macos.md`
+**注意**：updater 的 minisign 签名与 OS 代码签名是两套独立信任链（`docs/releasing-desktop.md`
 开篇就写了这件事）。Windows 侧**不做 OS 代码签名**（v1 决定），但 **updater 的
 minisign 签名要照做**，否则 Windows 客户端收不到更新。`latest.json` 要同时含两个平台。
 

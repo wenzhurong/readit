@@ -667,6 +667,19 @@ Mermaid 的已发布 Safari / 真 WKWebView 矩阵仍是 M6 的具名手工验�
 7. **源码模式必须查文档模型而非 DOM**——CodeMirror 6 的视口虚拟化会让任何基于 DOM 的查找静默漏掉屏幕外的行
 8. Windows 上 Ctrl+F 被 WebView2 内置查找栏吃掉（那个栏是好用的，含 shadow DOM）。要么在 Windows 让原生栏赢，要么让壳禁用浏览器加速键——注意 Tauri 未再导出 wry 的 `browser_accelerator_keys`，后者需要 wry 层补丁或上游 PR
 
+⚠️ **本条于 2026-08-18 修订：Windows 选择禁用 WebView2 浏览器加速键，两平台统一使用
+readit 查找栏。** Tauri 2.11.5 虽未暴露 wry 的 builder 开关，但
+`WebviewWindow::with_webview()` 能取得 controller；Windows 壳沿 `CoreWebView2()` →
+`Settings()` → `ICoreWebView2Settings3` 调用
+`SetAreBrowserAcceleratorKeysEnabled(false)`，不需要给 wry 打补丁。前端只在 Windows 绑定
+`Control+F`，macOS 仍绑定 `Meta+F`。
+
+选择这条路是为了守住第 7 点：WebView2 原生栏只查 DOM，CodeMirror 视口外的文档模型会被
+静默漏掉。代价是 WebView2 的整组浏览器加速键一起关闭，包括 Ctrl+P、Ctrl+R、F12；以后
+若产品需要其中任何一项，必须由壳显式重新提供入口与测试，不能重新放开整组。上述 COM
+路径已经通过 Windows 编译与接口守卫，**真 WebView2 窗口行为仍未执行**：2026-08-18 的
+受控会话在 Tauri 创建窗口阶段被系统错误 5 拒绝，不能把编译证据写成运行时通过。
+
 预算：3–6 KB 手写代码 + 2–3 KB 降级路径，无依赖。
 
 ---
