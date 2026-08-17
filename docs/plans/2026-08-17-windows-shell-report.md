@@ -136,11 +136,31 @@ Windows 壳通过 Tauri 2.11.5 的 `WebviewWindow::with_webview()` 取得 WebVie
 原子/原地保存刷新、真 WebView2 Mermaid、5 次启动与 60 秒内存。Chromium 与自动化测试
 的绿色结果没有写成真 WebView2 结果。
 
+## W5：桌面发布工作流
+
+原 `release-macos.yml` 已收敛为单一 `release-desktop.yml`。同一手动工作流依次构建
+macOS Apple Silicon、macOS Intel 和 Windows x64 MSVC；Windows 明确产出 NSIS，macOS
+明确产出 app/dmg，避免 W1 的全局 NSIS 默认值误伤 macOS runner。
+
+三个矩阵项共享 updater minisign 的私钥和密码，只使用 GitHub 内建 token 写 draft
+Release；没有加入 Windows OS 代码签名证书。`uploadUpdaterJson: true` 与
+`updaterJsonPreferNsis: true` 保证 Windows updater 选择 NSIS 产物。矩阵设置
+`max-parallel: 1`，使各平台按顺序把自身条目合并进同一个 `latest.json`，避免多个 job
+从同一旧 manifest 并发覆盖。Windows v1 只交付 x64；ARM64 没有本地构建或真机验收证据，
+不在本次工作流里虚增一个声明。
+
+测试先指向尚不存在的桌面工作流，Rust 编译按预期因 `include_str!` 找不到文件而红；
+加入工作流后定向测试通过。随后把两个 macOS bundle 临时退化成只有 dmg，新增守卫按预期
+报告缺少 `macOS bundles`；恢复 app/dmg 后变绿。守卫同时覆盖两个 macOS 架构、Windows
+runner/target、两项 minisign secret、NSIS 偏好、串行 manifest 合并和显式 bundle override。
+
+本轮没有触发 GitHub Actions、创建 Release 或上传线上 `latest.json`，所以结论是工作流
+结构与本地守卫完成，不是线上发布链已经实跑。
+
 ## 待完成
 
 - W2：实现已完成；三种初始注册表状态的运行时验证仍受沙箱阻塞。
 - W3：实现已完成；真实 WebView2 行为仍受 W4 的环境阻塞。
 - W4：路径、junction 与长路径自动化已完成；六项真实窗口验收仍需在非沙箱 Windows
   会话补验。
-- W5：Windows 发布、更新签名与双平台 `latest.json`。
 - W6：收口 README、SPEC、测试计划、债务与最终结论。

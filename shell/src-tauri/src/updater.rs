@@ -93,13 +93,17 @@ mod tests {
     }
 
     #[test]
-    fn macos_release_workflow_builds_both_architectures_with_ci_only_secrets() {
-        let workflow = include_str!("../../../.github/workflows/release-macos.yml");
+    fn desktop_release_workflow_builds_both_platforms_with_ci_only_secrets() {
+        let workflow = include_str!("../../../.github/workflows/release-desktop.yml");
         let requirements = [
             ("manual trigger", "workflow_dispatch:"),
             ("release permission", "contents: write"),
             ("Apple Silicon", "aarch64-apple-darwin"),
             ("Intel", "x86_64-apple-darwin"),
+            ("Windows runner", "windows-latest"),
+            ("Windows x64", "x86_64-pc-windows-msvc"),
+            ("macOS bundles", "bundles: app,dmg"),
+            ("Windows bundle", "bundles: nsis"),
             (
                 "private key secret",
                 "TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}",
@@ -110,6 +114,12 @@ mod tests {
             ),
             ("official release action", "tauri-apps/tauri-action@v1"),
             ("static updater JSON", "uploadUpdaterJson: true"),
+            ("NSIS updater", "updaterJsonPreferNsis: true"),
+            ("serialized manifest merge", "max-parallel: 1"),
+            (
+                "per-platform bundle override",
+                "--bundles ${{ matrix.bundles }}",
+            ),
         ];
         let missing = requirements
             .into_iter()

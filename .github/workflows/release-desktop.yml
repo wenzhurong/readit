@@ -1,4 +1,4 @@
-name: release macOS
+name: release desktop
 
 on:
   workflow_dispatch:
@@ -8,14 +8,27 @@ permissions:
 
 jobs:
   publish:
-    name: macOS (${{ matrix.target }})
-    runs-on: macos-latest
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
+      # Each action invocation merges its updater entry into latest.json. Serializing the
+      # matrix prevents two jobs from replacing the manifest from the same stale snapshot.
+      max-parallel: 1
       matrix:
-        target:
-          - aarch64-apple-darwin
-          - x86_64-apple-darwin
+        include:
+          - label: macOS (Apple Silicon)
+            platform: macos-latest
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+          - label: macOS (Intel)
+            platform: macos-latest
+            target: x86_64-apple-darwin
+            bundles: app,dmg
+          - label: Windows (x64)
+            platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -39,8 +52,9 @@ jobs:
           tauriScript: npm run tauri
           tagName: readit-v__VERSION__
           releaseName: 'readit v__VERSION__'
-          releaseBody: 'macOS build. M6 manual acceptance status is recorded in the repository.'
+          releaseBody: 'Unsigned macOS and Windows builds. Manual acceptance status is recorded in the repository.'
           releaseDraft: true
           prerelease: false
           uploadUpdaterJson: true
-          args: --target ${{ matrix.target }}
+          updaterJsonPreferNsis: true
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
