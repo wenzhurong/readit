@@ -369,6 +369,7 @@ cd shell/src-tauri && cargo test # Rust 侧
 | `SPEC.md` | **上位契约。** 产品级规格，7 个里程碑，每条决策带理由与实测出处 |
 | `docs/plans/2026-08-08-plan2-debt.md` | **债务台账。** 每条具名、带出处、可核验 |
 | `docs/plans/2026-08-13-m6-manual-acceptance.md` | M6 的六项真机手工清单 |
+| `docs/plans/2026-08-17-windows-shell.md` | **Windows 壳构建方案**（下一步工作） |
 | `docs/windows-test-plan.md` | Windows 侧验证方案 |
 | `docs/windows-debug-report-2026-08-14.md` | Windows 真机验证报告 |
 | `docs/releasing-macos.md` | macOS 签名与发布 |
