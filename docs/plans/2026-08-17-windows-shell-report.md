@@ -65,10 +65,33 @@
 
 以上三项必须在不拦截 HKCU 的 Windows 会话中补验；当前只证明安装脚本的静态策略和可编译性，不能把它们写成运行时通过。
 
+## W3：Windows `Ctrl+F`
+
+### 决策：方案 B
+
+Windows 壳通过 Tauri 2.11.5 的 `WebviewWindow::with_webview()` 取得 WebView2 controller，沿 `CoreWebView2()` → `Settings()` → `ICoreWebView2Settings3` 调用 `SetAreBrowserAcceleratorKeysEnabled(false)`。对应 COM 依赖只在 `cfg(windows)` 下加入，并精确钉住 `webview2-com = 0.38.2`、`windows-core = 0.61.2`。
+
+选择 B 而不是保留 WebView2 原生查找栏，是因为原生栏只能搜索当前 DOM，不能遵守 readit 在源码/分栏模式下的文档模型查找语义。禁用设置在 Tauri `setup()` 的 UI 线程同步完成；controller、settings 或接口转换失败会让 setup 明确失败，不静默退回两个查找栏竞争的状态。
+
+前端按平台选择主修饰键：macOS 仍是独占 `Meta+F`，Windows 是独占 `Control+F`，两边都排除另一主修饰键以及 Alt/Shift 组合。
+
+### 可见副作用
+
+`AreBrowserAcceleratorKeysEnabled=false` 关闭的是 WebView2 的整组浏览器加速键，不只 `Ctrl+F`。Windows 壳中 WebView2 自带的打印、刷新和开发者工具快捷键（例如 `Ctrl+P`、`Ctrl+R`、`F12`）因此也不再由浏览器进程处理；键盘事件仍可由页面/壳显式接管。readit 当前没有把这些浏览器快捷键列为产品入口，所以接受该影响；若以后需要其中任何一项，应在壳层显式绑定并测试，而不是重新开启整组原生加速键。
+
+### 红灯与绿灯
+
+1. Windows `Control+F` 行为测试先红：事件未被阻止，反而仍由 `Meta+F` 触发。
+2. 平台分流后变绿：`1 file / 5 tests passed`，同时守住 macOS 既有行为。
+3. Rust 守卫先红于缺少精确 COM 依赖；实现后定向测试变绿。
+4. Windows GNU 下完整 `cargo test --lib`：`28 passed / 0 failed`。
+
+真实 WebView2 窗口中的 `Ctrl+F` 行为并入 W4 人工验收，不用单元测试结果冒充真引擎结果。
+
 ## 待完成
 
 - W2：实现已完成；三种初始注册表状态的运行时验证仍受沙箱阻塞。
-- W3：接管 Windows 原生 `Ctrl+F`，并记录对其他 WebView2 浏览器快捷键的影响。
+- W3：实现已完成；真实 WebView2 中的行为并入 W4。
 - W4：在真实应用窗口执行六项人工验收，并补 Windows 路径/标题边界测试。
 - W5：Windows 发布、更新签名与双平台 `latest.json`。
 - W6：收口 README、SPEC、测试计划、债务与最终结论。
