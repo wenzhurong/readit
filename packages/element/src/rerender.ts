@@ -86,8 +86,16 @@ export interface RerenderDeps {
    * 高亮加载器。P1 不许 @readit/element 在运行时 import @readit/highlight，
    * 所以这条只能由宿主注入；null 表示宿主根本没打算要高亮——那不是「加载中」，
    * 是一个已经完成的选择，不该报进 pending。
+   *
+   * 形参收到的是**到目前为止见过的全部围栏语言的并集**（小写、去重），不是本次
+   * 文档的语言。因为新的 highlighter 整体替换旧的：只给本文档的语言，从 A 导航到
+   * B 再回到 A 时 A 的语言就没人支持了。
+   *
+   * 这个形参不是装饰。`createShikiHighlighter()` 不传 `langs` 得到的是空语言集，
+   * 对任何语言都 `supports() === false`，于是每个围栏都静默回落朴素 `<pre>`——
+   * 不报错、不降级提示。加载器拿不到语言，宿主就没有任何办法把这件事做对。
    */
-  loadHighlighter: (() => Promise<Highlighter>) | null
+  loadHighlighter: ((languages: readonly string[]) => Promise<Highlighter>) | null
   /** Mermaid 与高亮同样由宿主注入，元素包对它只有类型边。 */
   loadMermaid: (() => Promise<MermaidRenderer>) | null
   setTimer(fn: () => void, ms: number): number
@@ -108,7 +116,7 @@ export interface Rerenderer {
 
 /** 浏览器里的真实 deps。两个可选重能力由宿主给，其余全是标准 API 与 core 的导出。 */
 export function browserDeps(
-  loadHighlighter: (() => Promise<Highlighter>) | null,
+  loadHighlighter: ((languages: readonly string[]) => Promise<Highlighter>) | null,
   loadMermaid: (() => Promise<MermaidRenderer>) | null = null,
 ): RerenderDeps {
   return {
@@ -151,15 +159,36 @@ export function createRerenderer(
   let frame: number | null = null
   let destroyed = false
 
+  /**
+   * 已经向 loadHighlighter 请求过的语言（小写）。它同时承担两件事：
+   *
+   * 1. 判断「文档里出现了还没请求过的语言」——这是**重新**加载 highlighter 的唯一
+   *    条件。没有它，`highlighter === null` 一旦不成立就永不再加载，宿主从 A 导航
+   *    到用别的语言的 B 时 B 永远不高亮。
+   * 2. 保证终止。scan() 按契约是**过报**的，```zzzznotalanguage 这种也会进
+   *    languages；请求过就记下，所以每个名字最多触发一次加载，不会因为「加载完还是
+   *    不支持」而循环。
+   */
+  const requestedLangs = new Set<string>()
+
+  const unrequestedLangs = (found: ScanResult): string[] =>
+    found.languages.filter((name) => !requestedLangs.has(name.toLowerCase()))
+
   const missing = (found: ScanResult): PendingCapability[] => {
     const out: PendingCapability[] = []
     if (found.needsMath && math === null) out.push('math')
-    if (found.needsHighlight && highlighter === null && deps.loadHighlighter !== null) out.push('highlight')
+    if (
+      found.needsHighlight &&
+      deps.loadHighlighter !== null &&
+      (highlighter === null || unrequestedLangs(found).length > 0)
+    ) {
+      out.push('highlight')
+    }
     if (found.needsMermaid && mermaid === null && deps.loadMermaid !== null) out.push('mermaid')
     return out
   }
 
-  const kick = (want: readonly PendingCapability[]): void => {
+  const kick = (want: readonly PendingCapability[], found: ScanResult): void => {
     for (const cap of want) {
       if (inflight.has(cap) || failed.has(cap)) continue
       inflight.add(cap)
@@ -183,7 +212,11 @@ export function createRerenderer(
       } else if (cap === 'highlight') {
         const load = deps.loadHighlighter
         if (load === null) continue
-        void load().then((h) => {
+        // 先记账再发起：加载在飞的时候文档若又换到新语言，missing() 仍会报
+        // 'highlight'，但 inflight 挡住重复 kick；等这次落地后 paint() 会重算，
+        // 那时新语言还在 unrequested 里，于是带着并集再来一次。
+        for (const name of found.languages) requestedLangs.add(name.toLowerCase())
+        void load([...requestedLangs]).then((h) => {
           done(() => {
             highlighter = memoizeHighlighter(h)
           })
@@ -208,7 +241,7 @@ export function createRerenderer(
     host.setPending(want)
     host.paint(deps.render(value, { ...options, math, highlighter }))
     if (found.needsMermaid && mermaid !== null) host.hydrateMermaid(mermaid)
-    if (want.length > 0) kick(want)
+    if (want.length > 0) kick(want, found)
   }
 
   const cancelPending = (): void => {

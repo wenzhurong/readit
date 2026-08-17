@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { mount, type MountHandle } from 'readit/element'
 import './styles.css'
+import { createHighlighterLoader, createMermaidLoader } from './loaders.js'
 import { routeDocumentOpen } from './navigation.js'
 import { observeLocalResources } from './resources.js'
 import {
@@ -67,14 +68,8 @@ function showDocument(documentPayload: DocumentPayload): void {
     value: documentPayload.source,
     baseUrl: documentPayload.path,
     emojiBase: '/emoji/',
-    loadHighlighter: async () => {
-      const plugin = await import('readit/plugins/highlight')
-      return plugin.createShikiHighlighter()
-    },
-    loadMermaid: async () => {
-      const plugin = await import('readit/plugins/mermaid')
-      return plugin.createMermaidRenderer()
-    },
+    loadHighlighter: createHighlighterLoader(),
+    loadMermaid: createMermaidLoader(),
     onNavigate: (path) => queueNavigation(path),
   })
   stopObservingResources = observeLocalResources(host)

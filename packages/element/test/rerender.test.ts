@@ -219,6 +219,74 @@ describe('C1：加载到的 highlighter 被记忆化包裹（集成验证，不�
     r.destroy()
   })
 
+  it('高亮加载器收到文档里扫出的围栏语言，而不是被空手调用', async () => {
+    // 空手调用是壳里那个缺陷的形状：createShikiHighlighter() 不传 langs 得到空
+    // 语言集，supports() 恒 false，每个围栏静默回落朴素 <pre>。加载器如果拿不到
+    // 语言，宿主就没有任何办法把这件事做对——所以形参必须真的被送到。
+    const seen: string[][] = []
+    const loader = vi.fn(async (langs: readonly string[]): Promise<Highlighter> => {
+      seen.push([...langs])
+      return { highlight: (code) => `<i>${code}</i>`, supports: () => true }
+    })
+    const deps: RerenderDeps = { ...h.deps, loadHighlighter: loader }
+    const r = createRerenderer(h.host, deps, {}, '```ts\na\n```\n\n```rust\nb\n```\n')
+    r.repaint()
+    await vi.waitFor(() => {
+      expect(seen.length).toBe(1)
+    })
+    expect(seen[0]).toEqual(['ts', 'rust'])
+    r.destroy()
+  })
+
+  it('换到带新语言的文档会重新加载，且带上历史并集——只给本次的语言，回到旧文档就没人支持了', async () => {
+    const seen: string[][] = []
+    const loader = vi.fn(async (langs: readonly string[]): Promise<Highlighter> => {
+      const supported = new Set(langs)
+      seen.push([...langs])
+      return {
+        highlight: (code, lang) => (supported.has(lang) ? `<i>${code}</i>` : null),
+        supports: (lang) => supported.has(lang),
+      }
+    })
+    const deps: RerenderDeps = { ...h.deps, loadHighlighter: loader }
+    const r = createRerenderer(h.host, deps, {}, '```ts\na\n```\n')
+    r.repaint()
+    await vi.waitFor(() => {
+      expect(seen.length).toBe(1)
+    })
+
+    r.setValue('```rust\nb\n```\n')
+    await vi.waitFor(() => {
+      expect(seen.length).toBe(2)
+    })
+
+    expect(seen).toEqual([['ts'], ['ts', 'rust']])
+    r.destroy()
+  })
+
+  it('未知围栏语言只请求一次——scan() 按契约过报，不能因为「加载完仍不支持」而反复重载', async () => {
+    const seen: string[][] = []
+    const loader = vi.fn(async (langs: readonly string[]): Promise<Highlighter> => {
+      seen.push([...langs])
+      return { highlight: () => null, supports: () => false }
+    })
+    const deps: RerenderDeps = { ...h.deps, loadHighlighter: loader }
+    const r = createRerenderer(h.host, deps, {}, '```zzzznotalanguage\na\n```\n')
+    r.repaint()
+    await vi.waitFor(() => {
+      expect(seen.length).toBe(1)
+    })
+    r.repaint()
+    r.repaint()
+    r.repaint()
+    await Promise.resolve()
+    expect({ loads: seen.length, asked: seen[0] }).toEqual({
+      loads: 1,
+      asked: ['zzzznotalanguage'],
+    })
+    r.destroy()
+  })
+
   it('宿主构造时直接传入的 highlighter 同样被包裹，不只是异步加载来的那个', () => {
     let calls = 0
     const preloaded: Highlighter = {

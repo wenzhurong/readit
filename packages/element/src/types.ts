@@ -26,8 +26,14 @@ export interface MountOptions {
    * 把 'highlight' 报进 pending（那不是「加载中」，是一个已经完成的选择）。
    * 与 `highlighter` 字段互补：后者是宿主直接给实例的同步路径，这个字段是
    * 「等真的用到再去拿」的懒加载路径。
+   *
+   * **形参 `languages` 必须用上。** 它是到目前为止见过的全部围栏语言的并集
+   * （小写、去重）。`createShikiHighlighter()` 不传 `langs` 得到的是空语言集，
+   * 对任何语言都 `supports() === false`，于是每个围栏静默回落朴素 `<pre>`——
+   * 不报错也不提示。语言集在工厂期就定死（`highlight()` 契约上必须纯同步），
+   * 所以这是宿主唯一的注入点。文档换到新语言时元素会带着新的并集再调一次。
    */
-  loadHighlighter: (() => Promise<Highlighter>) | null
+  loadHighlighter: ((languages: readonly string[]) => Promise<Highlighter>) | null
   /**
    * Mermaid Phase B 水合器的异步加载器。与 loadHighlighter 一样由宿主
    * 注入，以便重依赖只在文档首次出现 mermaid 围栏时才下载。
