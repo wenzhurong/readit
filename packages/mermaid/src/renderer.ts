@@ -61,21 +61,59 @@ function errorMessage(error: unknown): string {
   return String(error)
 }
 
+/** 中性值。写上它们，而不是把声明删掉——理由见 guardForeignObjectLayers。 */
+const NEUTRAL_LAYER_VALUES: ReadonlyArray<readonly [string, string]> = [
+  ['opacity', '1'],
+  ['transform', 'none'],
+  ['filter', 'none'],
+]
+
 /**
  * WebKit bug 23113 needs both a transformed SVG ancestor and a composited HTML
  * descendant. Mermaid's defaults do not create that combination, but author
  * classDef/style directives can put these three properties on label HTML.
- * Keep SVG geometry transforms intact; only strip layer-triggering properties
- * from HTML descendants of foreignObject.
+ * Keep SVG geometry transforms intact; only neutralise layer-triggering
+ * properties on HTML descendants of foreignObject.
+ *
+ * **Why this pins neutral values instead of deleting declarations.** The first
+ * version only did `style.removeProperty()` + `removeAttribute()`, which covers
+ * inline declarations and presentation attributes — and misses the route
+ * Mermaid actually uses. `classDef risky opacity:0.3` does not become an inline
+ * style on the label; Mermaid compiles it into a `<style>` element injected in
+ * the SVG:
+ *
+ *     #readit-mermaid-1 .risky>*   { opacity:0.3!important; }
+ *     #readit-mermaid-1 .risky span{ opacity:0.3!important; }
+ *
+ * Measured in real WebKit (2026-08-17): the label `span.nodeLabel` has
+ * `style === null` and `getComputedStyle().opacity === '0.3'`. Deleting inline
+ * declarations cannot touch that, so the composited-HTML half of the 23113
+ * precondition stood and the label painted at the untransformed origin in
+ * WKWebView — exactly what this guard exists to prevent.
+ *
+ * Writing the neutral value with `!important` wins because the CSS cascade
+ * sorts style-attribute declarations above selector-matched ones within the
+ * same origin and importance. A stylesheet rule of our own would not: Mermaid's
+ * selector carries an id (`#readit-mermaid-1 .risky span`), so anything we
+ * could write as `foreignObject *` loses on specificity. Inline is the only
+ * reliable route.
+ *
+ * The cost is that these three properties become unstyleable on Mermaid label
+ * HTML from any source. That was already the intent for the inline route; this
+ * only makes the coverage uniform. Mermaid's own defaults put none of the three
+ * on label HTML, so nothing legitimate is being overridden.
+ *
+ * Note the blind spot this sat in: Playwright's headless WebKit reproduces the
+ * *precondition* (computed opacity 0.3 on the label) but not the *symptom*
+ * (misplacement). Gate on the precondition — see mermaid.spec.ts.
  */
 function guardForeignObjectLayers(root: Element): void {
   for (const foreignObject of root.querySelectorAll('foreignObject')) {
     for (const html of foreignObject.querySelectorAll<HTMLElement>('*')) {
-      for (const property of ['opacity', 'transform', 'filter'] as const) {
-        html.style.removeProperty(property)
+      for (const [property, neutral] of NEUTRAL_LAYER_VALUES) {
         html.removeAttribute(property)
+        html.style.setProperty(property, neutral, 'important')
       }
-      if (html.getAttribute('style')?.trim() === '') html.removeAttribute('style')
     }
   }
 }

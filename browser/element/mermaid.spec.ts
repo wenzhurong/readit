@@ -137,4 +137,82 @@ test.describe('Mermaid hydration', () => {
     expect(state.pending).toBeNull()
     expect(pageErrors).toEqual([])
   })
+
+  test('classDef 的图层触发属性到不了 foreignObject 里的 HTML —— 走的是样式表，删行内声明够不着', async ({
+    page,
+  }) => {
+    // 2026-08-17 的 M6 真机验收发现的洞。`classDef risky opacity:0.3` 不产生行内
+    // 样式：Mermaid 把它编译成注入 SVG 的 <style>
+    //   `#<id> .risky>*{opacity:0.3!important}` / `#<id> .risky span{...}`
+    // 而当时的护栏只做 style.removeProperty() + removeAttribute()，两者都够不着
+    // 样式表规则。于是标签 span 的计算 opacity 是 0.3 —— 「被合成的 HTML 后代」
+    // 这半个 WebKit bug 23113 前提原样成立，真 WKWebView 里标签会画到未变换的
+    // 原点上去。
+    //
+    // **这一条必须由浏览器层守。** 单元测试用的 happy-dom 会把 <style> 的内容整个
+    // 丢掉，表达不了样式表来源；而 Playwright 的无头 WebKit 虽然不复现「错位」这个
+    // 症状，却忠实复现了「计算 opacity 是 0.3」这个前提——所以门开在前提上。
+    await page.goto('/host.html')
+    await page.waitForFunction(() => window.readitFixture !== undefined)
+    await mountMermaid(
+      page,
+      [
+        '```mermaid',
+        'flowchart TD',
+        '  H1["plain label"]',
+        '  H2["classed label"]',
+        '  H1 --> H2',
+        '  classDef risky opacity:0.3',
+        '  class H2 risky',
+        '```',
+        '',
+      ].join('\n'),
+    )
+    await page.waitForFunction(
+      () =>
+        document
+          .getElementById('a')
+          ?.shadowRoot?.querySelector('.highlight-source-mermaid')
+          ?.getAttribute('data-readit-mermaid-state') === 'ready',
+    )
+
+    const layers = await page.evaluate(() => {
+      const diagram = document
+        .getElementById('a')
+        ?.shadowRoot?.querySelector<HTMLElement>('.highlight-source-mermaid')
+      const htmlInForeignObjects = [
+        ...(diagram?.querySelectorAll('foreignObject') ?? []),
+      ].flatMap((fo) => [...fo.querySelectorAll<HTMLElement>('*')])
+      return {
+        // 护栏要盖到的元素确实存在，否则下面的断言会空过
+        htmlCount: htmlInForeignObjects.length,
+        offenders: htmlInForeignObjects
+          .map((el) => {
+            const s = getComputedStyle(el)
+            return { tag: el.tagName, opacity: s.opacity, transform: s.transform, filter: s.filter }
+          })
+          .filter(
+            (s) =>
+              s.opacity !== '1' ||
+              !(s.transform === 'none' || s.transform === '') ||
+              !(s.filter === 'none' || s.filter === ''),
+          ),
+        // classDef 对 SVG 形状的作用照旧保留：护栏只管 foreignObject 里的 HTML
+        shapeOpacity: [...(diagram?.querySelectorAll('g.node') ?? [])].map((node) =>
+          getComputedStyle(node.querySelector('rect') ?? node).opacity,
+        ),
+        classedNodeExists: [...(diagram?.querySelectorAll('g.node') ?? [])].some((n) =>
+          n.getAttribute('class')?.includes('risky'),
+        ),
+      }
+    })
+
+    // 前提校验：classDef 真的被 Mermaid 认下来了，不是语法错误导致这条空过
+    expect(layers.classedNodeExists).toBe(true)
+    expect(layers.htmlCount).toBeGreaterThan(0)
+    // 正题：foreignObject 里没有任何一层带着非中性的图层触发属性
+    expect(layers.offenders).toEqual([])
+    // 反面：SVG 形状上的 0.3 仍在——作者的样式意图没有被无差别抹掉
+    expect(layers.shapeOpacity).toContain('0.3')
+  })
 })

@@ -5,6 +5,13 @@ import {
   type SvgSanitizer,
 } from '../src/renderer.js'
 
+/** 与 renderer.ts 的 NEUTRAL_LAYER_VALUES 对应。 */
+const NEUTRAL: ReadonlyArray<readonly [string, string]> = [
+  ['opacity', '1'],
+  ['transform', 'none'],
+  ['filter', 'none'],
+]
+
 function placeholder(source = 'flowchart LR\nA --> B'): HTMLDivElement {
   const target = document.createElement('div')
   target.className = 'highlight highlight-source-mermaid'
@@ -106,7 +113,7 @@ describe('createMermaidRendererWith', () => {
     })
   })
 
-  it('removes WebKit layer triggers only from foreignObject HTML descendants', async () => {
+  it('neutralises WebKit layer triggers only on foreignObject HTML descendants', async () => {
     const target = placeholder()
     const mermaid: MermaidAdapter = {
       initialize() {},
@@ -131,12 +138,66 @@ describe('createMermaidRendererWith', () => {
       opacityAttribute: label?.getAttribute('opacity'),
       color: label?.style.color,
     }).toEqual({
+      // SVG 侧的几何变换必须留着
       svgTransform: 'translate(1 2)',
-      opacityStyle: '',
-      transformStyle: '',
-      filterStyle: '',
+      // 从「删掉声明」改成「写上中性值」：外观等价（都回到初始值），但只有后者
+      // 压得住样式表里的 !important —— 见 guardForeignObjectLayers 的注释。
+      opacityStyle: '1',
+      transformStyle: 'none',
+      filterStyle: 'none',
       opacityAttribute: null,
+      // 三者之外的行内属性不受影响
       color: 'red',
+    })
+  })
+
+  it('本来没有行内声明的每一层，事后都带上 !important 的中性值——这是能压住样式表的唯一位置', async () => {
+    // 真 WebKit 实测（2026-08-17）：`classDef risky opacity:0.3` 不产生行内样式，
+    // 它被编译成注入 SVG 的 <style>：`#id .risky span{opacity:0.3!important}`。
+    // 标签 span 的 style 属性是 null，计算值却是 0.3 —— 删行内声明够不着。
+    //
+    // 这条只能钉「写入的形状」：层叠里 style 属性的 !important 排在选择器匹配的
+    // 之上，所以中性值写在这里才压得住。**真正的层叠行为由浏览器层守**
+    // （browser/element/mermaid.spec.ts 用真 classDef 断言计算值），
+    // 因为 happy-dom 会把 <style> 的内容整个丢掉，这里表达不了样式表来源。
+    const target = placeholder()
+    const mermaid: MermaidAdapter = {
+      initialize() {},
+      async render() {
+        return {
+          svg:
+            '<svg><g transform="translate(4 8)" class="risky"><foreignObject>' +
+            '<div><span class="nodeLabel"><p>label</p></span></div>' +
+            '</foreignObject></g></svg>',
+        }
+      },
+    }
+    await createMermaidRendererWith(mermaid, { sanitize: (svg) => svg }).hydrate(document)
+
+    const shape = (selector: string): unknown => {
+      const el = target.querySelector<HTMLElement>(selector)
+      return NEUTRAL.map(([property, value]) => [
+        el?.style.getPropertyValue(property) === value,
+        el?.style.getPropertyPriority(property),
+      ])
+    }
+    const pinned = [[true, 'important'], [true, 'important'], [true, 'important']]
+
+    expect({
+      // foreignObject 里的每一层都要盖到，不只是最外层
+      div: shape('foreignObject div'),
+      span: shape('foreignObject span'),
+      p: shape('foreignObject p'),
+      // SVG 侧的几何变换照旧不碰
+      svgTransform: target.querySelector('g')?.getAttribute('transform'),
+      // foreignObject 自身是 SVG 元素，不在护栏范围内
+      foreignObjectStyle: target.querySelector('foreignObject')?.getAttribute('style'),
+    }).toEqual({
+      div: pinned,
+      span: pinned,
+      p: pinned,
+      svgTransform: 'translate(4 8)',
+      foreignObjectStyle: null,
     })
   })
 
