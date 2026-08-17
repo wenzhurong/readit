@@ -289,9 +289,12 @@ SPEC 里的每条修订都带 ⚠️ 标注与日期，说明**原文是什么�
 
 ## 许可
 
-**尚未确定。** 这需要在首次发布前定下来。
+**MIT**，见 [`LICENSE`](LICENSE)。
 
-一条相关的既有约束：对抗性语料 vendor 的是
-`karlcow/markdown-testsuite`（**MIT**，只取输入）。
+选它是因为这个项目的定位是**可被别人内嵌**——MIT 是下游法务最不可能拦下来的那一档。
+
+第三方成分：对抗性语料 vendor 的是 `karlcow/markdown-testsuite`（**MIT**，只取输入），
+其原始许可证随语料一并保留在
+[`packages/core/test/corpus/adversarial/karlcow/LICENSE.txt`](packages/core/test/corpus/adversarial/karlcow/LICENSE.txt)。
 `michelf/mdtest` 是 **GPL-2.0，刻意没有 vendor**——
-对一个准备被别人内嵌的库，那是下游法务会真的拦下来的东西。
+对一个准备被别人内嵌的库，那正是下游法务会真的拦下来的东西。
