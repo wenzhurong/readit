@@ -255,6 +255,39 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn rejects_a_windows_junction_that_escapes_the_current_document_directory() {
+        let tree = TempTree::new();
+        let docs = tree.path().join("docs");
+        let outside = tree.path().join("outside");
+        fs::create_dir_all(&docs).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let document = docs.join("README.md");
+        let secret = outside.join("secret.txt");
+        let junction = docs.join("escape");
+        fs::write(&document, "# current").unwrap();
+        fs::write(&secret, "secret").unwrap();
+        let output = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&junction)
+            .arg(&outside)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "mklink /J failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let root = ResourceRoot::default();
+        root.set_document(&document).unwrap();
+        let result = root.resolve_path("/escape/secret.txt");
+        fs::remove_dir(&junction).unwrap();
+
+        assert_eq!(result, Err(ResourceError::OutsideDocumentRoot));
+    }
+
     #[test]
     fn replacing_the_current_document_replaces_the_resource_scope() {
         let tree = TempTree::new();

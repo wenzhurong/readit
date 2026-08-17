@@ -228,6 +228,28 @@ mod tests {
         assert_eq!(state.take_pending_path(), None);
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn opens_an_extended_length_windows_document_path() {
+        use std::os::windows::ffi::OsStrExt;
+
+        let tree = TempTree::new();
+        let mut directory = tree.path().canonicalize().unwrap();
+        for index in 0..10 {
+            directory.push(format!("long-segment-{index:02}-abcdefghijklmnop"));
+        }
+        fs::create_dir_all(&directory).unwrap();
+        let document = directory.join("extended-path.md");
+        fs::write(&document, "# extended path\n").unwrap();
+        assert!(document.as_os_str().encode_wide().count() > 260);
+
+        let state = AppState::default();
+        let payload = state.open_document(&document).unwrap();
+
+        assert_eq!(payload.source, "# extended path\n");
+        assert_eq!(payload.path, document.canonicalize().unwrap().to_str().unwrap());
+    }
+
     #[test]
     fn opening_markdown_reads_it_and_moves_the_resource_scope() {
         let tree = TempTree::new();

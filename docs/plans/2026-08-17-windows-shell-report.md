@@ -6,7 +6,9 @@
 
 ## 当前结论
 
-工作仍在推进中。W1 已完成：当前源码能够在 Windows x64 上编译为原生程序并生成 NSIS 安装包，安装包也能完成当前用户静默安装。W2–W6 尚未完成，因此此时还不能给出“完整符合预期、可正式发布”的结论。
+工作仍在推进中。W1–W3 已完成实现，W4 已补齐 Windows 路径、安全与长路径自动化，
+但真实 WebView2 窗口验收受当前桌面沙箱阻塞。W5–W6 尚未完成，因此此时还不能给出
+“完整符合预期、可正式发布”的结论。
 
 测试主机为 Windows `10.0.26200.9168`、AMD64，已安装 Microsoft Edge WebView2 Runtime `151.0.4129.86`。干净 Windows 10 且没有 WebView2 Runtime 的场景尚未执行，不以当前主机结果代替该场景。
 
@@ -88,10 +90,57 @@ Windows 壳通过 Tauri 2.11.5 的 `WebviewWindow::with_webview()` 取得 WebVie
 
 真实 WebView2 窗口中的 `Ctrl+F` 行为并入 W4 人工验收，不用单元测试结果冒充真引擎结果。
 
+## W4：Windows 路径补强与真 WebView2 验收
+
+### Windows 路径与安全修正
+
+- 新增壳边界的原生路径归一化：`C:\…` 转成前端导航使用的斜杠形式，去除
+  `\\?\` 扩展长度前缀，并把 `\\?\UNC\server\share\…` 还原为 UNC 路径。
+- 窗口标题只取文件名，不再把 Windows 完整路径或扩展长度前缀暴露到标题。
+- OS 级打开在进入元素导航历史前先归一化；元素层能正确解析反斜杠 base、盘符绝对路径
+  和 UNC 路径，不会把 `C:` 误作外链 scheme，也不会把新的绝对盘符路径拼到旧目录后。
+- Windows Rust 测试创建真实目录联接（junction），证明 `readit://` 资源根会拒绝联接到
+  文档目录外部的文件。
+- Windows Rust 测试创建并打开超过 260 个 UTF-16 code unit 的 Markdown 路径；本机
+  `LongPathsEnabled=0`，测试依靠 canonical extended path 仍成功。由于方案明确要求在
+  `LongPathsEnabled=1` 的机器上还清 D2-27，本轮只记录实测，不关闭该债务。
+
+### 红灯与绿灯
+
+1. 壳路径测试先红：新模块尚不存在，且扩展长度路径仍以原始反斜杠进入路由；修复后
+   `document-path` 与 `navigation` 共 `7 passed / 0 failed`。
+2. 元素导航加入 Windows base 与盘符绝对路径用例后先有 2 个失败；归一化后该文件
+   `45 passed / 0 failed`。合并定向运行最终为 `3 files / 52 tests passed`。
+3. 目录联接测试的越界护栏被临时改为恒不执行后，测试由预期的
+   `OutsideDocumentRoot` 变为返回外部文件路径，证明断言对真实缺陷敏感；恢复护栏后通过。
+4. 长路径守卫中临时注入传统 260 字符拒绝分支后，定向测试按预期失败并报告
+   `injected legacy Windows path limit`；移除注入后通过。
+5. Windows GNU 下完整 Rust 库测试：`30 passed / 0 failed`。壳与元素 TypeScript
+   typecheck 均通过。Vitest 默认 forks 在当前沙箱以 `spawn EPERM` 失败，改用同一
+   Vitest 的 `vmThreads` 池后 52 个定向断言全部实际执行；不把前一次“no tests”当成功。
+
+### 六项真引擎清单结果
+
+结果已直接写回唯一清单 `2026-08-13-m6-manual-acceptance.md`，并增加 macOS/Windows
+平台列，没有复制第二份清单。本轮六项 Windows 结果为：第 1–5 项未执行，第 6 项只有
+体积数据。
+
+阻塞证据是可复现的：直接启动刚构建的 release exe 后，Tauri 在创建主 WebView2 窗口时
+退出并报告 `Failed to setup app: Access is denied (os error 5)`。把 WebView2 profile 和
+`LOCALAPPDATA` 临时指向可写的 `D:\robot` 后结果不变；Computer Use 初始化后列出了唯一
+资源管理器窗口，但环境明确返回 `Computer Use was not approved to use explorer`。因此没有
+取得应用窗口、截图或交互证据。
+
+这不是产品“通过”或“失败”的证据，而是测试环境阻塞。以下项目仍须在普通交互式 Windows
+会话完成：资源管理器双击与三种默认程序状态、直接二次进程 argv、Ctrl+F 单栏行为、
+原子/原地保存刷新、真 WebView2 Mermaid、5 次启动与 60 秒内存。Chromium 与自动化测试
+的绿色结果没有写成真 WebView2 结果。
+
 ## 待完成
 
 - W2：实现已完成；三种初始注册表状态的运行时验证仍受沙箱阻塞。
-- W3：实现已完成；真实 WebView2 中的行为并入 W4。
-- W4：在真实应用窗口执行六项人工验收，并补 Windows 路径/标题边界测试。
+- W3：实现已完成；真实 WebView2 行为仍受 W4 的环境阻塞。
+- W4：路径、junction 与长路径自动化已完成；六项真实窗口验收仍需在非沙箱 Windows
+  会话补验。
 - W5：Windows 发布、更新签名与双平台 `latest.json`。
 - W6：收口 README、SPEC、测试计划、债务与最终结论。

@@ -17,6 +17,7 @@ const SCHEME_RE = /^([a-zA-Z][a-zA-Z0-9+.-]*):/
 export function classifyHref(href: string): LinkKind {
   if (href === '') return 'ignore'
   if (href.startsWith('#')) return 'hash'
+  if (href.startsWith('\\\\')) return 'relative'
   if (href.startsWith('//')) return 'external'
   const match = SCHEME_RE.exec(href)
   const scheme = match?.[1]
@@ -55,14 +56,26 @@ export function resolveRelative(baseUrl: string, href: string): { path: string; 
   const hashIndex = href.indexOf('#')
   const rawPath = hashIndex === -1 ? href : href.slice(0, hashIndex)
   const hash = hashIndex === -1 ? '' : href.slice(hashIndex)
-  const decodedPath = decodePathSafely(rawPath)
+  const decodedRawPath = decodePathSafely(rawPath)
+  const decodedPath = normalizeWindowsPath(decodedRawPath)
+  const normalizedBaseUrl = normalizeWindowsPath(baseUrl)
 
-  if (decodedPath.startsWith('/')) {
-    return { path: authorityPrefixOf(baseUrl) + removeDotSegments(decodedPath), hash }
+  if (/^[a-zA-Z]:\//.test(decodedPath) || decodedRawPath.startsWith('\\\\')) {
+    return { path: removeDotSegments(decodedPath), hash }
   }
 
-  const baseDir = baseUrl.slice(0, baseUrl.lastIndexOf('/') + 1)
+  if (decodedPath.startsWith('/')) {
+    return { path: authorityPrefixOf(normalizedBaseUrl) + removeDotSegments(decodedPath), hash }
+  }
+
+  const baseDir = normalizedBaseUrl.slice(0, normalizedBaseUrl.lastIndexOf('/') + 1)
   return { path: removeDotSegments(baseDir + decodedPath), hash }
+}
+
+function normalizeWindowsPath(path: string): string {
+  if (path.startsWith('\\\\?\\UNC\\')) return `//${path.slice(8).replaceAll('\\', '/')}`
+  const withoutExtendedPrefix = path.startsWith('\\\\?\\') ? path.slice(4) : path
+  return withoutExtendedPrefix.replaceAll('\\', '/')
 }
 
 /**
