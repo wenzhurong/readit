@@ -212,3 +212,98 @@ SHA-256 `9bbbb2a88d1c6c49022f242f6c490c95cd94b500abb437e85bca7def4d0b40c8`。
    `.sig` 与单一 `latest.json`。本方案不推送、不创建线上 Release。
 5. M7 再处理 Authenticode、Apple Developer ID/公证和 SmartScreen/Gatekeeper 信任；
    Windows ARM64 也仍在 v1 x64 边界之外。
+
+---
+
+## 控制端复核（2026-08-18，macOS 26.5.2 / M1 Pro）
+
+复核的着眼点是**报告作者的环境看不见、而 macOS 能看见的东西**。结论：实现与报告都
+扎实，但分支当时**不可直接合并**——两个阻塞项，都是沙箱环境结构性看不到的那一类。
+
+### 🔴 阻塞 1：`npm test` 在规范路径下红 5 条（已修）
+
+`shell/test/windows-bundle.test.ts` 与 `shell/test/windows-installer.test.ts` 用
+`process.cwd()` 拼路径，隐含假设 cwd 是 `shell/`。规范命令 `npm test` 从仓库根跑，
+于是文件读成空串、断言以 `expected '' to contain …` 失败。
+
+**这一条最值得留档的是它怎么溜过去的**：报告自己写着「不能把等价拆跑写成『原命令
+通过』」——**这个判断完全正确，而正是那次在 `shell/` 目录内的拆跑（39/39）掩盖了缺陷**。
+分支上也没有任何 CI 运行记录，没有第二道闸。
+
+修的时候撞到第二层坑：直接照仓库根那几个测试（`ci-wiring` / `spec-sync` /
+`import-direction` / `offline-gate`）改成 `new URL(rel, import.meta.url)` **仍然失败**。
+实测原因是**壳这个 vitest project 的 environment 是 happy-dom**
+（`shell/vitest.config.ts:5`），它的 `URL` 按文档位置解析，把传入的 base 丢掉：
+
+```
+new URL('../src-tauri/tauri.conf.json', import.meta.url)
+  → http://localhost:3000/src-tauri/tauri.conf.json
+```
+
+最终改用纯 node 的 `dirname(fileURLToPath(import.meta.url))` + `join`，并把这两个坑
+写进了文件头注释。
+
+### 🔴 阻塞 2：macOS 上 `tauri build` 静默不产出任何包（已修）
+
+`"targets": ["nsis"]` 落在**基础** `tauri.conf.json` 里，对所有平台生效。macOS 实测：
+
+| | 结果 |
+|---|---|
+| 基础配置直接构建 | exit 0，打印 `Built application at: …/readit-shell`（裸二进制），**bundle/macos/ 下无产出** |
+| 对照 `--config targets:["app"]` | 正常产出 `.app` |
+
+不报错、只是什么都不生成。发布工作流传了显式 `--bundles` 所以线上不受影响，但任何本地
+macOS 构建都坏了，而 M6 清单第 6 项要求的正是「用 release 配置生成并安装 `.app`/`.dmg`」。
+
+已把 `targets` 从基础配置移进 `tauri.windows.conf.json`，并加了一条**反漂移守卫**
+断言基础配置不得再钉 `targets`（把缺陷注回基础配置验证过它变红：
+`expected [ 'nsis' ] to be undefined`）。修复后不带 `--bundles` 的构建重新产出
+`.app` + `.dmg`。
+
+### 🟡 clippy 警告（已修）
+
+`lib.rs` 的 `.setup(|app| …)` 里 `app` 只在 `#[cfg(windows)]` 分支用到，macOS 上留下
+`unused variable` 警告。改成 `|_app|`，与同文件 `app.run(move |_app_handle, _event|)`
+的既有写法一致。报告诚实地说了本轮跑不成 clippy、没有下结论，所以这不是虚报。
+
+### 🟡 记为 D2-30，未在本轮修改
+
+`packages/element/src/navigate.ts` 为 Windows 无条件把 `\` 换成 `/`，而那是共享库。
+POSIX 上反斜杠是合法文件名字符。理由与还清路径见台账 D2-30——简言之壳侧已在边界
+归一化，元素这层之所以还需要懂 Windows 只因为壳对 UNC 保留了反斜杠；但控制端在 macOS
+上无法验证改动后的 Windows 行为，贸然改会在无法复核的平台上制造回归。
+
+### ✅ 复核确认没问题的
+
+- **`RunEvent::Opened` 完好**。`app.run(move |app_handle, event|` → `|_app_handle, _event|`
+  的改名看着像删了 macOS 双击投递，专门查过，分支体原样保留。
+- `watcher.rs` 的修法正确且只动测试（关闭的断言通道不能跨 `notify` 的 extern 回调解栈）。
+- `releasing-macos.md` → `releasing-desktop.md` 改名无悬空引用，`updater.rs` 的
+  `include_str!` 已跟着改。
+- M6 清单加平台列时**没有丢掉 macOS 那一侧的结果**（5 勾 / 1 留空原样保留）。
+- 分支构建出的 macOS 应用**能装、能跑、渲染正常**（已装到 `/Applications` 并截图核对）。
+
+### 复核后的四条不变量（macOS 实测）
+
+| 不变量 | 值 |
+|---|---|
+| `npm test`（仓库根，规范命令） | **2869 通过 / 90 文件 / 0 失败** |
+| `npm run test:browser` | 72 通过 / 2 具名跳过 |
+| `cargo test` + `cargo clippy --all-targets` | 29 通过；**clippy 0 警告** |
+| `npm run typecheck` | 全绿（11 份 tsconfig） |
+| 债务台账条目数 | 17（新增 D2-30） |
+| 不带 `--bundles` 的 macOS 构建 | 产出 `.app` + `.dmg` |
+
+### 关于报告本身
+
+**这是整批交付里最强的部分。** 它三次主动拒绝拔高：clippy 跑不了就写「本轮没有新的
+clippy 结论」；拆跑就写「不能把等价拆跑写成原命令通过」；窗口起不来就把六项记「未执行」
+而不是「通过」或「失败」。证据自审表把「本机实测」与「读文档得出」分列，Playwright
+Chromium 没有被改写成 WebView2 信号。
+
+**而且正是这些自陈的保留意见把复核直接指向了两个阻塞项。** 如果报告粉饰过，它们会更晚
+才被发现——很可能是在第一个真实用户手里。
+
+W3 也值得记一笔：方案里推测 `with_webview()` → `ICoreWebView2Settings3` 也许能绕开给
+wry 打补丁，明确标注为「控制端未验证」。**执行方验证了，可行**，省掉了 SPEC §11.3
+当初假设的那笔补丁维护成本。
