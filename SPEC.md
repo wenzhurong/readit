@@ -24,7 +24,7 @@
 8. [美元护栏：行内数学的确定性规则集](#s8)
 9. [嵌入模型：Shadow DOM、主题、包布局](#s9)
 10. [桌面壳：Tauri 2.11](#s10)
-11. [数据流、导航与查找](#s11)
+11. [数据流、导航、查找与保存](#s11)
 12. [错误处理与安全](#s12)
 13. [测试架构](#s13)
 14. [落地顺序与验收线](#s14)
@@ -530,12 +530,17 @@ readit/
 ```ts
 mount(el, {
   value, mode: 'read'|'source'|'split'|'plain', shadow: true, theme: 'auto',
-  baseUrl, inlineMath: 'github', math: null, highlighter, emojiBase, onNavigate,
+  baseUrl, inlineMath: 'github', math: null, highlighter, emojiBase, onNavigate, onChange,
   loadHighlighter, loadMermaid,
 }) -> { setValue, getValue, setMode, setTheme, find, destroy }
 ```
 
 **四个模式。** `read` 只读渲染；`source` 用 CodeMirror 编辑源码；`split` 左源码右预览；**`'plain'` 是轻量编辑档——纯 textarea，不加载 CodeMirror**，给「想能改字但不想付 176,654 B」的嵌入方。
+
+**`onChange(value)`（默认 `null`）只报告用户编辑。** 宿主调用 `setValue()`、`setMode()`、
+`setTheme()` 或外部导航都不得触发它；否则「收到变化就保存」的宿主会形成回灌循环。
+已在两档编辑器、四次模式切换和程序化整体换值上分别钉住负向断言。⚠️ 本条于
+2026-08-18 随桌面保存能力新增；dirty 与“已保存”仍是宿主概念，不加入元素句柄。
 
 **`breaks`（默认 `false`）**：段落内的**软换行**要不要发 `<br>`。
 
@@ -612,6 +617,9 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 | Windows argv | 直接读裸 argv，**不要当 URL 解析**——Tauri 官方的文件关联示例就是这么错的，会丢掉 `C:\Users\…\file.md` |
 | 单实例 | `tauri-plugin-single-instance` 2.4.3，**第一个注册**，早于其他所有插件。第二次调用的 argv 路由进已开窗口的导航历史 |
 | 文件监听 | `notify`。⚠️ 原子保存的 rename 语义会骗过朴素 watcher |
+| 当前文档与保存 | Rust 独立持有规范化后的文件路径与单调 generation；资源根目录不是文件路径。`save_document` 不收路径，只接受内容与 generation，旧文档请求不能写到新文档 |
+| 原子写 | 目标同目录唯一临时文件 + flush/sync + 原子替换；保留权限，成功/失败都不留临时文件 |
+| 原生菜单与退出 | macOS 从 Tauri 完整默认菜单扩展 File/Save 与 View 模式项，**但应用菜单的 Quit 必须换成自建菜单项**：预定义 Quit 接的是 Cocoa `terminate:`，而 tao 没有实现 `applicationShouldTerminate:`，`RunEvent::ExitRequested` 根本不会发出——照抄默认菜单等于让 ⌘Q 静默丢弃未保存修改（2026-08-18 真机实测）。换掉之后，关窗、自建 Quit 与 ⌘Q 三条路径都经前端脏状态裁决；前端尚未 ready 时保持原生退出退路。⚠️ **Apple Event 退出（注销、关机、`osascript … to quit`）仍拦不住**，它同样落在 `terminate:` 上，在 tao 补上 `applicationShouldTerminate:` 之前没有拦截点 |
 | 更新 | 官方 updater + minisign 密钥对 + GitHub Releases 上的静态 `latest.json`。**不依赖 OS 代码签名**，证书没到位也能发更新 |
 
 ### 10.2 macOS 的 WebKit 版本
@@ -655,7 +663,7 @@ Mermaid 的已发布 Safari / 真 WKWebView 矩阵仍是 M6 的具名手工验�
 
 <a id="s11"></a>
 
-## 11. 数据流、导航与查找
+## 11. 数据流、导航、查找与保存
 
 ### 11.1 数据流
 
@@ -711,6 +719,39 @@ readit 查找栏。** Tauri 2.11.5 虽未暴露 wry 的 builder 开关，但
 受控会话在 Tauri 创建窗口阶段被系统错误 5 拒绝，不能把编译证据写成运行时通过。
 
 预算：3–6 KB 手写代码 + 2–3 KB 降级路径，无依赖。
+
+### 11.4 编辑与保存
+
+**归属：元素契约在 M4，桌面入口、文件能力与状态机在 M6。** 2026-08-18 补回
+§1.3 目标第 2 条在里程碑分解中丢失的归属。
+
+七条固定语义：
+
+1. `save_document` 不接受路径；Rust 只写当前文档 generation 对应的权威路径。
+2. 保存使用同目录临时文件和原子替换，并保留原权限。
+3. watcher 自写识别使用内容快照，不使用“保存后 N 毫秒忽略”时间窗。
+4. 外部变更遇到未保存修改时不覆盖，显示“使用磁盘版本 / 保留我的修改”。
+5. 只做手动保存（`Cmd/Ctrl+S`），并显示 dirty/saving 状态。
+6. 桌面壳只暴露 Reading / Source / Split；`plain` 仍是轻量嵌入档。
+7. dirty 由宿主维护；元素只发用户编辑 `onChange(value)`。
+8. **行尾在编辑器出口还原**：载入时全篇一致的 CRLF 原样写回磁盘，行尾不一致的文档
+   归一化为 LF。两档编辑器都存不住 CRLF（CodeMirror 的 `doc.toString()` 一律用 `\n`
+   拼行，`<textarea>` 的 API value 按 HTML 规范同样归一化），所以内部一律 LF、只在
+   `getValue()` 与 `onChange` 上还原。**不要改用 CodeMirror 的
+   `EditorState.lineSeparator`**：那个 facet 同时用于拆行，设成 `\r\n` 之后宿主再
+   `setValue()` 一份 LF 内容（「使用磁盘版本」正是这条路径）会把落单的 `\n` 变成行内
+   字面字符。⚠️ 本条于 2026-08-18 补上；此前 CRLF 文档编辑保存后整份文件被静默改写成
+   LF，而 Rust 的原子写一直是字节保真的——丢失发生在更上游。
+
+保存开始时捕获内容、document generation 与请求顺序；成功只把该快照设成
+`savedValue`，再比较当前值，不能无条件清 dirty。同一文档的保存串行；watcher 事件即使
+先于 IPC 成功响应，也通过请求内容识别自身回声。导航提供“保存并继续 / 放弃并继续 /
+取消”，关闭与退出提供对应三动作；保存期间又发生编辑时不得离开。
+
+桌面壳在宿主层监听跨 Shadow DOM 的 composition 事件。保存、模式切换、导航、watcher
+应用与退出都等 `compositionend` 的编辑器落账边界后再继续，因此壳自己不会在预编辑期间
+调用权威 `setValue()`。这不改变上文给任意嵌入宿主的 `setValue()` 契约；WebKit 真输入法
+自动化缺口 `GAP-IME-WEBKIT` 仍需第 7 项真机清单验证。
 
 ---
 
@@ -852,9 +893,9 @@ readit 查找栏。** Tauri 2.11.5 虽未暴露 wry 的 builder 开关，但
 | **M1** | Phase A 引擎 + L1 + 归一化器 + L2 + oracle 刷新脚本 | 672/672 GFM 减白名单；语料**全部通过，或失配已具名入棘轮台账并附不可修的理由**（见 §15 第 10 条） |
 | **M2** | 美元护栏 + 数学 | 159 条护栏语料 154 对、5 条具名偏离；数学黄金文件 + **顺序置换测试**过 |
 | **M3** | element + Shadow DOM + L3b + 高亮双默认 | 敌意宿主 fixture 下渲染不变（**达成**，2026-08-12 修复后，见下）；同页两实例测试过（达成） |
-| **M4** | 编辑器 + 滚动同步 + `mode:'plain'` 档 | IME 组合测试过（**若 Playwright 无法复现真实输入法行为，降级为手工验证并具名记录为覆盖缺口**——见计划二设计 §4.4） |
+| **M4** | 编辑器 + 滚动同步 + `mode:'plain'` 档 + 用户编辑 `onChange` 契约 | IME 组合测试过；`onChange` 只因用户编辑触发（**若 Playwright 无法复现真实输入法行为，降级为手工验证并具名记录为覆盖缺口**——见计划二设计 §4.4） |
 | **M5** | Mermaid：Phase A 保留本地 `.highlight-source-mermaid > pre`，Phase B 按需原地水合 | 真浏览器结构、错误/降级与断网断言 + 固定容器截图；运行时 SVG **不入字节快照** |
-| **M6** | 壳：文件关联、单实例、`readit://`、导航、查找、文件监听、更新器 | 双平台**真引擎**冒烟 |
+| **M6** | 壳：文件关联、单实例、`readit://`、导航、查找、文件监听、更新器、源码/分栏入口与原子手动保存 | 双平台**真引擎**冒烟；第 7 项覆盖编辑、dirty、冲突、IME 与关闭/退出保护 |
 | **M7** | 签名分发 | 见下 |
 
 ⚠️ **M3 的「敌意宿主 fixture 下渲染不变」验收线：曾未达成，2026-08-12 已修复并达成（D2-20）。**

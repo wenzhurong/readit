@@ -1,6 +1,6 @@
 # 可编辑与保存（供 Codex 执行）
 
-**日期**：2026-08-18　**前置**：`main` 在 `99f186d`，CI 四项全绿
+**日期**：2026-08-18　**前置**：以执行时的 `main` HEAD 与实测基线为准，不复用旧提交号或旧 CI 结论
 
 ## 0. 先读这一段
 
@@ -28,7 +28,7 @@ SPEC **§1.3 目标第 2 条**白纸黑字写着：
 | 编辑器两档（CodeMirror + textarea）共用同一张契约表 | `@readit/editor`，17 条包内测试 |
 | 双向滚动同步 | `packages/element/src/scroll/sync.ts` |
 | 编辑变更的内部通路 | `panes.ts:136` 的 `onChange` → `rerenderer.update` |
-| 当前文档的**权威路径** | `AppState.resources.current`（`protocol.rs:19`） |
+| 当前文档的资源根目录 | `AppState.resources.current`（`protocol.rs:19`）；它保存的是父目录，**不是当前文档路径** |
 | 文件监听认得原子替换 | 盯父目录 + 按路径过滤，M6 第 4 项实测过 rename 换 inode |
 | Tauri 菜单 API | 2.11.5 的 `menu` 模块齐备（`submenu`/`predefined`/`builders`） |
 | Windows 浏览器加速键已全局禁用 | W3 方案 B，所以 `Ctrl+S` 不会被 WebView2 抢走 |
@@ -48,7 +48,7 @@ SPEC **§1.3 目标第 2 条**白纸黑字写着：
 
 - **版本钉死**：Cargo 用 `=x.y.z`，npm 不写 `^`
 - **显式暂存路径，绝不 `git add -A`**
-- **提交身份已配好 `mmy420`，直接 `git commit`，不要改 git 配置。不要推送。**
+- **修改、提交、推送分阶段授权**：本方案授权实现不自动包含提交；每次提交前先确认账号，且不要改全局 Git 配置。未经明确授权不要推送。
 - **`npm test` 全程离线**，测试里不要发网络请求
 - **每个任务一个提交**，提交信息写**为什么**
 - **每条新增断言都要证明它会红**——把缺陷注回去看它变红，再改回来
@@ -65,14 +65,19 @@ Tauri IPC，导入即有副作用，**测不了**——台账 D2-24 记的正是
 
 ---
 
-## 1. 六条已裁决的语义（不要重新讨论）
+## 1. 七条已裁决的语义（不要重新讨论）
 
 控制端 2026-08-18 与用户共同裁决。**这些是前提，不是选项。**
 
 ### 裁决 1 — 保存写回「Rust 已持有的当前文档」，命令**不接受路径参数**
 
 `open_document(path)` 收任意路径，读是合理的（用户自己选的文件）。**写不行。**
-`AppState.resources.current` 已经存着规范化后的当前文档路径，`save_document` 只写那一份。
+Rust 壳必须新增独立的当前文档权威字段（例如
+`current_document: RwLock<Option<PathBuf>>`）。`AppState.resources.current` 只保存资源根目录，
+不能复用为文件路径。`save_document` 只写 Rust 壳持有的当前文档路径。
+
+该字段只在 `open_document` 完整成功后切换；打开、导航与保存必须带文档 generation 或等价的
+串行化约束，确保一次保存不会在等待期间落到另一份文档上。
 
 这样「webview 能写任意文件」这一整类风险直接不存在，不用靠消毒器兜底。
 **与 `external.rs` 同一条纪律：不要复用渲染端的分类当授权判据，壳自己维护权威。**
@@ -88,14 +93,18 @@ Tauri IPC，导入即有副作用，**测不了**——台账 D2-24 记的正是
 保存必然触发自己的 watcher。**不许用「刚写完 N 毫秒内忽略」**——那是又一个猜出来的
 常数，并发下必错，且这个项目已经因猜数字栽过两次。
 
-做法：重载拿到内容后，**若与编辑器当前值逐字节相同就什么都不做**（不调 `setValue`）。
-确定、无时序假设，还顺带覆盖「外部工具写了相同内容」。
+做法：状态机同时记录 `currentValue`、`savedValue`、`observedDiskValue` 与最近成功保存的内容快照。
+重载拿到内容后，若与编辑器当前值逐字节相同则不调 `setValue`；若它等于最近成功保存的快照，
+也把它视为自身写入的回声，即使用户已经继续编辑、当前值又变脏，也不弹外部冲突提示。
+判断完全由内容和文档 generation 决定，不依赖时间窗。
 
 ### 裁决 4 — 外部变更遇上未保存修改：**不自动覆盖，可见地提示**
 
 今天是无条件 `setValue`，脏内容直接没。只读时正确，可编辑后是数据丢失路径。
 
 有未保存修改时**不自动应用**外部变更，显示提示让用户选「用磁盘版本」或「保留我的修改」。
+「保留我的修改」后要记住已经拒绝的磁盘内容，同一内容的重复 watcher 事件不得反复弹窗；
+提示期间若磁盘再次变化，以最新一次内容为准。
 依据是项目自己的原则：**降级必须可见**（SPEC §12，`data-readit-pending` 是先例）。
 **静默丢用户输入比任何降级都糟。**
 
@@ -144,8 +153,10 @@ Tauri IPC，导入即有副作用，**测不了**——台账 D2-24 记的正是
 
 ### E2 — 壳：模式入口
 
-**macOS**：原生菜单栏加 View 子菜单（Reading / Source / Split），带 accelerator。
-与 C7 当初选原生菜单同一理由：更贴 macOS 习惯，且不依赖 webview 是否拿到焦点。
+**macOS**：在保留默认 App/File/Edit/View/Window/Help 能力（特别是 Undo/Redo、剪切/复制/
+粘贴、Select All、全屏）的基础上扩展菜单；不能用精简自定义菜单覆盖 Tauri 默认菜单。
+View 下加入 Reading / Source / Split 的 `CheckMenuItem`，accelerator 分别为
+`CmdOrCtrl+1/2/3`；File 下加入 Save（`CmdOrCtrl+S`）。
 
 **Windows**：没有菜单栏，用 window 捕获键盘监听——照 `find-shortcut.ts` 的既有形状
 （`connectFindShortcut` 那条 window capture 监听）。**W3 已经全局禁用了浏览器加速键，
@@ -159,31 +170,51 @@ Tauri IPC，导入即有副作用，**测不了**——台账 D2-24 记的正是
 - 切到 `source`/`split` 时 CodeMirror 才第一次动态加载（P1 的懒加载边界），首次切换有
   延迟。**确认它不会看起来像卡死**——需要的话给一个可见的加载态。
 - 当前模式要在菜单里可见（选中态），否则用户不知道自己在哪一档。
+- 首次加载 CodeMirror 时显示确定性的 pending 状态；不能仅靠人工观察「看起来不像卡死」。
+- 从前端或快捷键切换模式后，要同步原生菜单的选中态。
+
+### 1.1 执行语义补充（实现前必须满足）
+
+这些条目消除上述裁决落到异步壳层时的歧义，不新增产品选项：
+
+- **保存快照**：保存开始时捕获内容、文档 generation 与请求序号。成功后只把该快照记为
+  `savedValue`，再以 `currentValue !== savedValue` 重算脏状态；绝不能无条件清脏。
+- **保存排序**：同一文档的保存串行执行，旧 generation 或旧请求的完成结果不能覆盖新状态。
+- **使用磁盘版本**：把最新磁盘内容应用到元素，同时令 current/saved/observed 三者一致并清脏。
+- **保留我的修改**：保持 current 与 dirty，更新 observed；下一次手动保存允许覆盖磁盘。
+- **脏状态导航**：提供「保存并继续 / 放弃并继续 / 取消」。保存失败时停留在原文档。
+- **脏状态关闭或退出**：提供「保存并退出 / 放弃并退出 / 取消」。macOS `Cmd+Q` 也必须走
+  同一流程，不能只依赖 `beforeunload`。
+- **原生关闭桥接**：Rust 同时拦截 `CloseRequested` 与 `ExitRequested`，由前端异步决定后再执行；
+  必须有无前端/启动失败时的退路，不能把应用锁死。
 
 ---
 
 ### E3 — Rust：`save_document` 命令
 
-**签名不带路径**（裁决 1）。写回 `AppState.resources.current`。
+**签名不带路径**（裁决 1）。写回 Rust 壳独立持有的 `current_document`，不能写
+`AppState.resources.current`（那是资源根目录）。
 
 ```
-save_document(content: String, state) -> Result<(), String>
+save_document(content: String, generation: u64, state) -> Result<(), String>
 ```
 
 **必须做的**：
 - 原子写：同目录临时文件 + `rename`（裁决 2）。**同目录**——跨设备 rename 会失败。
+- 临时文件名唯一，并用 create-new 语义避免踩到已有文件；原子替换后保留原文件权限。
 - 失败时清理临时文件，不留垃圾
 - 没有已打开文档时明确报错，不要静默成功
 - 目标仍须通过 `is_markdown`（与 `open_document` 同一守卫）
-- 写入后**同步更新自己对内容的记账**，供裁决 3 的内容比对使用（或者把比对完全放前端，
-  两种都可以，**写明你选了哪种以及为什么**）
+- 内容记账放前端纯状态机：dirty、异步请求与 UI 都是宿主概念；Rust 只负责权威路径和写入能力。
+- 把文件系统操作抽成可注入的窄接口，使「临时文件已创建后 rename 失败」能稳定单测。
 
 **验收**：
 - 写入字节与传入内容完全一致（含 CRLF / 尾随换行 / 非 ASCII）
 - rename 之后 inode 变了、内容对（M6 第 4 项已经证明我们的 watcher 认得这个）
 - 无文档时报错
 - 临时文件在成功与失败两条路径上都不残留
-- **权限被拒时**（只读文件、只读目录）错误可读，不是 panic
+- **权限被拒时**错误可读，不是 panic。POSIX 的原子替换主要受目录权限约束，不能把
+  「只读文件一定失败」写成跨平台断言；使用只读目录（平台限定）或注入失败稳定覆盖。
 
 ---
 
@@ -196,15 +227,18 @@ save_document(content: String, state) -> Result<(), String>
 | 事件 | 行为 |
 |---|---|
 | 元素 `onChange` | 标脏；记下当前值 |
-| `Cmd/Ctrl+S` | 调 `save_document`；成功 → 清脏；失败 → 可见报错，**保持脏** |
-| 文件监听触发、**不脏** | 拿到磁盘内容；**与当前值逐字节比对**（裁决 3），相同则什么都不做，不同则 `setValue` |
-| 文件监听触发、**脏** | **不自动应用**（裁决 4），交给 E5 提示 |
-| 导航到别的文档时脏 | 先提示，不要直接走掉 |
-| 关窗时脏 | 先提示 |
+| `Cmd/Ctrl+S` | 捕获内容、generation 和请求序号后排队调用 `save_document`；成功只更新 `savedValue` 并重算 dirty；失败 → 可见报错，**保持脏** |
+| watcher 内容等于当前值 | 更新 observed 后结束，不调 `setValue` |
+| watcher 内容等于最近保存快照 | 视为自身写入回声；即使当前又变脏也不提示 |
+| 文件监听触发、**不脏** | 不同则 `setValue`，并令 current/saved/observed 一致 |
+| 文件监听触发、**脏** | **不自动应用**（裁决 4），去重后交给 E5 提示；提示期间保留最新磁盘内容 |
+| 导航到别的文档时脏 | 「保存并继续 / 放弃并继续 / 取消」 |
+| 关窗或退出时脏 | 「保存并退出 / 放弃并退出 / 取消」 |
 
 **验收**：这个模块要能在**不启动应用**的情况下被单测覆盖——纯状态机，依赖用参数注入
 （照 `createWatchedDocumentReloader(currentPath, reload, reportError, delayMs)` 的形状）。
-**每条转移一条断言，每条都要证明会红。**
+**每条转移一条断言，每条都要证明会红。** 另加两条时序回归：保存 A 期间编辑成 B，
+A 成功后 B 仍脏；A 的 watcher 回声到达时不把 B 当外部冲突。
 
 ---
 
@@ -212,7 +246,9 @@ save_document(content: String, state) -> Result<(), String>
 
 - **脏标记**：窗口标题加约定记号（macOS 的 `documentEdited` 或标题前缀），或状态区可见提示
 - **冲突提示**：两个动作——「用磁盘版本」（丢弃本地改动）与「保留我的修改」（忽略这次外部变更）
+- **导航/关闭提示**：三个动作——保存后继续、放弃后继续、取消；保存失败不得继续
 - 提示必须**可见且可操作**，不是 `console.warn`
+- 原生窗口关闭和应用退出必须经过同一状态机；`beforeunload` 只做清理，不承担数据保护
 
 依据是 SPEC §12「降级必须可见」，元素侧的 `data-readit-pending` 是既有先例。
 
@@ -220,10 +256,11 @@ save_document(content: String, state) -> Result<(), String>
 
 ### E6 — 文档与台账收口
 
-- **SPEC**：M4/M6 里程碑行按实际改；§9.4 补 `onChange` 契约；**把保存语义（六条裁决）
+- **SPEC**：M4/M6 里程碑行按实际改；§9.4 补 `onChange` 契约；**把保存语义（七条裁决）
   写进 §11**，带日期。§1.3 目标第 2 条终于有了归属，值得在修订里点明这条缺口是怎么发现的。
-- **台账 D2-28**（壳没有模式切换入口 → M4 够不着）：E2 做完即可还清。**顺带把 M6 清单
-  第 6 项的「四大件」口径改回来**——CodeMirror 可达之后，那条注记不再成立。
+- **台账 D2-28**（壳没有模式切换入口 → M4 够不着）：E2 做完即可还清。M6 清单
+  第 6 项未来复测恢复「四大件」口径；2026-08-17 的 172.4 MB 是实现前已完成的三大件
+  历史测量，不能追溯性改写。
 - **README**：加「编辑与保存」一节，写清模式怎么切、怎么保存、外部变更怎么处置。
 - **M6 验收清单**：**不要新建第二份**。在
   `docs/plans/2026-08-13-m6-manual-acceptance.md` 里加第 7 项，覆盖：切到 source/split →
@@ -257,9 +294,41 @@ save_document(content: String, state) -> Result<(), String>
 7. **`plain` 档不进壳**（裁决 6），但 `getValue()` 在它上面本来就能用——
    **不要把保存做成模式相关的**，它只该依赖「当前值」。
 
+8. **异步保存成功不等于当前内容已保存**。只能把请求开始时的快照设为 `savedValue`，
+   然后重新比较当前值；禁止直接 `dirty = false`。
+
+9. **同一次自身保存的 watcher 回声可能晚于下一次编辑**。识别依据是保存内容快照与
+   document generation，不是「当前是否脏」，也不是时间窗。
+
+10. **macOS 退出不等于关闭当前窗口**。`Cmd+Q` 可能只产生 `ExitRequested`；只接
+    `beforeunload` 或 `CloseRequested` 都不完整。
+
 ---
 
-## 4. 明确不在范围
+## 4. 执行记录（2026-08-18）
+
+- **E0**：已纠正资源根目录/当前文件路径混淆，并补齐 generation、异步保存、watcher
+  回声、三动作离开语义、默认菜单保留和原生退出桥接。
+- **E1**：`MountOptions.onChange` 已落地；只转发用户编辑，程序化 `setValue`、四模式切换
+  与主题切换不触发。单元断言完成缺陷回注；双浏览器用例已写入，当前受本机 loopback
+  监听沙箱阻塞而未执行。
+- **E2**：macOS 从 Tauri 完整默认菜单扩展 File/Save 与 View 三模式项；Windows 使用
+  capture 快捷键。首次动态加载有可见 pending，原生模式选中态与前端同步。
+- **E3**：Rust 独立持有当前文档路径与 generation；同目录 `tempfile` 原子替换、权限保留、
+  flush/sync、成功/失败清理均已覆盖。旧 generation 写入被拒绝。
+- **E4**：状态机位于独立 `save-state.ts`；保存串行、快照重算 dirty、IPC 响应前 watcher
+  回声、自写后继续编辑、冲突去重与最新值、导航保存失败等路径均有单测。
+- **E5**：标题/状态区显示 dirty/saving；外部冲突和导航/关闭/退出均有可操作提示；Rust
+  同时拦截 `CloseRequested`/`ExitRequested`，只在前端监听器 ready 后启用。壳用真实
+  composition 事件门推迟保存、模式、watcher、导航和退出，不扩张元素公开 API。
+- **E6**：SPEC、README、D2-28 与既有 M6 手工清单已同步；第 7 项双平台真机验收保持
+  未执行，不以自动化替代。
+
+**本轮没有 commit 或 push。** 完整自动化结果与环境阻塞以最终执行报告为准。
+
+---
+
+## 5. 明确不在范围
 
 | 项 | 原因 |
 |---|---|
@@ -271,9 +340,9 @@ save_document(content: String, state) -> Result<(), String>
 
 ---
 
-## 5. 报告
+## 6. 报告
 
-新建 `docs/plans/2026-08-18-editing-and-save-report.md`：
+已生成 `docs/plans/2026-08-18-editing-and-save-report.md`，内容包括：
 
 - 每个任务：改了什么、**先红后绿的命令与实际输出**
 - **每条新增断言「验证它会红」那一步的证据**——尤其 E1 的「`setValue` 不触发
@@ -284,5 +353,5 @@ save_document(content: String, state) -> Result<(), String>
 - **自审：哪些结论来自实际运行、哪些来自阅读文档——两者不许混**
 - 阶段边界：做完之后「可编辑并保存」这条 v1 目标还差什么
 
-**提交**：每任务一个提交；身份已配好 `mmy420`，直接 `git commit`；
-显式列暂存路径，**绝不 `git add -A`**；**不要推送**。
+**提交阶段尚未授权、尚未执行。** 若用户另行授权，按任务边界显式列暂存路径，
+**绝不 `git add -A`**；每次提交前先确认账号，不假定固定身份，也不要自动推送。

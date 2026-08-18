@@ -16,6 +16,7 @@
 
 - [它是什么形状](#它是什么形状)
 - [安装与运行（桌面）](#安装与运行桌面)
+- [桌面编辑与保存](#桌面编辑与保存)
 - [保真度模型：与什么一致，以及为什么不是 100%](#保真度模型与什么一致以及为什么不是-100)
 - [架构：Phase A / Phase B](#架构phase-a--phase-b)
 - [包](#包)
@@ -40,7 +41,7 @@
    加上主题、四种模式（只读 / 源码 / 分栏 / 轻量编辑）、导航、查找、
    以及按需水合的高亮与 Mermaid。
 3. **桌面壳**（`shell/`，Tauri 2.11）——文件关联、单实例、`readit://` 资源协议、
-   文件监听、更新器。Rust 层**刻意保持薄**，迭代留在 JS 里。
+   文件监听、源码/分栏入口、原子保存与更新器。Rust 层**刻意保持薄**，迭代留在 JS 里。
 
 **"可被内嵌"是承重需求，不是附赠**：第 1、2 层不依赖第 3 层，宿主可以只要引擎、
 或只要组件。组件在 Shadow DOM 里，且有一条真浏览器测试证明它在**敌意宿主**
@@ -138,6 +139,21 @@ npm run tauri --workspace=readit-shell-frontend -- build --bundles nsis `
 3. 从候选应用中选择 readit。
 
 也可以在资源管理器中右键文件 → **打开方式 → 选择其他应用**，选 readit 并确认始终使用。
+
+---
+
+## 桌面编辑与保存
+
+- Reading / Source / Split：macOS 从 **View** 菜单切换，也可用 `Cmd+1/2/3`；Windows
+  使用 `Ctrl+1/2/3`。模式跨文档保持。`plain` 只供嵌入方使用，不进入桌面壳。
+- 保存：macOS 使用 **File → Save** 或 `Cmd+S`，Windows 使用 `Ctrl+S`。只手动保存，
+  不自动保存；标题前的 `●` 和右上角“未保存”表示磁盘还没有当前内容。
+- 保存采用目标文件同目录的临时文件 + 原子替换，Rust 不接受渲染端提供的写入路径；
+  旧文档 generation 的延迟请求不能写到新文档。
+- 磁盘在本地有未保存修改时再次变化，readit 不会覆盖输入，而会显示“使用磁盘版本 /
+  保留我的修改”。打开另一文件、关闭窗口或退出时提供保存、放弃、取消三种动作。
+- 中文输入法组合期间，壳会等 `compositionend` 后再保存、切模式、应用 watcher 内容或离开。
+  这条仍须在真实 WKWebView / WebView2 完成手工验收清单第 7 项。
 
 ---
 
@@ -245,6 +261,9 @@ const view = mount(document.getElementById('host'), {
   value: '# Hi\n\n- [x] done\n',
   mode: 'read',      // 'read' | 'source' | 'split' | 'plain'
   theme: 'auto',     // 'auto' | 'light' | 'dark'
+  onChange(value) {  // 只因用户编辑触发；setValue/setMode/setTheme 不触发
+    console.log(value)
+  },
 })
 
 view.setValue('# Changed\n')
@@ -347,9 +366,9 @@ cd shell/src-tauri && cargo test # Rust 侧
 | M1 | Phase A 引擎 + 规格套件 + 归一化器 + oracle 脚本 | ✅ |
 | M2 | 美元护栏 + 数学 | ✅ |
 | M3 | element + Shadow DOM + L3b + 高亮双默认 | ✅ |
-| M4 | 编辑器 + 滚动同步 + `plain` 档 | ✅ |
+| M4 | 编辑器 + 滚动同步 + `plain` 档 + `onChange` | ✅ |
 | M5 | Mermaid | ✅ |
-| **M6** | 壳：关联、单实例、`readit://`、导航、查找、监听、更新器 | 🟡 macOS 六项真机验收已执行：5 项通过、1 项按规则留空；Windows 壳、NSIS 与发布矩阵已实现，**真 WebView2 六项受测试环境阻塞、仍未执行** |
+| **M6** | 壳：关联、单实例、`readit://`、导航、查找、监听、编辑/原子保存、更新器 | 🟡 原六项 macOS 真机验收已执行：5 项通过、1 项按规则留空；新增第 7 项编辑/保存两平台均待真机；Windows 原六项仍受环境阻塞 |
 | M7 | 签名分发 | ⬜ |
 
 ---
@@ -369,12 +388,13 @@ cd shell/src-tauri && cargo test # Rust 侧
   这一轮**抓出四个真缺陷**（出货应用里语法高亮从未生效、Mermaid 长标签被裁、图层护栏
   被 `classDef` 绕过、查找命中不滚进视野），**四个在库层、Rust 层、happy-dom 层乃至
   Playwright 层都是绿的**。全部已修。自动化不能替代真机，这一轮是最直接的证据。
-- **壳没有模式切换入口**，`mount()` 不传 `mode`、全仓没有 `setMode` 调用——**M4 的编辑器
-  对应用用户不可达**，M6 的「四个大件同时」在壳内只能凑到三个。见台账 D2-28。
+- **编辑与保存已实现但尚未取得双平台真引擎验收。** 自动化已覆盖用户编辑回调、原子替换、
+  异步保存竞争、watcher 自写回声、冲突选择和原生退出握手；真实 WKWebView/WebView2 的
+  菜单、输入法、文件权限和关闭/退出行为仍以手工清单第 7 项为准。D2-28 已在实现层还清。
 - **Windows 壳已实现，但真 WebView2 仍是零验收覆盖。** 当前可构建当前用户 NSIS，
   文件关联不抢默认、单实例 argv、扩展长度路径/junction 守卫、Ctrl+F 与跨平台 updater
   workflow 均有自动化证据；受控测试会话在创建 WebView2 窗口时被系统错误 5 拒绝，
-  六项真机清单保持未执行。详见 Windows 壳报告，不能把 Chromium 代理信号写成通过。
+  七项真机清单保持未执行。详见 Windows 壳报告与新增第 7 项，不能把 Chromium 代理信号写成通过。
 - **IME 在 WebKit 上是具名缺口**（`GAP-IME-WEBKIT`）：WKWebView 没有等价于 CDP
   `Input.imeSetComposition` 的入口，四条真机组合测试整体跳过，跳过的标题就是缺口名。
 - **`npm audit` 报 2 high。** 两条都评估过、都不可达：`js-yaml` 的两条通告都依赖
@@ -391,11 +411,11 @@ cd shell/src-tauri && cargo test # Rust 侧
 |---|---|
 | `SPEC.md` | **上位契约。** 产品级规格，7 个里程碑，每条决策带理由与实测出处 |
 | `docs/plans/2026-08-08-plan2-debt.md` | **债务台账。** 每条具名、带出处、可核验 |
-| `docs/plans/2026-08-13-m6-manual-acceptance.md` | M6 的六项真机手工清单 |
+| `docs/plans/2026-08-13-m6-manual-acceptance.md` | M6 的七项真机手工清单 |
 | `docs/plans/2026-08-17-windows-shell.md` | Windows 壳构建方案 |
 | `docs/plans/2026-08-17-windows-shell-report.md` | Windows 壳实现、测试证据与剩余边界 |
 | `docs/plans/2026-08-18-windows-acceptance-runbook.md` | **Windows 真机验收操作手册** —— 六项在 Windows 上逐条怎么跑 |
-| `docs/plans/2026-08-18-editing-and-save.md` | **可编辑与保存方案** —— 六条语义裁决 + E1–E6 分解 |
+| `docs/plans/2026-08-18-editing-and-save.md` | **可编辑与保存方案** —— 七条语义裁决 + E1–E6 分解 |
 | `docs/windows-test-plan.md` | Windows 侧验证方案 |
 | `docs/windows-debug-report-2026-08-14.md` | Windows 真机验证报告 |
 | `docs/releasing-desktop.md` | macOS/Windows updater 签名与桌面发布 |
