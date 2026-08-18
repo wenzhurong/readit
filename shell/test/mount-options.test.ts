@@ -29,3 +29,26 @@ describe('壳的挂载选项', () => {
     expect(before).toContain('SPEC §9.4')
   })
 })
+
+/**
+ * 同样是文本守卫。`documentWindowTitle()` 是纯函数、单测覆盖得到，但「有没有人把它
+ * 送到原生标题栏」测不了——而 2026-08-18 的真机验收发现的正是这一类：函数算得对，
+ * 只是没人调用 setTitle()，标题栏从头到尾都是「readit」。
+ */
+describe('壳的原生窗口标题', () => {
+  it('把标题送到原生标题栏，而不是只设 document.title', () => {
+    const src = main()
+    expect(src).toContain('getCurrentWindow().setTitle(')
+    expect(src).toContain('documentWindowTitle(state.path, state.dirty)')
+  })
+
+  it('能力清单里授了 set-title —— 缺了它这条特性会静默失效', () => {
+    // 2026-08-18 实测：能力清单里没有这条时，setTitle() 被 Tauri 的权限系统拒掉，
+    // 标题栏一直停在「readit」，而界面上没有任何可见报错。接线对、权限没给，
+    // 表现和「根本没写这段代码」完全一样。
+    const capability = JSON.parse(
+      readFileSync(join(SHELL_DIR, 'src-tauri/capabilities/main.json'), 'utf8'),
+    ) as { permissions: readonly string[] }
+    expect(capability.permissions).toContain('core:window:allow-set-title')
+  })
+})

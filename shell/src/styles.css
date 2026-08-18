@@ -35,6 +35,68 @@ body {
   color: #cf222e;
 }
 
+#document-state {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 9;
+  margin: 0;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid ButtonBorder;
+  border-radius: 999px;
+  color: GrayText;
+  background: Canvas;
+  font-size: 0.75rem;
+}
+
+#conflict,
+#leave-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  z-index: 20;
+  display: flex;
+  width: min(40rem, calc(100vw - 2rem));
+  box-sizing: border-box;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border: 1px solid ButtonBorder;
+  border-radius: 0.75rem;
+  background: Canvas;
+  box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 22%);
+  transform: translateX(-50%);
+}
+
+#conflict[hidden],
+#leave-prompt[hidden] {
+  display: none;
+}
+
+#conflict h2,
+#leave-prompt h2,
+#conflict p,
+#leave-prompt p {
+  margin: 0;
+}
+
+#conflict h2,
+#leave-prompt h2 {
+  margin-bottom: 0.35rem;
+  font-size: 1rem;
+}
+
+.prompt-actions {
+  display: flex;
+  flex: none;
+  gap: 0.5rem;
+}
+
+.prompt-actions button {
+  font: inherit;
+}
+
 #update {
   position: fixed;
   right: 1rem;

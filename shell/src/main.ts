@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { mount, type MountHandle } from 'readit/element'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { mount, type Mode, type MountHandle } from 'readit/element'
 import './styles.css'
 import { createHighlighterLoader, createMermaidLoader } from './loaders.js'
 import { routeDocumentOpen } from './navigation.js'
@@ -12,15 +13,27 @@ import {
 import { connectUpdateNotice } from './updates.js'
 import { connectExternalLinks } from './external-links.js'
 import { connectFindShortcut } from './find-shortcut.js'
-import { documentFileName, normalizeDocumentPath } from './document-path.js'
+import { connectEditShortcuts } from './edit-shortcuts.js'
+import { createCompositionGate } from './composition-gate.js'
+import { createLeavePrompt, type LeaveKind } from './leave-prompt.js'
+import { createSaveState, type SaveDocumentRef, type SaveStateSnapshot } from './save-state.js'
+import { documentWindowTitle, normalizeDocumentPath } from './document-path.js'
 
-interface DocumentPayload {
-  readonly path: string
-  readonly source: string
+interface DocumentPayload extends SaveDocumentRef {}
+
+interface ModeEventPayload {
+  readonly mode: Extract<Mode, 'read' | 'source' | 'split'>
+}
+
+interface LeaveEventPayload {
+  readonly kind: Extract<LeaveKind, 'close' | 'exit'>
 }
 
 const DOCUMENTS_PENDING_EVENT = 'readit-documents-pending'
 const DOCUMENT_CHANGED_EVENT = 'readit-document-changed'
+const MODE_EVENT = 'readit-set-mode'
+const SAVE_EVENT = 'readit-save-requested'
+const LEAVE_EVENT = 'readit-leave-requested'
 
 function requireElement(selector: string): HTMLElement {
   const element = document.querySelector<HTMLElement>(selector)
@@ -28,13 +41,33 @@ function requireElement(selector: string): HTMLElement {
   return element
 }
 
+function requireButton(selector: string): HTMLButtonElement {
+  const element = document.querySelector<HTMLButtonElement>(selector)
+  if (element === null) throw new Error(`readit shell is missing ${selector}`)
+  return element
+}
+
 const host = requireElement('#reader')
 const status = requireElement('#status')
+const documentState = requireElement('#document-state')
+const conflict = requireElement('#conflict')
+const useDisk = requireButton('#use-disk')
+const keepMine = requireButton('#keep-mine')
 const updateNotice = requireElement('#update')
 const updateMessage = requireElement('#update-message')
-const installUpdate = requireElement('#install-update') as HTMLButtonElement
+const installUpdate = requireButton('#install-update')
+const leavePrompt = createLeavePrompt({
+  root: requireElement('#leave-prompt'),
+  title: requireElement('#leave-title'),
+  message: requireElement('#leave-message'),
+  save: requireButton('#leave-save'),
+  discard: requireButton('#leave-discard'),
+  cancel: requireButton('#leave-cancel'),
+})
+const compositionGate = createCompositionGate(host)
 
 let handle: MountHandle | null = null
+let currentMode: Extract<Mode, 'read' | 'source' | 'split'> = 'read'
 let stopObservingResources: (() => void) | null = null
 let navigationTail: Promise<void> = Promise.resolve()
 let draining = false
@@ -49,62 +82,117 @@ function displayError(error: unknown): void {
   status.textContent = error instanceof Error ? error.message : String(error)
 }
 
+let shownTitle = ''
+
+function renderSaveState(state: SaveStateSnapshot): void {
+  const title = documentWindowTitle(state.path, state.dirty)
+  if (title !== shownTitle) {
+    shownTitle = title
+    document.title = title
+    // 原生标题栏不跟随 document.title，必须显式设。理由见 documentWindowTitle。
+    void getCurrentWindow().setTitle(title).catch(displayError)
+  }
+  documentState.hidden = !state.dirty && !state.saving
+  documentState.textContent = state.saving
+    ? state.dirty ? '正在保存；仍有未保存修改' : '正在保存…'
+    : state.dirty ? '未保存' : ''
+}
+
+const saveState = createSaveState({
+  write: (content, generation) => invoke('save_document', { content, generation }),
+  applyValue: (value) => handle?.setValue(value),
+  stateChanged: renderSaveState,
+  conflictChanged: (value) => {
+    conflict.hidden = value === null
+    if (value !== null) keepMine.focus()
+  },
+  reportError: displayError,
+})
+
 const stopExternalLinks = connectExternalLinks(host, {
   openExternal: (url) => invoke('open_external', { url }),
   showFeedback: (message) => displayError(new Error(message)),
 })
 const stopFindShortcut = connectFindShortcut(window, () => handle)
 
+function setShellMode(mode: Extract<Mode, 'read' | 'source' | 'split'>): void {
+  void compositionGate.wait().then(() => {
+    currentMode = mode
+    handle?.setMode(mode)
+    return invoke('set_mode_menu', { mode })
+  }).catch(displayError)
+}
+
+function requestSave(): void {
+  void compositionGate.wait().then(() => saveState.save())
+}
+
+const stopEditShortcuts = navigator.userAgent.includes('Windows')
+  ? connectEditShortcuts(window, { setMode: setShellMode, save: requestSave })
+  : (): void => {}
+
+useDisk.addEventListener('click', () => saveState.resolveConflict('use-disk'))
+keepMine.addEventListener('click', () => saveState.resolveConflict('keep-mine'))
+
 function showDocument(documentPayload: DocumentPayload): void {
   currentDocumentPath = documentPayload.path
-  document.title = `${documentFileName(documentPayload.path)} — readit`
   status.hidden = true
   status.removeAttribute('data-kind')
   if (handle !== null) {
     handle.setValue(documentPayload.source)
-    return
+  } else {
+    handle = mount(host, {
+      value: documentPayload.source,
+      mode: currentMode,
+      baseUrl: normalizeDocumentPath(documentPayload.path),
+      // SPEC §9.4: the desktop shell reads authored local files, whose editors conventionally
+      // render soft line breaks. The reusable element keeps its GitHub-compatible breaks: false
+      // default; only the shell deliberately opts into the local-editor convention.
+      breaks: true,
+      emojiBase: '/emoji/',
+      loadHighlighter: createHighlighterLoader(),
+      loadMermaid: createMermaidLoader(),
+      onNavigate: (path) => queueNavigation(path),
+      onChange: (value) => saveState.userChanged(value),
+    })
+    stopObservingResources = observeLocalResources(host)
   }
-
-  handle = mount(host, {
-    value: documentPayload.source,
-    baseUrl: normalizeDocumentPath(documentPayload.path),
-    // **桌面壳在这一条上刻意偏离 GitHub。** 引擎默认 breaks: false，那是 GitHub 对
-    // 仓库里 .md 文件的行为（packages/core/test/breaks.test.ts 从抓回的语料里逐份
-    // 重算并钉住）。但桌面壳读的是作者硬盘上的文件，不是仓库页面：
-    //
-    // 写这些文件的地方（Cursor / VS Code 预览、Obsidian、Typora，以及 GitHub 自己的
-    // 评论区）一律把软换行当换行，作者也就按那个观感在写。把阅读器钉死在仓库那一套，
-    // 等于要求用户回头改掉全部历史文档 —— 2026-08-18 在一份真实文档上量过：
-    // 同一个目录下 506 份 .md 里 52 份依赖这个行为。
-    //
-    // 偏离已记进 SPEC §9.4。**这一条不适用于库**：嵌入方要的正是 GitHub 形状，
-    // 所以默认值留在引擎里不动，只有壳显式抬起它。
-    //
-    // 已知限制：这里是挂载期一次性设定。换文档走的是 handle.setValue() 而不是重挂
-    // （重挂会清掉元素的历史栈，前进/后退就没了），所以 frontmatter 的
-    // `readit-breaks` 逐文档覆盖在壳里不生效 —— 那条通道是给库宿主的。
-    breaks: true,
-    emojiBase: '/emoji/',
-    loadHighlighter: createHighlighterLoader(),
-    loadMermaid: createMermaidLoader(),
-    onNavigate: (path) => queueNavigation(path),
-  })
-  stopObservingResources = observeLocalResources(host)
+  saveState.load(documentPayload)
 }
 
 async function openAndShow(path: string): Promise<void> {
+  // A discarded navigation may happen while a manually-started save is still in flight. Let the
+  // old generation finish before open_document publishes the next Rust authority.
+  await saveState.whenSavesSettle()
   showDocument(await invoke<DocumentPayload>('open_document', { path }))
 }
 
+async function mayNavigate(): Promise<boolean> {
+  await compositionGate.wait()
+  if (!saveState.snapshot().dirty) return true
+  const decision = await leavePrompt.request('navigate')
+  return await saveState.prepareToLeave(decision)
+}
+
 function queueNavigation(path: string): Promise<void> {
-  const next = navigationTail.then(() => openAndShow(path))
+  const next = navigationTail.then(async () => {
+    if (!(await mayNavigate())) return
+    await openAndShow(path)
+  })
   navigationTail = next.catch(() => {})
   return next
 }
 
 const watchedDocumentReloader = createWatchedDocumentReloader(
   () => currentDocumentPath,
-  queueNavigation,
+  async () => {
+    await compositionGate.wait()
+    const generation = saveState.snapshot().generation
+    if (generation === null) return
+    const source = await invoke<string>('read_current_document', { generation })
+    if (saveState.snapshot().generation !== generation) return
+    saveState.diskChanged(source)
+  },
   displayError,
 )
 
@@ -129,6 +217,18 @@ async function drainPendingDocuments(): Promise<void> {
   }
 }
 
+async function handleNativeLeave(kind: Extract<LeaveKind, 'close' | 'exit'>): Promise<void> {
+  await compositionGate.wait()
+  const decision = saveState.snapshot().dirty ? await leavePrompt.request(kind) : 'discard'
+  const allowed = await saveState.prepareToLeave(decision)
+  if (!allowed) {
+    await invoke('cancel_leave')
+    return
+  }
+  await saveState.whenSavesSettle()
+  await invoke('complete_leave', { kind })
+}
+
 void (async () => {
   stopListening.push(
     await listen(DOCUMENTS_PENDING_EVENT, () => {
@@ -137,7 +237,18 @@ void (async () => {
     await listen<WatchedDocumentChange>(DOCUMENT_CHANGED_EVENT, (event) => {
       watchedDocumentReloader.handle(event.payload)
     }),
+    await listen<ModeEventPayload>(MODE_EVENT, (event) => setShellMode(event.payload.mode)),
+    await listen(SAVE_EVENT, requestSave),
+    await listen<LeaveEventPayload>(LEAVE_EVENT, (event) => {
+      void handleNativeLeave(event.payload.kind).catch(async (error) => {
+        displayError(error)
+        await invoke('cancel_leave').catch(displayError)
+      })
+    }),
   )
+  // Native close/quit interception is enabled only after every corresponding listener exists.
+  await invoke('frontend_ready')
+  await invoke('set_mode_menu', { mode: currentMode })
   await drainPendingDocuments()
 })().catch(displayError)
 
@@ -161,6 +272,9 @@ window.addEventListener('beforeunload', () => {
   stopUpdateNotice?.()
   stopExternalLinks()
   stopFindShortcut()
+  stopEditShortcuts()
+  compositionGate.destroy()
+  leavePrompt.destroy()
   stopObservingResources?.()
   handle?.destroy()
 })

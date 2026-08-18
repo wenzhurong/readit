@@ -9,6 +9,28 @@
     <main id="app">
       <div id="reader" aria-live="polite"></div>
       <p id="status">请从 Finder 打开一个 Markdown 文件。</p>
+      <p id="document-state" hidden aria-live="polite"></p>
+      <aside id="conflict" hidden role="alertdialog" aria-labelledby="conflict-title">
+        <div>
+          <h2 id="conflict-title">文件已在其他程序中更改</h2>
+          <p>当前文档还有未保存修改。请选择要保留的版本。</p>
+        </div>
+        <div class="prompt-actions">
+          <button id="use-disk" type="button">使用磁盘版本</button>
+          <button id="keep-mine" type="button">保留我的修改</button>
+        </div>
+      </aside>
+      <aside id="leave-prompt" hidden role="alertdialog" aria-modal="true" aria-labelledby="leave-title">
+        <div>
+          <h2 id="leave-title"></h2>
+          <p id="leave-message"></p>
+        </div>
+        <div class="prompt-actions">
+          <button id="leave-save" type="button"></button>
+          <button id="leave-discard" type="button"></button>
+          <button id="leave-cancel" type="button">取消</button>
+        </div>
+      </aside>
       <aside id="update" hidden aria-live="polite">
         <span id="update-message"></span>
         <button id="install-update" type="button">安装并重启</button>
