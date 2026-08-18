@@ -24,6 +24,7 @@ export interface ReaditFixtureApi {
   destroy(id: string): void
   destroyAll(): void
   readonly navigations: string[]
+  readonly changes: string[]
   connectShellExternalLinks(hostId: string): void
   shellExternalLinkState(): { opened: readonly string[]; feedback: readonly string[] }
   probeShellResourceRewrite(): string | null
@@ -57,6 +58,7 @@ export interface ReaditFixtureApi {
 
 const handles = new Map<string, Handle>()
 const navigations: string[] = []
+const changes: string[] = []
 const shellExternalOpened: string[] = []
 const shellExternalFeedback: string[] = []
 const shellExternalStops = new Map<string, () => void>()
@@ -68,7 +70,11 @@ const api: ReaditFixtureApi = {
     const host = document.getElementById(hostId)
     if (host === null) throw new Error(`fixture: no host #${hostId}`)
     const id = `h${(seq += 1)}`
-    handles.set(id, mount(host, { onNavigate: (path: string) => { navigations.push(path) }, ...opts }))
+    handles.set(id, mount(host, {
+      onNavigate: (path: string) => { navigations.push(path) },
+      onChange: (value: string) => { changes.push(value) },
+      ...opts,
+    }))
     return id
   },
   mountWithMermaid(hostId, opts) {
@@ -79,6 +85,7 @@ const api: ReaditFixtureApi = {
       id,
       mount(host, {
         onNavigate: (path: string) => { navigations.push(path) },
+        onChange: (value: string) => { changes.push(value) },
         ...opts,
         loadMermaid: async () => {
           // 专用转发模块给 Rollup 一个稳定的 load-mermaid-* chunk 名，
@@ -108,6 +115,7 @@ const api: ReaditFixtureApi = {
     shellFindStop = null
   },
   navigations,
+  changes,
   connectShellExternalLinks(hostId) {
     const host = document.getElementById(hostId)
     if (host === null) throw new Error(`fixture: no host #${hostId}`)

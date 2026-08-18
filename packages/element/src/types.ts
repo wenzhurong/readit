@@ -28,6 +28,11 @@ export interface MountOptions {
   emojiBase: string
   onNavigate: ((path: string) => void) | null
   /**
+   * 只在用户编辑源码时触发，携带最新全文。宿主调用 setValue()、setMode()、
+   * setTheme() 或发生外部导航时都不得触发。
+   */
+  onChange: ((value: string) => void) | null
+  /**
    * 高亮器的异步加载器（task-17-brief「新增契约提案」第 2 条）。P1 禁止
    * @readit/element 在运行时 import @readit/highlight，而 SPEC §5.1 又要求
    * 「首次遇到围栏语言」才加载那份体积——两条同时成立的唯一办法是加载器

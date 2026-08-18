@@ -59,6 +59,42 @@ test('setTheme 换的是自己的调色板，不是文档的', async ({ page }) 
   expect(dark.doc).toBeNull()
 })
 
+test('onChange 只报告真实编辑，程序化写值与切模式不报告', async ({ page }) => {
+  await page.goto('/host.html')
+  const id = await mountDoc(page, 'a', { value: DOC, mode: 'source', theme: 'light' })
+  const editor = page.locator('#a .cm-content')
+  await expect(editor).toBeVisible()
+
+  // **必须用真键盘，不能用 locator.fill()。** 2026-08-18 实测：`.cm-content` 是
+  // CodeMirror 的 contenteditable，`fill()` 在 WebKit 上是**空操作**——文档内容原样
+  // 不变（domText 仍是挂载值），于是 onChange 不触发也是正确的，测试却会红成
+  // 「功能坏了」。Chromium 上 fill() 恰好能改到，所以这个差异只在 WebKit 显形。
+  //
+  // 仓库里既有的编辑器输入走 CDP `Input.insertText`（browser/editor/ime.spec.ts），
+  // 那是 Chromium 独有的——GAP-IME-WEBKIT 就是这么来的。真键盘是三个引擎都有、
+  // 且最接近真实用户编辑的那条路。
+  await editor.click()
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.keyboard.type('X')
+  await expect
+    .poll(async () => await page.evaluate(() => window.readitFixture.changes.at(-1) ?? null))
+    .toBe('X')
+
+  // 逐键触发，所以这里钉「程序化操作**没有再加**任何一条」，而不是钉总数等于 1。
+  const afterEdit = await page.evaluate(() => window.readitFixture.changes.length)
+  expect(afterEdit).toBeGreaterThan(0)
+
+  await page.evaluate((handle) => {
+    const mounted = window.readitFixture.get(handle)
+    mounted.setValue('# Programmatic\n')
+    mounted.setMode('split')
+    mounted.setMode('read')
+    mounted.setMode('source')
+    mounted.setTheme('dark')
+  }, id)
+  expect(await page.evaluate(() => window.readitFixture.changes.length)).toBe(afterEdit)
+})
+
 /**
  * Task 18（批次 5 返工，见 batch-5-report.md）端到端验证：SPEC §9.2 说对外
  * 只开两个覆写通道之一是 `--readit-*`。这条不是 css-bridge.test.ts 那种字符串层

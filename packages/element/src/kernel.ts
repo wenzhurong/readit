@@ -29,6 +29,7 @@ export const DEFAULT_MOUNT_OPTIONS: MountOptions = {
   highlighter: null,
   emojiBase: GITHUB_EMOJI_BASE,
   onNavigate: null,
+  onChange: null,
   loadHighlighter: null,
   loadMermaid: null,
 }
@@ -230,6 +231,9 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
       // 是「属性存在」，空字符串仍然存在，角标不会消失。
       if (pending.length === 0) delete host.dataset['readitPending']
       else host.dataset['readitPending'] = pending.join(' ')
+    },
+    onChange(value: string): void {
+      opts.onChange?.(value)
     },
     onPainted(): void {
       for (const fn of afterRender) fn()

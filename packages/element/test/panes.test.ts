@@ -89,6 +89,7 @@ describe('createPanes：模式状态机', () => {
 
   it('plain 档里打字会重渲预览（走防抖 → 帧）', async () => {
     const { content, sourcePane } = host()
+    const onChange = vi.fn()
     const panes = createPanes({
       content,
       sourcePane,
@@ -100,6 +101,7 @@ describe('createPanes：模式状态机', () => {
       measure: () => 0,
       disposers: createDisposers(),
       onPending: () => {},
+      onChange,
     })
     // 先在真时钟下把编辑器建好（动态 import 需要真实的异步 I/O，见 waitFor()
     // 的注释），再切假时钟去测防抖窗口——两件事不能同时用同一套时钟。
@@ -118,6 +120,8 @@ describe('createPanes：模式状态机', () => {
     vi.advanceTimersByTime(20)
     expect(content.innerHTML).toContain('Changed')
     expect(panes.getValue()).toBe('# Changed')
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(onChange).toHaveBeenLastCalledWith('# Changed')
     panes.destroy()
     raf.mockRestore()
     vi.useRealTimers()

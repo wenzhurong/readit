@@ -87,6 +87,9 @@ export const BASE_CSS = `
   margin: 0; padding: 16px; white-space: pre-wrap; overflow-wrap: anywhere;
   font: 12px/1.45 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
+.readit-source-pending {
+  margin: 0; padding: 16px; color: GrayText; font: 13px/1.45 system-ui, sans-serif;
+}
 /*
  * Task 17：两个编辑器实现都不会自己把高度撑满 .readit-source——<textarea>
  * 没有显式 height 时按 rows 属性算一个很小的默认高度；CodeMirror 的

@@ -51,6 +51,7 @@ describe('mount 的默认值', () => {
       highlighter: null,
       emojiBase: 'https://github.githubassets.com/images/icons/emoji/',
       onNavigate: null,
+      onChange: null,
       loadHighlighter: null,
       loadMermaid: null,
     })
@@ -115,6 +116,19 @@ describe('read 模式渲染', () => {
 })
 
 describe('模式状态机', () => {
+  it('程序化 setValue/setMode/setTheme 都不触发 onChange', () => {
+    const onChange = vi.fn()
+    const kernel = createKernel(makeHost(), resolveMountOptions({ value: DOC, onChange }))
+    kernel.setValue('# Programmatic\n')
+    kernel.setMode('source')
+    kernel.setMode('split')
+    kernel.setMode('plain')
+    kernel.setMode('read')
+    kernel.setTheme('dark')
+    expect(onChange).not.toHaveBeenCalled()
+    kernel.destroy()
+  })
+
   it('read 只显示预览窗格', () => {
     const kernel = createKernel(makeHost(), resolveMountOptions({ value: DOC }))
     expect(kernel.content.hidden).toBe(false)
@@ -155,8 +169,10 @@ describe('模式状态机', () => {
    */
   it('source 模式异步建出真实的 CodeMirror 编辑器', async () => {
     const kernel = createKernel(makeHost(), resolveMountOptions({ value: DOC, mode: 'source' }))
+    expect(kernel.sourcePane.querySelector('[data-editor="pending"]')?.textContent).toContain('正在加载')
     await waitFor(() => kernel.sourcePane.querySelector('.cm-editor') !== null)
     expect(kernel.sourcePane.querySelector('.cm-editor')).not.toBeNull()
+    expect(kernel.sourcePane.querySelector('[data-editor="pending"]')).toBeNull()
     expect(kernel.sourcePane.querySelector('pre.readit-source-fallback')).toBeNull()
   })
 

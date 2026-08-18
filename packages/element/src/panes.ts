@@ -37,6 +37,8 @@ export interface PanesOptions {
   disposers: Disposers
   /** 把「还缺什么能力」交给宿主落成 data-readit-pending（§0.1 G4）。 */
   onPending(pending: readonly PendingCapability[]): void
+  /** 只转发编辑器的用户输入；宿主 setValue() 不走这条边。 */
+  onChange?(value: string): void
   /**
    * 每次 HTML 落地之后触发，在 synthesizeHtmlAnchors/scrollSync.invalidate()
    * 之后调用。kernel.ts 用它补 part="code-block"（Phase A 输出字节是冻结的，
@@ -128,7 +130,18 @@ export function createPanes(opts: PanesOptions): Panes {
     opts.sourcePane.replaceChildren(pre)
   }
 
+  const showEditorPending = (): HTMLElement => {
+    const pending = opts.sourcePane.ownerDocument.createElement('p')
+    pending.className = 'readit-source-pending'
+    pending.setAttribute('data-editor', 'pending')
+    pending.setAttribute('role', 'status')
+    pending.textContent = '正在加载源码编辑器…'
+    opts.sourcePane.append(pending)
+    return pending
+  }
+
   const buildEditor = async (kind: EditorKind, mine: number): Promise<void> => {
+    const pending = showEditorPending()
     const editorOptions: EditorOptions = {
       parent: opts.sourcePane,
       root: opts.root,
@@ -136,6 +149,7 @@ export function createPanes(opts: PanesOptions): Panes {
       onChange: (next) => {
         value = next
         rerenderer.update(next)
+        opts.onChange?.(next)
       },
       onScroll: (topLine) => {
         sync?.fromEditor(topLine)
@@ -150,6 +164,7 @@ export function createPanes(opts: PanesOptions): Panes {
         created.destroy()
         return
       }
+      pending.remove()
       editor = created
       sync = createScrollSync({
         source: created,
