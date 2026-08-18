@@ -86,6 +86,7 @@ function createReaditElement(): CustomElementConstructor {
           mode: readEnum(this, 'mode', isMode, 'read'),
           theme: readEnum(this, 'theme', isTheme, 'auto'),
           inlineMath: readEnum(this, 'inline-math', isInlineMath, 'github'),
+          breaks: this.hasAttribute('breaks'),
           shadow: this.getAttribute('shadow') !== 'false',
           baseUrl: this.getAttribute('base-url') ?? '',
           emojiBase: this.getAttribute('emoji-base') ?? GITHUB_EMOJI_BASE,

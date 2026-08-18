@@ -14,6 +14,15 @@ export interface MountOptions {
   // 与 @readit/core 的 InlineMathMode 结构相同。这里按 P4 逐字写出联合类型，
   // 而不是复用那个别名 —— 契约怎么写的，签名就怎么读。
   inlineMath: 'github' | 'strict' | 'off'
+  /**
+   * 段落内软换行是否发 `<br>`。默认 `false` —— 那是 GitHub 对仓库里 `.md` 文件的
+   * 行为（实测：6 份真实抓取的语料里，段落内软换行产出 0 个 `<br>`）。
+   *
+   * 置 `true` 得到的是**编辑器预览那一套**（Cursor / VS Code / Obsidian，也是
+   * GitHub 评论区的行为）。本地文档阅读器有正当理由选它——见
+   * `RenderOptions.breaks` 的完整理由。
+   */
+  breaks: boolean
   math: MathRenderer | null
   highlighter: Highlighter | null
   emojiBase: string

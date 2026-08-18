@@ -174,11 +174,13 @@ function registerReaditRaw(md: MarkdownIt): void {
  * markdown-it 自身的文本转义直接吞掉——集成测试跑通之前这里原来就是
  * `html: opts.allowDangerousHtml`，是本任务发现并修的第一处装配 bug。
  */
-function baseEngine(): MarkdownIt {
+function baseEngine(breaks = false): MarkdownIt {
   return new MarkdownItConstructor({
     html: true,
     xhtmlOut: false,
-    breaks: false,
+    // 默认 false = GitHub 的 .md 文件渲染，也是 CommonMark 规格套件（L1）要的值；
+    // createSpecEngine 不传参，永远走这一档。只有 createEngine 会按宿主选项抬起它。
+    breaks,
     langPrefix: 'language-',
     // linkify-it 6 把 fuzzyLink 默认关了；GFM 扩展自动链接由 SEMANTIC_RULES 里的
     // 自写规则移植（SPEC §6 规则 1）。这里必须保持 false，不要改回 true。
@@ -189,7 +191,7 @@ function baseEngine(): MarkdownIt {
 
 /** 完整引擎：语义规则 + 外形规则。render() 走这条。 */
 export function createEngine(opts: RenderOptions): MarkdownIt {
-  const md = baseEngine()
+  const md = baseEngine(opts.breaks)
   registerReaditRaw(md)
   for (const apply of SEMANTIC_RULES) apply(md)
   for (const apply of SHAPE_RULES) apply(md)

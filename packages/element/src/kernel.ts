@@ -24,6 +24,7 @@ export const DEFAULT_MOUNT_OPTIONS: MountOptions = {
   theme: 'auto',
   baseUrl: '',
   inlineMath: 'github',
+  breaks: false,
   math: null,
   highlighter: null,
   emojiBase: GITHUB_EMOJI_BASE,
@@ -214,6 +215,7 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
     mode: opts.mode,
     renderOptions: {
       inlineMath: opts.inlineMath,
+      breaks: opts.breaks,
       math: opts.math,
       highlighter: opts.highlighter,
       emojiBase: opts.emojiBase,

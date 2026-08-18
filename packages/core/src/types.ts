@@ -16,6 +16,35 @@ export const GITHUB_EMOJI_BASE = 'https://github.githubassets.com/images/icons/e
 
 export interface RenderOptions {
   inlineMath: InlineMathMode
+  /**
+   * 段落内的**软换行**（单个换行、行尾没有两个空格也没有反斜杠）要不要发 `<br>`。
+   *
+   * **默认 `false`，因为那才是 GitHub。** 这一条是量出来的不是记出来的：
+   * `packages/core/test/fixtures/real-world/` 里 6 份从 github.com 抓回的 HTML，
+   * 对应源码里的段落内软换行，**GitHub 产出 0 个由它们而来的 `<br>`**
+   * （mermaid.html 里那 6 个全部来自源码显式写的 `<br>`/`<br/>`）。
+   * 由 `packages/core/test/breaks.test.ts` 逐份重算并钉住；软换行的**条数**取决于
+   * 「什么算段落内软换行」的判据，那条测试里写死了它用的那一套。
+   * 语料逐字节比对跑的就是这个默认值，**不要改它**。
+   *
+   * ## 那为什么还要有这个选项
+   *
+   * 与 `emojiBase` 同一性质：保真度与另一条真实需求冲突，选项是冲突的出口。
+   *
+   * GitHub 自己也分两套——**评论/issue 里换行就是换行**（`breaks: true`），
+   * **仓库里的 `.md` 文件不是**。而绝大多数本地编辑器（Cursor / VS Code 预览、
+   * Obsidian、Typora）按前一套渲染。于是同一份文档在「写它的地方」和「GitHub 上」
+   * 长得不一样，作者通常按前者的观感在写。
+   *
+   * 一个**本地文档阅读器**面对的是作者硬盘上的文件，不是仓库页面。把它钉死在
+   * 后一套，等于要求用户改掉自己全部历史文档。所以：**引擎默认保真，宿主可以
+   * 选择另一套，并且这个选择必须是显式的**。
+   *
+   * 三个入口，优先级由宿主决定：`render(src, { breaks })`、
+   * `mount({ breaks })`、以及文档自己的 frontmatter `readit-breaks: true`
+   * （见 `readFrontmatterOptions`，与 `readit-inline-math` 同一机制）。
+   */
+  breaks: boolean
   math: MathRenderer | null
   highlighter: Highlighter | null
   allowDangerousHtml: boolean
@@ -47,6 +76,8 @@ export interface RenderOptions {
 
 export const DEFAULT_OPTIONS: Readonly<RenderOptions> = Object.freeze({
   inlineMath: 'github',
+  // false = GitHub 的 .md 文件渲染。语料比对依赖它，改这个值会让 56/68 变红。
+  breaks: false,
   math: null,
   highlighter: null,
   allowDangerousHtml: false,

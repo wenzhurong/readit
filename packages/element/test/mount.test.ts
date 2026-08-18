@@ -44,6 +44,9 @@ describe('mount 的默认值', () => {
       theme: 'auto',
       baseUrl: '',
       inlineMath: 'github',
+      // false = GitHub 对仓库 .md 文件的行为。宿主要编辑器预览那一套（软换行发
+      // <br>）得显式开——见 MountOptions.breaks。
+      breaks: false,
       math: null,
       highlighter: null,
       emojiBase: 'https://github.githubassets.com/images/icons/emoji/',

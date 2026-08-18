@@ -75,7 +75,7 @@ function openingFrontmatterBody(src: string): string | null {
  * callers decide how to merge it into API/application defaults. Rendering remains a
  * separate operation, so reading never consumes the visible frontmatter table.
  */
-export function readFrontmatterOptions(src: string): { inlineMath?: InlineMathMode } {
+export function readFrontmatterOptions(src: string): { inlineMath?: InlineMathMode; breaks?: boolean } {
   const body = openingFrontmatterBody(src)
   if (body === null) return {}
   const parsed = parseFrontmatter(body)
@@ -88,6 +88,18 @@ export function readFrontmatterOptions(src: string): { inlineMath?: InlineMathMo
     return {}
   }
 
-  const value = (parsed.data as Record<string, unknown>)['readit-inline-math']
-  return value === 'github' || value === 'strict' || value === 'off' ? { inlineMath: value } : {}
+  const data = parsed.data as Record<string, unknown>
+  const out: { inlineMath?: InlineMathMode; breaks?: boolean } = {}
+
+  const inlineMath = data['readit-inline-math']
+  if (inlineMath === 'github' || inlineMath === 'strict' || inlineMath === 'off') {
+    out.inlineMath = inlineMath
+  }
+
+  // 只认真正的 YAML 布尔。CORE_SCHEMA 下 `true` / `false` 已经是 boolean，
+  // 字符串 "true" 不是——不做字符串宽容，那会让「写错了」和「关掉了」无法区分。
+  const breaks = data['readit-breaks']
+  if (typeof breaks === 'boolean') out.breaks = breaks
+
+  return out
 }
