@@ -537,6 +537,36 @@ mount(el, {
 
 **四个模式。** `read` 只读渲染；`source` 用 CodeMirror 编辑源码；`split` 左源码右预览；**`'plain'` 是轻量编辑档——纯 textarea，不加载 CodeMirror**，给「想能改字但不想付 176,654 B」的嵌入方。
 
+**`breaks`（默认 `false`）**：段落内的**软换行**要不要发 `<br>`。
+
+⚠️ **本条于 2026-08-18 新增，并且它是本项目第一条「壳刻意偏离 GitHub」的记录，
+所以理由要写足。**
+
+默认 `false` 是量出来的：`packages/core/test/fixtures/real-world/` 的 6 份 HTML 直接
+抓自 github.com，逐份重算后**由软换行产生的 `<br>` 为 0**（mermaid 那几个来自源码里
+显式写的 `<br>`）。`packages/core/test/breaks.test.ts` 把这个 0 钉住了 —— 语料的逐字节
+比对跑的正是这个默认值，**改它会让 56/68 变红**。
+
+**但 GitHub 自己就有两套**：仓库里的 `.md` 文件不把软换行当换行，**评论 / issue 会**。
+而写这些文件的地方（Cursor / VS Code 预览、Obsidian、Typora）一律按后一套渲染，
+作者也就按那个观感在写。
+
+于是产生一条真实冲突：**桌面壳读的是作者硬盘上的文件，不是仓库页面。** 2026-08-18 在
+一个真实目录里量过：506 份 `.md` 中 **52 份**依赖「一行就是一行」。把阅读器钉死在仓库
+那一套，等于要求用户回头改掉全部历史文档。
+
+**裁决**：引擎默认保真（`false`），**桌面壳显式置 `true`**（`shell/src/main.ts`，
+带理由注释，`shell/test/mount-options.test.ts` 守着它不被无声改掉）。
+**库这一侧不变**——嵌入方要的正是 GitHub 形状。
+
+这与 `emojiBase` 是同一种东西：保真度与另一条真实需求冲突时，选项是冲突的出口，
+而不是把冲突藏起来。三个入口：`render(src, { breaks })`、`mount({ breaks })`、
+文档 frontmatter `readit-breaks: true`（与 `readit-inline-math` 同一机制）。
+
+⚠️ **壳里 frontmatter 那条通道不生效**：换文档走 `handle.setValue()` 而不是重挂
+（重挂会清掉元素的历史栈，前进/后退就没了），所以 `breaks` 在壳里是挂载期一次性设定。
+那条通道是给库宿主的。
+
 **`loadHighlighter` 带形参**：`(languages: readonly string[]) => Promise<Highlighter>`。
 形参是到目前为止见过的全部围栏语言的并集（小写、去重），文档换到新语言时元素会带着
 新的并集**再调一次**、用返回值整体替换旧实例。

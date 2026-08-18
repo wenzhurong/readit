@@ -68,6 +68,22 @@ function showDocument(documentPayload: DocumentPayload): void {
   handle = mount(host, {
     value: documentPayload.source,
     baseUrl: normalizeDocumentPath(documentPayload.path),
+    // **桌面壳在这一条上刻意偏离 GitHub。** 引擎默认 breaks: false，那是 GitHub 对
+    // 仓库里 .md 文件的行为（packages/core/test/breaks.test.ts 从抓回的语料里逐份
+    // 重算并钉住）。但桌面壳读的是作者硬盘上的文件，不是仓库页面：
+    //
+    // 写这些文件的地方（Cursor / VS Code 预览、Obsidian、Typora，以及 GitHub 自己的
+    // 评论区）一律把软换行当换行，作者也就按那个观感在写。把阅读器钉死在仓库那一套，
+    // 等于要求用户回头改掉全部历史文档 —— 2026-08-18 在一份真实文档上量过：
+    // 同一个目录下 506 份 .md 里 52 份依赖这个行为。
+    //
+    // 偏离已记进 SPEC §9.4。**这一条不适用于库**：嵌入方要的正是 GitHub 形状，
+    // 所以默认值留在引擎里不动，只有壳显式抬起它。
+    //
+    // 已知限制：这里是挂载期一次性设定。换文档走的是 handle.setValue() 而不是重挂
+    // （重挂会清掉元素的历史栈，前进/后退就没了），所以 frontmatter 的
+    // `readit-breaks` 逐文档覆盖在壳里不生效 —— 那条通道是给库宿主的。
+    breaks: true,
     emojiBase: '/emoji/',
     loadHighlighter: createHighlighterLoader(),
     loadMermaid: createMermaidLoader(),
