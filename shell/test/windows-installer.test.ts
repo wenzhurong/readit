@@ -1,10 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const repoRoot = join(process.cwd(), '..')
-const platformConfigPath = join(process.cwd(), 'src-tauri/tauri.windows.conf.json')
-const hooksPath = join(process.cwd(), 'src-tauri/windows/installer-hooks.nsh')
+// 路径解析的两个坑见 windows-bundle.test.ts 顶部：process.cwd() 不是 shell/，
+// 而 new URL(rel, import.meta.url) 在 happy-dom 环境下会丢掉 base。
+const SHELL_DIR = join(dirname(fileURLToPath(import.meta.url)), '..')
+const REPO_ROOT = join(SHELL_DIR, '..')
+const platformConfigPath = join(SHELL_DIR, 'src-tauri/tauri.windows.conf.json')
+const hooksPath = join(SHELL_DIR, 'src-tauri/windows/installer-hooks.nsh')
 
 function textIfPresent(path: string): string {
   return existsSync(path) ? readFileSync(path, 'utf8') : ''
@@ -35,7 +39,7 @@ describe('Windows installer association policy', () => {
   })
 
   it('documents the user-controlled Default apps flow', () => {
-    const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8')
+    const readme = readFileSync(join(REPO_ROOT, 'README.md'), 'utf8')
 
     expect(readme).toContain('设置 → 应用 → 默认应用')
     expect(readme).toContain('不会静默抢占')
