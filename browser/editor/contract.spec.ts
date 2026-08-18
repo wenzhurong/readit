@@ -7,7 +7,7 @@ import { expect, mountDoc, test } from '../support/harness.js'
  * getBoundingClientRect），happy-dom 不提供，只有这里能跑——不补上这一半，
  * 「两个实现才算验证过一个抽象」这句话就只兑现了一半（批次 6 报告的原话）。
  *
- * plain 档跑全部 7 条；codemirror 档跑 6 条——「组合期间的 setValue 被推迟」
+ * plain 档跑全部 8 条；codemirror 档跑 7 条——「组合期间的 setValue 被推迟」
  * 那一条被 contract.ts 的 supportsSyntheticComposition 开关排除在外：
  * CodeMirror 6 的 view.composing 只在真的观察到一次组合期间的文本变更时才
  * 置真，`dispatchEvent()` 派发的合成 CompositionEvent 驱动不了它（这是本批
@@ -16,14 +16,14 @@ import { expect, mountDoc, test } from '../support/harness.js'
  * 真实驱动，比合成事件更严格，不是自我肯定。
  */
 test.describe('L3b-editor：两个实现共用同一张 P2 契约表', () => {
-  test('plain 档满足 P2 的 Editor 契约（7 条）', async ({ page }) => {
+  test('plain 档满足 P2 的 Editor 契约（8 条）', async ({ page }) => {
     await page.goto('/host.html')
     await page.waitForFunction(() => window.readitFixture !== undefined)
     const failures = await page.evaluate(async () => window.readitFixture.runEditorContract('plain'))
     expect(failures).toEqual([])
   })
 
-  test('codemirror 档满足 P2 的 Editor 契约（6/7 条，组合期推迟改由 ime.spec.ts 用真实 CDP 验证）', async ({
+  test('codemirror 档满足 P2 的 Editor 契约（7/8 条，组合期推迟改由 ime.spec.ts 用真实 CDP 验证）', async ({
     page,
   }) => {
     await page.goto('/host.html')

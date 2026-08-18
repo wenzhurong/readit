@@ -153,6 +153,41 @@ export function editorContractCases(create: EditorFactory, env: ContractEnv): Co
         assertEqual(parent.childElementCount, 0, 'parent.childElementCount after destroy')
       },
     },
+    {
+      // 两档实现都存不住 CRLF——CodeMirror 的 doc.toString() 一律用 \n 拼行，
+      // <textarea> 的 API value 按 HTML 规范也归一化成 LF——所以这条契约管的是
+      // **出口**：进来什么行尾，出去还是什么行尾。放在共用表里是因为两档必须一致：
+      // 宿主在 source 与 plain 之间切模式时，值会在两个实现之间搬运，谁的出口
+      // 编码不一样，切一次模式就静默改写了整份文件的行尾。
+      name: '行尾在出口还原：全篇 CRLF 原样保留，混合行尾归一化为 LF',
+      async run() {
+        const sink = { changes: [] as string[], scrolls: [] as number[] }
+        const { ed, parent } = await make('a\r\nb\r\n', sink)
+        assertEqual(ed.getValue(), 'a\r\nb\r\n', 'getValue 保留载入时的 CRLF')
+
+        // 承重的是 onChange 这条：桌面壳保存写盘的是 onChange 带回来的内容，
+        // 不是 getValue()。这里只断言**编码**、不断言正文，因为不同引擎经
+        // execCommand('insertText') 插入换行后的确切收尾并不一致，而受测的性质
+        // 是行尾编码本身。
+        env.type(parent, 'x\ny\n')
+        await waitFor(() => sink.changes.length > 0)
+        const last = sink.changes[sink.changes.length - 1] ?? ''
+        assertEqual(last.includes('\r\n'), true, 'onChange 应按 CRLF 出口')
+        assertEqual(
+          last.split('\r\n').join('').includes('\n'),
+          false,
+          'onChange 里不得残留裸 LF',
+        )
+
+        // 整体换文档时行尾跟着新内容走：桌面壳的「使用磁盘版本」会走这条路径，
+        // 磁盘上那一版的行尾未必与载入时相同。
+        ed.setValue('p\nq\n')
+        assertEqual(ed.getValue(), 'p\nq\n', 'setValue 换成 LF 文档后跟着变 LF')
+        ed.setValue('m\r\nn\no\r\n')
+        assertEqual(ed.getValue(), 'm\nn\no\n', '行尾不一致的文档归一化为 LF')
+        ed.destroy()
+      },
+    },
   ]
 
   // 插在「setValue 不回灌」之后、「用户输入触发 onChange」之前，保持与旧顺序

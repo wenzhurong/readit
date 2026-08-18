@@ -1,3 +1,4 @@
+import { detectLineEnding, withLineEnding, type LineEnding } from './line-endings.js'
 import type { Editor, EditorOptions } from './types.js'
 
 /**
@@ -30,12 +31,24 @@ export function createPlainEditor(opts: EditorOptions): Editor {
   ta.className = 'readit-plain-editor'
   ta.setAttribute('wrap', WRAP)
   ta.spellcheck = false
-  ta.value = opts.value
+  // textarea 的 API value 按 HTML 规范把换行归一化成 LF，存不住 CRLF；行尾记在
+  // 这里、只在出口还原。见 line-endings.ts 的模块注释。
+  let ending: LineEnding = detectLineEnding(opts.value)
+  ta.value = withLineEnding(opts.value, '\n')
   opts.parent.append(ta)
 
   let composing = false
   let deferred: string | null = null
   let destroyed = false
+
+  const readValue = (): string => withLineEnding(ta.value, ending)
+
+  // 换整份文档时行尾跟着这份新内容走：宿主可能拿磁盘上的另一版本覆盖当前文档。
+  const adopt = (value: string): void => {
+    ending = detectLineEnding(value)
+    const lf = withLineEnding(value, '\n')
+    if (ta.value !== lf) ta.value = lf
+  }
 
   const lineCount = (): number => ta.value.split('\n').length
 
@@ -49,7 +62,7 @@ export function createPlainEditor(opts: EditorOptions): Editor {
   const currentTopLine = (): number => topLineFromScroll(ta.scrollTop, lineHeight(), lineCount())
 
   const onInput = (): void => {
-    opts.onChange(ta.value)
+    opts.onChange(readValue())
   }
   const onScrollEvent = (): void => {
     opts.onScroll(currentTopLine())
@@ -60,8 +73,9 @@ export function createPlainEditor(opts: EditorOptions): Editor {
   const onCompositionEnd = (): void => {
     composing = false
     if (deferred !== null) {
-      ta.value = deferred
+      const next = deferred
       deferred = null
+      adopt(next)
     }
   }
 
@@ -75,13 +89,14 @@ export function createPlainEditor(opts: EditorOptions): Editor {
       // 组合期间写 textarea.value 会把输入法的预编辑串连同状态一起冲掉。
       // 攒着，compositionend 再落地——丢弃比推迟更糟，那是静默的数据丢失。
       if (composing) {
+        // 连行尾一起推迟：组合期间只记原始内容，compositionend 时才一并采纳。
         deferred = value
         return
       }
-      if (ta.value !== value) ta.value = value
+      adopt(value)
     },
     getValue() {
-      return ta.value
+      return readValue()
     },
     focus() {
       ta.focus()

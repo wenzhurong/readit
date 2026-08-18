@@ -3,6 +3,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import { EditorView, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view'
+import { detectLineEnding, withLineEnding, type LineEnding } from './line-endings.js'
 import type { Editor, EditorOptions } from './types.js'
 
 /**
@@ -21,6 +22,8 @@ export function createCodeMirrorEditor(opts: EditorOptions): Editor {
   let applying = false
   let deferred: string | null = null
   let destroyed = false
+  // 文档内部一律以 LF 存放，行尾只在出口还原。见 line-endings.ts 的模块注释。
+  let ending: LineEnding = detectLineEnding(opts.value)
 
   const view: EditorView = new EditorView({
     parent: opts.parent,
@@ -28,7 +31,7 @@ export function createCodeMirrorEditor(opts: EditorOptions): Editor {
     // 这里显式传是因为 P2 的 EditorOptions 里有它，别让两条信息各说各话。
     root: opts.root,
     state: EditorState.create({
-      doc: opts.value,
+      doc: withLineEnding(opts.value, '\n'),
       extensions: [
         lineNumbers(),
         highlightActiveLine(),
@@ -39,7 +42,7 @@ export function createCodeMirrorEditor(opts: EditorOptions): Editor {
         EditorView.lineWrapping,
         EditorView.updateListener.of((update) => {
           // applying 为真时这次变更是 setValue 自己派的，不是用户输入。
-          if (update.docChanged && !applying) opts.onChange(update.state.doc.toString())
+          if (update.docChanged && !applying) opts.onChange(readValue())
         }),
         EditorView.domEventHandlers({
           scroll: () => {
@@ -50,11 +53,20 @@ export function createCodeMirrorEditor(opts: EditorOptions): Editor {
     }),
   })
 
+  const readValue = (): string => withLineEnding(view.state.doc.toString(), ending)
+
   const applyDeferred = (): void => {
     if (deferred === null || view.composing) return
     const next = deferred
     deferred = null
-    write(next)
+    adopt(next)
+  }
+
+  // 换整份文档时行尾跟着这份新内容走：宿主可能拿磁盘上的另一版本覆盖当前文档
+  // （桌面壳的「使用磁盘版本」），那一版的行尾未必与载入时相同。
+  const adopt = (value: string): void => {
+    ending = detectLineEnding(value)
+    write(withLineEnding(value, '\n'))
   }
 
   const write = (value: string): void => {
@@ -74,13 +86,15 @@ export function createCodeMirrorEditor(opts: EditorOptions): Editor {
     setValue(value) {
       if (destroyed) return
       if (view.composing) {
+        // 连行尾一起推迟：组合期间只记原始内容，compositionend 时才一并采纳，
+        // 否则组合过程中的 getValue() 会拿旧正文配新行尾。
         deferred = value
         return
       }
-      write(value)
+      adopt(value)
     },
     getValue() {
-      return view.state.doc.toString()
+      return readValue()
     },
     focus() {
       view.focus()
