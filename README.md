@@ -394,6 +394,7 @@ cd shell/src-tauri && cargo test # Rust 侧
 | `docs/plans/2026-08-13-m6-manual-acceptance.md` | M6 的六项真机手工清单 |
 | `docs/plans/2026-08-17-windows-shell.md` | Windows 壳构建方案 |
 | `docs/plans/2026-08-17-windows-shell-report.md` | Windows 壳实现、测试证据与剩余边界 |
+| `docs/plans/2026-08-18-windows-acceptance-runbook.md` | **Windows 真机验收操作手册** —— 六项在 Windows 上逐条怎么跑 |
 | `docs/windows-test-plan.md` | Windows 侧验证方案 |
 | `docs/windows-debug-report-2026-08-14.md` | Windows 真机验证报告 |
 | `docs/releasing-desktop.md` | macOS/Windows updater 签名与桌面发布 |

@@ -182,13 +182,18 @@ npm run tauri --workspace=readit-shell-frontend -- build --bundles nsis `
   --config '{"bundle":{"createUpdaterArtifacts":false}}'
 ```
 
-安装后，直接执行安装目录里的 `readit-shell.exe <绝对 Markdown 路径>`，不要用会绕过
-第二进程的启动器替代；随后完整执行跨平台真机清单的六项，并另测三种文件关联初始状态。
-至少覆盖带空格/中文路径、`\\?\` 扩展长度路径、相对图片、第二进程、Ctrl+F、原子保存、
-Mermaid 和 5 次启动/60 秒内存。记录 WebView2 Runtime 版本。
+**分步操作手册见 `docs/plans/2026-08-18-windows-acceptance-runbook.md`。**
+那份文件给出六项在 Windows 上的逐条操作、判据、以及五条「已知会被误当成缺陷的东西」；
+夹具用 `npm run acceptance:fixtures` 生成（与 macOS 侧同一套，结果才可比）。
 
-若程序在前端加载前被企业策略或测试沙箱拒绝，贴出系统错误并记“未执行”；只有看到真实
-readit WebView2 窗口并完成操作，才能给这一节写“通过”。
+这里只留三条硬约束：
+
+1. **直接执行安装目录里的 `readit-shell.exe <绝对路径>`**，不要用会绕过第二进程的
+   启动器替代——否则测不到 single-instance。
+2. **结果写回 `docs/plans/2026-08-13-m6-manual-acceptance.md` 的 Windows 列**，
+   不要新建第二份清单。
+3. 若程序在前端加载前被企业策略或测试沙箱拒绝，贴出系统错误并记「未执行」；
+   **只有看到真实 readit WebView2 窗口并完成操作，才能写「通过」**。
 
 ---
 

@@ -24,7 +24,8 @@
     "browser:serve": "npm run browser:build && node browser/serve.mjs",
     "test:browser": "playwright test --project=element-chromium --project=element-webkit",
     "test:visual": "playwright test --project=visual-chromium",
-    "visual:baseline": "bash tools/visual-baseline.sh"
+    "visual:baseline": "bash tools/visual-baseline.sh",
+    "acceptance:fixtures": "vite-node tools/make-acceptance-fixtures.ts"
   },
   "devDependencies": {
     "@fontsource/inter": "5.3.0",
