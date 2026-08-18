@@ -46,6 +46,16 @@
     "macOS": {
       "minimumSystemVersion": "14.0",
       "signingIdentity": "-"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "minimumWebview2Version": null,
+      "nsis": {
+        "installMode": "currentUser"
+      }
     }
   },
   "plugins": {

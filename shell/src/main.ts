@@ -12,6 +12,7 @@ import {
 import { connectUpdateNotice } from './updates.js'
 import { connectExternalLinks } from './external-links.js'
 import { connectFindShortcut } from './find-shortcut.js'
+import { documentFileName, normalizeDocumentPath } from './document-path.js'
 
 interface DocumentPayload {
   readonly path: string
@@ -56,7 +57,7 @@ const stopFindShortcut = connectFindShortcut(window, () => handle)
 
 function showDocument(documentPayload: DocumentPayload): void {
   currentDocumentPath = documentPayload.path
-  document.title = `${documentPayload.path.split('/').pop() ?? 'readit'} — readit`
+  document.title = `${documentFileName(documentPayload.path)} — readit`
   status.hidden = true
   status.removeAttribute('data-kind')
   if (handle !== null) {
@@ -66,7 +67,7 @@ function showDocument(documentPayload: DocumentPayload): void {
 
   handle = mount(host, {
     value: documentPayload.source,
-    baseUrl: documentPayload.path,
+    baseUrl: normalizeDocumentPath(documentPayload.path),
     emojiBase: '/emoji/',
     loadHighlighter: createHighlighterLoader(),
     loadMermaid: createMermaidLoader(),

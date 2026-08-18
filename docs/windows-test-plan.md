@@ -4,9 +4,10 @@
 覆盖，这份方案只做 CI 做不到的事。** 重做 CI 已经证明的东西不产生信息，还会制造
 「我们验过 Windows 了」的错觉。
 
-**现状（2026-08-14）**：仓库有 8 个包
+**现状（2026-08-18）**：仓库有 8 个包
 （`core` / `element` / `editor` / `find` / `highlight` / `math` / `mermaid` / `readit`）
-外加一个 Tauri 桌面壳。M0–M5 已交付，M6 的自动化部分已交付。
+外加一个可产出 NSIS 的 Tauri 桌面壳。M0–M5 已交付；M6 的 macOS 真机验收已执行，
+Windows 壳实现和自动化已落地，但真 WebView2 六项验收仍未执行。
 
 > ⚠️ **这份文档于 2026-08-14 重写。** 上一版写于 2026-08-08，当时仓库只有两个纯 Node 包，
 > 文末写着「浏览器 element —— M3，尚未开工」「编辑器与 IME —— M4，尚未开工」。
@@ -20,12 +21,13 @@
 | | 状态 |
 |---|---|
 | **引擎与库**（8 个包） | ✅ 可验。跨平台，`npm test` 在 Windows CI 上每次推送都跑。 |
-| **浏览器层**（L3b：element / editor / find / mermaid） | 🟡 **可验，但从未在 Windows 上跑过**。CI 只在 Linux 容器里跑它们。这是本次最大的新增面。 |
+| **浏览器层**（L3b：element / editor / find / mermaid） | ✅ Windows 侧已跑过 Chromium/WebKit；Chromium 仍只是 WebView2 的代理信号。 |
 | **视觉层**（L4） | ❌ 不要在 Windows 上跑。基线只在固定 Linux 容器里生成（SPEC §13.2），Windows 的字体栈不同，比对必然红且没有信息量。 |
-| **桌面壳** | ❌ **Windows 上没有壳可测——不是没测，是没建。** `shell/src-tauri/tauri.conf.json` 只有 macOS 段（`minimumSystemVersion: 14.0`），没有 `windows` 配置、没有 `bundle.targets`，发布 workflow 也只跑 macOS。 |
+| **桌面壳** | 🟡 **已构建、尚未完成真窗口验收。** 可生成当前用户 NSIS，具备非劫持文件关联、单实例 argv、`readit://`、文件监听、Ctrl+F 和桌面发布矩阵；当前受控会话在创建 WebView2 窗口时被系统错误 5 拒绝。 |
 
-**看到「测一下 Windows 上的双击关联 / `readit://` / 更新器」这类要求，回一句
-「Windows 壳尚未构建」即可，不要尝试自己补一个 Tauri Windows 配置去跑。**
+**不要再回复「Windows 壳尚未构建」。** 壳已经存在；相关任务应运行本文件 §5.5 与
+`docs/plans/2026-08-13-m6-manual-acceptance.md`，并把无法取得真 WebView2 窗口的情况记为
+环境阻塞或未执行，不能退回“没有实现”的旧口径。
 
 ---
 
@@ -39,8 +41,9 @@ git --version
 
 Node 低于 22 直接停，报告版本号——不要自己升级。
 
-**不需要 Rust / cargo。** 壳的 Rust 侧不参与本次验证；`npm install` 只装
-`@tauri-apps/api` 与 `@tauri-apps/cli` 这两个 JS 包。
+只跑 §3–§5.4 的库/浏览器验证不需要 Rust。要构建或验收桌面壳，还需要 Rust stable、
+Visual Studio Build Tools（Desktop development with C++）和系统 WebView2 Runtime；
+正式发布矩阵使用 `x86_64-pc-windows-msvc`，不要把本地 GNU 便携构建冒充发布工具链。
 
 ---
 
@@ -77,10 +80,10 @@ npm run typecheck
 
 ---
 
-## 4. 浏览器层：从未在 Windows 上跑过（本次重点）
+## 4. 浏览器层：已跑过，必要时复核
 
-CI 只在 `mcr.microsoft.com/playwright:v1.62.1-noble` 这个 Linux 容器里跑 L3b。
-**Windows 上一次都没跑过**，这是本次最有信息量的一块。
+CI 仍只在 `mcr.microsoft.com/playwright:v1.62.1-noble` Linux 容器里跑 L3b；但
+2026-08-14 已在 Windows 真机跑过同一浏览器层。重新运行有回归价值，不再是首次覆盖。
 
 ```powershell
 npx playwright install chromium webkit
@@ -105,8 +108,9 @@ Playwright 在 Windows 上确实能跑 WebKit，但那是一个**没有任何真
 - **`element-chromium` / `editor-chromium` 的结果最有价值**：同属 Chromium 系，
   能抓到 Windows 特有的路径、字体、渲染差异，而未来的 Windows 壳正是跑在 WebView2 上。
 - `element-webkit` 的结果**只作参考**：红了值得报，但它不代表任何 Windows 用户的体验。
-- **真正的 WebView2 仍然零覆盖**（SPEC §13.2 要求「验收门必须包含真 WebView2 里的一次运行」，
-  记为 D2-21）。本次验不了它——没有 Windows 壳。**不要用 Playwright 的 Chromium 冒充它**。
+- **真正的 WebView2 验收仍为零**（SPEC §13.2 要求「验收门必须包含真 WebView2 里的一次运行」，
+  记为 D2-21）。现在缺的不是壳，而是一次不受桌面沙箱阻塞的真实窗口执行。
+  **不要用 Playwright 的 Chromium 或单元测试冒充它**。
 
 **不要跑 `npm run test:visual`**（L4）。基线是 Linux 容器里生成的，Windows 字体栈不同，
 必然全红且无信息量。同理 `npm run visual:baseline` 需要 bash + docker，不适用。
@@ -170,6 +174,22 @@ npm test 2>&1 | Select-String -Pattern "ENOENT|cannot find"
 实为 `foo.js`，在 Windows 与 macOS 上都能过、在 Linux CI 上会炸；反过来，两个只差
 大小写的语料文件在 Windows 上会互相覆盖。CI 的 ubuntu job 覆盖前者，这里查后者。
 
+### 5.5 真 WebView2 桌面壳
+
+```powershell
+npm run build
+npm run tauri --workspace=readit-shell-frontend -- build --bundles nsis `
+  --config '{"bundle":{"createUpdaterArtifacts":false}}'
+```
+
+安装后，直接执行安装目录里的 `readit-shell.exe <绝对 Markdown 路径>`，不要用会绕过
+第二进程的启动器替代；随后完整执行跨平台真机清单的六项，并另测三种文件关联初始状态。
+至少覆盖带空格/中文路径、`\\?\` 扩展长度路径、相对图片、第二进程、Ctrl+F、原子保存、
+Mermaid 和 5 次启动/60 秒内存。记录 WebView2 Runtime 版本。
+
+若程序在前端加载前被企业策略或测试沙箱拒绝，贴出系统错误并记“未执行”；只有看到真实
+readit WebView2 窗口并完成操作，才能给这一节写“通过”。
+
 ---
 
 ## 6. 报告格式
@@ -193,6 +213,10 @@ editor-chromium / editor-webkit → 同上
 5.3 autocrlf 三种设置   → 三种是否一致；两个 CR 语料文件是否被改写
 5.4 大小写              → 有无 ENOENT
 
+## 第 5.5 节 真 WebView2 壳
+六项清单逐项结果；三种文件关联起始状态；WebView2 Runtime 版本；NSIS/安装体积；
+哪些是窗口证据、哪些只是自动化证据
+
 ## 判断
 Windows 上引擎与浏览器层是否可用；失败项是**测试基建**问题还是**渲染/逻辑**缺陷
 ```
@@ -202,7 +226,7 @@ Windows 上引擎与浏览器层是否可用；失败项是**测试基建**问�
 **渲染输出本身在 Windows 上是一致的**。请把这两类分开判断，不要把基建问题报成引擎缺陷。
 
 **同样重要的反向纪律**：不要把「跑通了 Playwright 的 Chromium」写成「Windows 验证通过」。
-真正的 Windows 引擎是 WebView2，本次覆盖不到它——**这一条要在报告里明说**。
+真正的 Windows 引擎是 WebView2；若 §5.5 没完成，**这一条要在报告里明说**。
 
 ---
 
@@ -210,13 +234,11 @@ Windows 上引擎与浏览器层是否可用；失败项是**测试基建**问�
 
 | 项 | 原因 |
 |---|---|
-| **桌面壳的一切**（双击关联、单实例、`readit://`、文件监听、更新器、Cmd/Ctrl+F） | **Windows 壳尚未构建**，见 §0。不是「没测」，是「没有」。 |
-| **真 WebView2 冒烟** | 需要 Windows 壳。SPEC §13.2 要求它，记为 D2-21，仍开着。 |
 | **L4 视觉回归** | 基线只在固定 Linux 容器里生成，Windows 上跑没有信息量。 |
-| **性能与内存基线** | 归 M6，且需要壳。 |
-| **签名与分发** | 归 M7。Windows 侧 Azure Trusted Signing 对个人不开放，是预算与辖区问题，不是工程问题。 |
+| **OS 代码签名与 SmartScreen 信任** | 归 M7。Windows 侧 Azure Trusted Signing 对个人的辖区限制是预算/资格问题，不是本轮工程项。 |
+| **干净 Win10 且无 WebView2 的安装行为** | 只有具备该环境时才测；当前 `downloadBootstrapper` 设计需要联网，不能用已有 Runtime 的主机代替。 |
 
-看到这些相关要求，回一句「尚未实现 / 不在本次范围」即可，**不要尝试自己补**。
+桌面壳、真 WebView2、性能和 updater 已经属于本计划范围，不得再列进这张排除表。
 
 ---
 
@@ -225,6 +247,6 @@ Windows 上引擎与浏览器层是否可用；失败项是**测试基建**问�
 把报告交回。若 §4 的浏览器层在 Windows 上全绿，那是一条**新信息**——
 它此前从未被验证过；若有失败，请按 §6 最后一段把基建与缺陷分开判断。
 
-**下一步的 Windows 工作不是继续测，是构建 Windows 壳**（`tauri.conf.json` 的
-`bundle.targets` 与 `windows` 段、argv 处理、Ctrl+F 与 WebView2 内置查找栏的取舍）。
-那三件 SPEC §10.1 与 §11.3 都已写明做法，届时另开一份计划。
+**下一步的 Windows 工作是补齐普通交互式会话里的真 WebView2 六项验收**，再实跑一次
+`release desktop` 草稿发布，核对 `latest.json` 同时包含 macOS 与 Windows 的签名条目。
+实现过程与受阻证据见 `docs/plans/2026-08-17-windows-shell-report.md`。

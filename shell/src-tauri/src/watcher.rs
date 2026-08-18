@@ -101,7 +101,9 @@ mod tests {
         let canonical = document.canonicalize().unwrap();
         let (sender, receiver) = mpsc::channel();
         let _watcher = DocumentWatcher::new(&canonical, move |path| {
-            sender.send(path).unwrap();
+            // Windows can deliver a queued directory event while the test receiver is dropping.
+            // A closed assertion channel must not unwind through notify's extern callback.
+            let _ = sender.send(path);
         })
         .unwrap();
 

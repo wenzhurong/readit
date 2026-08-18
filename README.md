@@ -7,15 +7,15 @@
 由对 GitHub 真实输出的快照回归守住，不靠肉眼。
 
 > ⚠️ **预发布 / 内部工程状态。** 8 个包全部 `private: true` + `0.0.0`，没有任何
-> GitHub Release，**现在装不了也用不了**。这份 README 描述的是仓库里已经存在并
-> 被测试守住的东西，不是路线图。
+> GitHub Release；桌面壳只能从源码构建，尚无面向普通用户的已签名下载。这份 README
+> 描述的是仓库里已经存在并被测试守住的东西，不是路线图。
 
 ---
 
 ## 目录
 
 - [它是什么形状](#它是什么形状)
-- [安装与运行（macOS）](#安装与运行macos)
+- [安装与运行（桌面）](#安装与运行桌面)
 - [保真度模型：与什么一致，以及为什么不是 100%](#保真度模型与什么一致以及为什么不是-100)
 - [架构：Phase A / Phase B](#架构phase-a--phase-b)
 - [包](#包)
@@ -49,18 +49,18 @@
 
 ---
 
-## 安装与运行（macOS）
+## 安装与运行（桌面）
 
-**目前还没有发布版。** 构建产物只带 **ad-hoc 签名**（`tauri.conf.json` 里的
-`signingIdentity: "-"`），**没有 Apple Developer ID、没有公证**——那属于 M7，尚未开始。
-这一节说明它对你意味着什么。
+**目前还没有发布版。** macOS 构建只有 ad-hoc 签名（`tauri.conf.json` 里的
+`signingIdentity: "-"`），没有 Apple Developer ID 或公证；Windows 构建没有 Authenticode
+签名。两边的公开分发信任都属于 M7，尚未开始。这一节说明源码构建与手动信任意味着什么。
 
-### 自己构建：完全没有摩擦
+### macOS 自己构建
 
 ```bash
 npm install
 npm run build
-# 关掉 updater 产物，就不需要维护者的 minisign 私钥（有私钥的构建见 docs/releasing-macos.md）
+# 关掉 updater 产物，就不需要维护者的 minisign 私钥（有私钥的构建见 docs/releasing-desktop.md）
 npm run tauri --workspace=readit-shell-frontend -- build --bundles app \
   --config '{"bundle":{"createUpdaterArtifacts":false}}'
 ```
@@ -115,7 +115,29 @@ Finder 里选中任意 `.md` → `Cmd+I` → 「打开方式」选 readit → �
 
 ### Windows
 
-**没有 Windows 版**——不是没测，是没建，见[已知缺口](#已知缺口)。
+Windows 壳可以从源码构建为当前用户 NSIS 安装包；目前仍没有公开发布版或 OS 代码签名。
+在装好 Node ≥ 22、Rust stable、Visual Studio Build Tools（Desktop development with C++）
+和 WebView2 开发依赖后：
+
+```powershell
+npm install
+npm run build
+npm run tauri --workspace=readit-shell-frontend -- build --bundles nsis `
+  --config '{"bundle":{"createUpdaterArtifacts":false}}'
+```
+
+产物在 `shell/src-tauri/target/release/bundle/nsis/`。
+
+### 让 `.md` 双击打开 readit（Windows）
+
+安装器只把 readit 加入 `.md` / `.markdown` 的**打开方式**列表，**不会静默抢占**已有的
+默认程序，也不会改写 Windows 的 `UserChoice`。要设为默认应用，由用户在 Windows 中完成：
+
+1. 打开**设置 → 应用 → 默认应用**。
+2. 搜索 `.md`（需要时也单独搜索 `.markdown`）。
+3. 从候选应用中选择 readit。
+
+也可以在资源管理器中右键文件 → **打开方式 → 选择其他应用**，选 readit 并确认始终使用。
 
 ---
 
@@ -327,7 +349,7 @@ cd shell/src-tauri && cargo test # Rust 侧
 | M3 | element + Shadow DOM + L3b + 高亮双默认 | ✅ |
 | M4 | 编辑器 + 滚动同步 + `plain` 档 | ✅ |
 | M5 | Mermaid | ✅ |
-| **M6** | 壳：关联、单实例、`readit://`、导航、查找、监听、更新器 | 🟡 **macOS 六项真机验收已执行：5 项通过、1 项按规则留空**（下限区间无机器）；**Windows 壳未构建** |
+| **M6** | 壳：关联、单实例、`readit://`、导航、查找、监听、更新器 | 🟡 macOS 六项真机验收已执行：5 项通过、1 项按规则留空；Windows 壳、NSIS 与发布矩阵已实现，**真 WebView2 六项受测试环境阻塞、仍未执行** |
 | M7 | 签名分发 | ⬜ |
 
 ---
@@ -349,9 +371,10 @@ cd shell/src-tauri && cargo test # Rust 侧
   Playwright 层都是绿的**。全部已修。自动化不能替代真机，这一轮是最直接的证据。
 - **壳没有模式切换入口**，`mount()` 不传 `mode`、全仓没有 `setMode` 调用——**M4 的编辑器
   对应用用户不可达**，M6 的「四个大件同时」在壳内只能凑到三个。见台账 D2-28。
-- **Windows 壳不存在**——不是没测，是没建。`tauri.conf.json` 只有 macOS 段。
-  引擎与浏览器层在 Windows 上已实测可用（见 `docs/windows-debug-report-2026-08-14.md`），
-  但真 WebView2 仍是零覆盖。
+- **Windows 壳已实现，但真 WebView2 仍是零验收覆盖。** 当前可构建当前用户 NSIS，
+  文件关联不抢默认、单实例 argv、扩展长度路径/junction 守卫、Ctrl+F 与跨平台 updater
+  workflow 均有自动化证据；受控测试会话在创建 WebView2 窗口时被系统错误 5 拒绝，
+  六项真机清单保持未执行。详见 Windows 壳报告，不能把 Chromium 代理信号写成通过。
 - **IME 在 WebKit 上是具名缺口**（`GAP-IME-WEBKIT`）：WKWebView 没有等价于 CDP
   `Input.imeSetComposition` 的入口，四条真机组合测试整体跳过，跳过的标题就是缺口名。
 - **`npm audit` 报 2 high。** 两条都评估过、都不可达：`js-yaml` 的两条通告都依赖
@@ -369,10 +392,11 @@ cd shell/src-tauri && cargo test # Rust 侧
 | `SPEC.md` | **上位契约。** 产品级规格，7 个里程碑，每条决策带理由与实测出处 |
 | `docs/plans/2026-08-08-plan2-debt.md` | **债务台账。** 每条具名、带出处、可核验 |
 | `docs/plans/2026-08-13-m6-manual-acceptance.md` | M6 的六项真机手工清单 |
-| `docs/plans/2026-08-17-windows-shell.md` | **Windows 壳构建方案**（下一步工作） |
+| `docs/plans/2026-08-17-windows-shell.md` | Windows 壳构建方案 |
+| `docs/plans/2026-08-17-windows-shell-report.md` | Windows 壳实现、测试证据与剩余边界 |
 | `docs/windows-test-plan.md` | Windows 侧验证方案 |
 | `docs/windows-debug-report-2026-08-14.md` | Windows 真机验证报告 |
-| `docs/releasing-macos.md` | macOS 签名与发布 |
+| `docs/releasing-desktop.md` | macOS/Windows updater 签名与桌面发布 |
 | `docs/plans/` 其余 | 三份实施计划与它们的执行报告 |
 
 SPEC 里的每条修订都带 ⚠️ 标注与日期，说明**原文是什么、为什么改**。

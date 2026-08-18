@@ -15,7 +15,7 @@ function keydown(init: KeyboardEventInit): KeyboardEvent {
   return event
 }
 
-describe('Cmd+F shell bridge', () => {
+describe('platform find-shortcut bridge', () => {
   it('captures Meta+F before the focused document surface and opens the current handle', () => {
     const find = vi.fn()
     let downstream = 0
@@ -23,7 +23,7 @@ describe('Cmd+F shell bridge', () => {
       downstream += 1
     }
     document.addEventListener('keydown', onDocumentKeydown)
-    const stop = connectFindShortcut(window, () => ({ find }))
+    const stop = connectFindShortcut(window, () => ({ find }), 'macos')
 
     const event = keydown({ metaKey: true })
 
@@ -34,7 +34,7 @@ describe('Cmd+F shell bridge', () => {
 
   it('repeats find() so an already-open bar can refocus and select its query', () => {
     const find = vi.fn()
-    const stop = connectFindShortcut(window, () => ({ find }))
+    const stop = connectFindShortcut(window, () => ({ find }), 'macos')
 
     keydown({ metaKey: true })
     keydown({ metaKey: true })
@@ -45,14 +45,14 @@ describe('Cmd+F shell bridge', () => {
 
   it('leaves non-Cmd+F chords and the no-document state untouched', () => {
     const find = vi.fn()
-    const stop = connectFindShortcut(window, () => ({ find }))
+    const stop = connectFindShortcut(window, () => ({ find }), 'macos')
     const events = [
       keydown({ ctrlKey: true }),
       keydown({ metaKey: true, shiftKey: true }),
       keydown({ metaKey: true, key: 'g' }),
     ]
     stop()
-    const stopWithoutDocument = connectFindShortcut(window, () => null)
+    const stopWithoutDocument = connectFindShortcut(window, () => null, 'macos')
     events.push(keydown({ metaKey: true }))
 
     expect({ calls: find.mock.calls.length, prevented: events.map((event) => event.defaultPrevented) }).toEqual({
@@ -64,11 +64,26 @@ describe('Cmd+F shell bridge', () => {
 
   it('removes the capture listener on teardown', () => {
     const find = vi.fn()
-    const stop = connectFindShortcut(window, () => ({ find }))
+    const stop = connectFindShortcut(window, () => ({ find }), 'macos')
     stop()
 
     const event = keydown({ metaKey: true })
 
     expect([find.mock.calls.length, event.defaultPrevented]).toEqual([0, false])
+  })
+
+  it('captures Control+F on Windows without stealing Meta+F', () => {
+    const find = vi.fn()
+    const stop = connectFindShortcut(window, () => ({ find }), 'windows')
+
+    const control = keydown({ ctrlKey: true })
+    const meta = keydown({ metaKey: true })
+
+    expect({ calls: find.mock.calls.length, control: control.defaultPrevented, meta: meta.defaultPrevented }).toEqual({
+      calls: 1,
+      control: true,
+      meta: false,
+    })
+    stop()
   })
 })

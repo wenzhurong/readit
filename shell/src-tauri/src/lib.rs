@@ -69,6 +69,38 @@ fn handle_second_instance<R: Runtime>(app: &tauri::AppHandle<R>, args: Vec<Strin
     focus_main_window(app);
 }
 
+#[cfg(windows)]
+fn disable_browser_accelerator_keys<R: Runtime>(
+    app: &tauri::App<R>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| std::io::Error::other("main webview was not created"))?;
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+
+    // setup() runs on the UI thread, so Tauri executes this callback synchronously.
+    window.with_webview(move |webview| {
+        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+        use windows_core::Interface;
+
+        let result: windows_core::Result<()> = (|| unsafe {
+            let core = webview.controller().CoreWebView2()?;
+            let settings = core.Settings()?;
+            let settings3 = settings.cast::<ICoreWebView2Settings3>()?;
+            settings3.SetAreBrowserAcceleratorKeysEnabled(false)
+        })();
+        let _ = sender.send(result.map_err(|error| error.to_string()));
+    })?;
+
+    let result = receiver.try_recv().map_err(|error| {
+        std::io::Error::other(format!(
+            "WebView2 accelerator callback did not complete during setup: {error}"
+        ))
+    })?;
+    result.map_err(std::io::Error::other)?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = Arc::new(AppState::default());
@@ -93,6 +125,13 @@ pub fn run() {
         )
         .manage(state)
         .manage(PendingUpdate::default())
+        // 下划线前缀与下面 app.run(|_app_handle, _event|) 同理：这两个形参都只在
+        // 某一个平台的 cfg 分支里用到，不加前缀就会在另一个平台上留下未使用警告。
+        .setup(|_app| {
+            #[cfg(windows)]
+            disable_browser_accelerator_keys(_app)?;
+            Ok(())
+        })
         .register_asynchronous_uri_scheme_protocol("readit", move |_context, request, responder| {
             let state = Arc::clone(&protocol_state);
             std::thread::spawn(move || {
@@ -109,15 +148,15 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("failed to build readit");
 
-    app.run(move |app_handle, event| {
+    app.run(move |_app_handle, _event| {
         #[cfg(any(target_os = "macos", target_os = "ios"))]
-        if let tauri::RunEvent::Opened { urls } = event {
-            app_handle
+        if let tauri::RunEvent::Opened { urls } = _event {
+            _app_handle
                 .state::<Arc<AppState>>()
                 .enqueue_opened_urls(urls);
             // If JS already exists this wakes it; if Opened precedes Ready/Window, the queue in
             // AppState is the durable handoff and the frontend drains it after mounting.
-            announce_pending_documents(app_handle);
+            announce_pending_documents(_app_handle);
         }
     });
 }
@@ -165,5 +204,16 @@ mod tests {
             capability["permissions"],
             serde_json::json!(["core:event:allow-listen", "core:event:allow-unlisten"])
         );
+    }
+
+    #[test]
+    fn windows_disables_native_browser_accelerators_through_the_pinned_com_api() {
+        let manifest = include_str!("../Cargo.toml");
+        let source = include_str!("lib.rs");
+
+        assert!(manifest.contains("webview2-com = \"=0.38.2\""));
+        assert!(manifest.contains("windows-core = \"=0.61.2\""));
+        assert!(source.contains("SetAreBrowserAcceleratorKeysEnabled(false)"));
+        assert!(source.contains("disable_browser_accelerator_keys(app)?"));
     }
 }

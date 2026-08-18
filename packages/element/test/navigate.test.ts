@@ -92,6 +92,8 @@ describe('resolveRelative', () => {
     ['docs/README.md', '/img/a.md', '/img/a.md', ''],
     ['/docs/README.md', '/img/a.md', '/img/a.md', ''],
     ['file:///U/docs/README.md', '/img/a.md', 'file:///img/a.md', ''],
+    ['C:\\docs\\README.md', '.\\other.md', 'C:/docs/other.md', ''],
+    ['C:\\docs\\README.md', 'D:\\shared\\other.md', 'D:/shared/other.md', ''],
   ])('%s + %s → %s %s', (base, href, path, hash) => {
     expect(resolveRelative(base, href)).toEqual({ path, hash })
   })

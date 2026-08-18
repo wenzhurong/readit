@@ -2,22 +2,30 @@ export interface FindShortcutHandle {
   find(): unknown
 }
 
+export type FindShortcutPlatform = 'macos' | 'windows'
+
+function detectShortcutPlatform(view: Window): FindShortcutPlatform {
+  return /^(Mac|iPhone|iPad)/.test(view.navigator.platform) ? 'macos' : 'windows'
+}
+
 /**
- * ⚠️ **macOS 专用的和弦。** 这里硬编码 Meta+F 并显式排除 Ctrl，是因为当前壳只交付 macOS
- * （Windows 侧已被用户推迟）。做 Windows 时这里要分平台，而且不是简单换成 Ctrl+F：
- * SPEC §11.3 第 8 点写明 **Ctrl+F 会被 WebView2 的内置查找栏吃掉**（那个栏本身是好用的、
- * 也认 shadow DOM），所以届时要在「让原生栏赢」和「让壳禁用浏览器加速键」之间选，
- * 而后者需要 wry 层补丁——Tauri 已不再导出 `browser_accelerator_keys`。
+ * The native layer disables WebView2 browser accelerators on Windows so this capture listener
+ * can make the document-model finder the sole owner of Control+F. macOS keeps its existing
+ * Meta+F chord, including the explicit Control exclusion.
  */
 export function connectFindShortcut(
   view: Window,
   currentHandle: () => FindShortcutHandle | null,
+  platform: FindShortcutPlatform = detectShortcutPlatform(view),
 ): () => void {
   const onKeydown = (event: KeyboardEvent): void => {
+    const hasPlatformModifier =
+      platform === 'macos'
+        ? event.metaKey && !event.ctrlKey
+        : event.ctrlKey && !event.metaKey
     if (
       event.key.toLowerCase() !== 'f' ||
-      !event.metaKey ||
-      event.ctrlKey ||
+      !hasPlatformModifier ||
       event.altKey ||
       event.shiftKey
     ) {
