@@ -1,6 +1,8 @@
 mod document;
 mod external;
+mod leave;
 mod protocol;
+mod shell_menu;
 mod updater;
 mod watcher;
 
@@ -45,6 +47,29 @@ async fn open_document(
     })
     .await
     .map_err(|error| format!("document read task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn save_document(
+    content: String,
+    generation: u64,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let state = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || state.save_document(generation, &content))
+        .await
+        .map_err(|error| format!("document save task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn read_current_document(
+    generation: u64,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<String, String> {
+    let state = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || state.read_current_document(generation))
+        .await
+        .map_err(|error| format!("document reload task failed: {error}"))?
 }
 
 fn announce_pending_documents<R: Runtime>(app: &tauri::AppHandle<R>) {
@@ -109,7 +134,7 @@ pub fn run() {
     state.enqueue_argv(&initial_args, &initial_cwd);
     let protocol_state = Arc::clone(&state);
 
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // SPEC §10.1: this must remain the first plugin so a second process cannot race
         // setup performed by any later plugin.
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
@@ -125,6 +150,9 @@ pub fn run() {
         )
         .manage(state)
         .manage(PendingUpdate::default())
+        .manage(leave::LeaveState::default())
+        .on_menu_event(shell_menu::handle_menu_event)
+        .on_window_event(leave::handle_window_event)
         // 下划线前缀与下面 app.run(|_app_handle, _event|) 同理：这两个形参都只在
         // 某一个平台的 cfg 分支里用到，不加前缀就会在另一个平台上留下未使用警告。
         .setup(|_app| {
@@ -141,14 +169,28 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             take_pending_path,
             open_document,
+            save_document,
+            read_current_document,
+            leave::frontend_ready,
+            leave::cancel_leave,
+            leave::complete_leave,
+            shell_menu::set_mode_menu,
             external::open_external,
             updater::check_for_update,
             updater::install_update
-        ])
+        ]);
+
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(shell_menu::build_menu);
+
+    let app = builder
         .build(tauri::generate_context!())
         .expect("failed to build readit");
 
     app.run(move |_app_handle, _event| {
+        if let tauri::RunEvent::ExitRequested { api, .. } = &_event {
+            leave::handle_exit_requested(_app_handle, api);
+        }
         #[cfg(any(target_os = "macos", target_os = "ios"))]
         if let tauri::RunEvent::Opened { urls } = _event {
             _app_handle
@@ -195,14 +237,23 @@ mod tests {
         );
     }
 
+    /// 精确相等，不是「包含」——这是一条权限棘轮：每多授一条 core 权限都必须在这里
+    /// 显式改一次，并写清为什么。壳的其余原生能力都走具名 Rust 命令，不靠放宽 core。
     #[test]
-    fn main_capability_grants_only_the_event_listener_lifecycle() {
+    fn main_capability_grants_only_the_event_lifecycle_and_the_window_title() {
         let capability: serde_json::Value =
             serde_json::from_str(include_str!("../capabilities/main.json"))
                 .expect("main capability must be valid JSON");
         assert_eq!(
             capability["permissions"],
-            serde_json::json!(["core:event:allow-listen", "core:event:allow-unlisten"])
+            // set-title 于 2026-08-18 加入：脏标记 ● 与文件名由前端的保存状态算出，
+            // 而原生标题栏不跟随 document.title。少了这条权限，setTitle() 被权限系统
+            // 拒掉、界面上不报任何错，表现和没写这段代码一模一样（真机实测）。
+            serde_json::json!([
+                "core:event:allow-listen",
+                "core:event:allow-unlisten",
+                "core:window:allow-set-title"
+            ])
         );
     }
 

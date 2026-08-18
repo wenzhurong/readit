@@ -1,7 +1,11 @@
 use std::{
     collections::VecDeque,
+    io::Write,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex,
+    },
 };
 
 use serde::Serialize;
@@ -13,11 +17,19 @@ use crate::{protocol::ResourceRoot, watcher::DocumentWatcher};
 pub(crate) struct DocumentPayload {
     pub(crate) path: String,
     pub(crate) source: String,
+    pub(crate) generation: u64,
+}
+
+struct CurrentDocument {
+    path: PathBuf,
+    generation: u64,
 }
 
 #[derive(Default)]
 pub(crate) struct AppState {
     pub(crate) resources: ResourceRoot,
+    current_document: Mutex<Option<CurrentDocument>>,
+    next_generation: AtomicU64,
     pending: Mutex<VecDeque<PathBuf>>,
     watcher: Mutex<Option<DocumentWatcher>>,
 }
@@ -124,7 +136,66 @@ impl AppState {
         if let Some(watcher) = replacement {
             *active_watcher = Some(watcher);
         }
-        Ok(DocumentPayload { path, source })
+        let generation = self.next_generation.fetch_add(1, Ordering::Relaxed) + 1;
+        *self
+            .current_document
+            .lock()
+            .map_err(|_| "current document lock poisoned".to_owned())? = Some(CurrentDocument {
+            path: canonical,
+            generation,
+        });
+        Ok(DocumentPayload {
+            path,
+            source,
+            generation,
+        })
+    }
+
+    pub(crate) fn save_document(&self, generation: u64, content: &str) -> Result<(), String> {
+        // Keep the path locked for the whole replacement. An open that completes while a save is
+        // in flight waits here before it can publish the next current document, so content can
+        // never jump from the document visible when Save was requested to a later navigation.
+        let current = self
+            .current_document
+            .lock()
+            .map_err(|_| "current document lock poisoned".to_owned())?;
+        let current = current
+            .as_ref()
+            .ok_or_else(|| "cannot save: no Markdown document is open".to_owned())?;
+        if current.generation != generation {
+            return Err(format!(
+                "cannot save: document generation {generation} is stale (current generation is {})",
+                current.generation
+            ));
+        }
+        let path = current.path.as_path();
+        if !is_markdown(path) {
+            return Err(format!(
+                "cannot save a non-Markdown document: {}",
+                path.display()
+            ));
+        }
+        atomic_write(path, content.as_bytes())
+    }
+
+    pub(crate) fn read_current_document(&self, generation: u64) -> Result<String, String> {
+        let current = self
+            .current_document
+            .lock()
+            .map_err(|_| "current document lock poisoned".to_owned())?;
+        let current = current
+            .as_ref()
+            .ok_or_else(|| "cannot reload: no Markdown document is open".to_owned())?;
+        if current.generation != generation {
+            return Err(format!(
+                "cannot reload: document generation {generation} is stale (current generation is {})",
+                current.generation
+            ));
+        }
+        let bytes = std::fs::read(&current.path)
+            .map_err(|error| format!("cannot read {}: {error}", current.path.display()))?;
+        String::from_utf8(bytes)
+            .map_err(|_| format!("document is not valid UTF-8: {}", current.path.display()))
     }
 
     #[cfg(test)]
@@ -141,6 +212,71 @@ fn is_markdown(path: &Path) -> bool {
         })
 }
 
+fn atomic_write(path: &Path, content: &[u8]) -> Result<(), String> {
+    atomic_write_with(path, content, |temporary, target| {
+        temporary
+            .persist(target)
+            .map(|_| ())
+            .map_err(|error| error.error)
+    })
+}
+
+fn atomic_write_with<F>(path: &Path, content: &[u8], persist: F) -> Result<(), String>
+where
+    F: FnOnce(tempfile::NamedTempFile, &Path) -> std::io::Result<()>,
+{
+    let parent = path.parent().ok_or_else(|| {
+        format!(
+            "cannot save {}: document has no parent directory",
+            path.display()
+        )
+    })?;
+    let permissions = std::fs::metadata(path)
+        .map_err(|error| format!("cannot inspect {} before saving: {error}", path.display()))?
+        .permissions();
+    let mut temporary = tempfile::Builder::new()
+        .prefix(".readit-save-")
+        .tempfile_in(parent)
+        .map_err(|error| {
+            format!(
+                "cannot create a temporary file beside {}: {error}",
+                path.display()
+            )
+        })?;
+
+    temporary
+        .as_file_mut()
+        .write_all(content)
+        .map_err(|error| {
+            format!(
+                "cannot write temporary file for {}: {error}",
+                path.display()
+            )
+        })?;
+    temporary
+        .as_file()
+        .set_permissions(permissions)
+        .map_err(|error| {
+            format!(
+                "cannot preserve permissions for {}: {error}",
+                path.display()
+            )
+        })?;
+    temporary.as_file_mut().flush().map_err(|error| {
+        format!(
+            "cannot flush temporary file for {}: {error}",
+            path.display()
+        )
+    })?;
+    temporary
+        .as_file()
+        .sync_all()
+        .map_err(|error| format!("cannot sync temporary file for {}: {error}", path.display()))?;
+
+    persist(temporary, path)
+        .map_err(|error| format!("cannot atomically replace {}: {error}", path.display()))
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -151,7 +287,7 @@ mod tests {
 
     use tauri::http::StatusCode;
 
-    use super::AppState;
+    use super::{atomic_write_with, AppState};
 
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
@@ -247,7 +383,10 @@ mod tests {
         let payload = state.open_document(&document).unwrap();
 
         assert_eq!(payload.source, "# extended path\n");
-        assert_eq!(payload.path, document.canonicalize().unwrap().to_str().unwrap());
+        assert_eq!(
+            payload.path,
+            document.canonicalize().unwrap().to_str().unwrap()
+        );
     }
 
     #[test]
@@ -284,6 +423,114 @@ mod tests {
 
         assert!(state.open_document(&text).unwrap_err().contains("Markdown"));
         assert!(state.open_document(&binary).unwrap_err().contains("UTF-8"));
+    }
+
+    #[test]
+    fn saving_requires_an_open_document() {
+        let error = AppState::default()
+            .save_document(1, "# nowhere\n")
+            .unwrap_err();
+        assert!(error.contains("no Markdown document is open"));
+    }
+
+    #[test]
+    fn saving_atomically_replaces_the_open_document_without_changing_its_permissions() {
+        let tree = TempTree::new();
+        let document = tree.path().join("editable.md");
+        fs::write(&document, "old").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&document, fs::Permissions::from_mode(0o640)).unwrap();
+        }
+        let state = AppState::default();
+        let payload = state.open_document(&document).unwrap();
+        #[cfg(unix)]
+        let old_inode = {
+            use std::os::unix::fs::MetadataExt;
+            fs::metadata(&document).unwrap().ino()
+        };
+
+        let expected = "# 已保存\r\n\r\n尾随换行\r\n";
+        state.save_document(payload.generation, expected).unwrap();
+
+        assert_eq!(fs::read(&document).unwrap(), expected.as_bytes());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{MetadataExt, PermissionsExt};
+            let metadata = fs::metadata(&document).unwrap();
+            assert_ne!(metadata.ino(), old_inode);
+            assert_eq!(metadata.permissions().mode() & 0o777, 0o640);
+        }
+        assert!(fs::read_dir(tree.path()).unwrap().all(|entry| !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".readit-save-")));
+    }
+
+    #[test]
+    fn a_save_from_an_older_document_generation_cannot_touch_the_new_document() {
+        let tree = TempTree::new();
+        let first = tree.path().join("first.md");
+        let second = tree.path().join("second.md");
+        fs::write(&first, "first").unwrap();
+        fs::write(&second, "second").unwrap();
+        let state = AppState::default();
+        let first_payload = state.open_document(&first).unwrap();
+        let second_payload = state.open_document(&second).unwrap();
+
+        let error = state
+            .save_document(first_payload.generation, "stale write")
+            .unwrap_err();
+
+        assert!(error.contains("generation"));
+        assert_eq!(fs::read_to_string(&first).unwrap(), "first");
+        assert_eq!(fs::read_to_string(&second).unwrap(), "second");
+        assert!(second_payload.generation > first_payload.generation);
+    }
+
+    #[test]
+    fn watcher_reload_reads_only_the_matching_current_generation() {
+        let tree = TempTree::new();
+        let document = tree.path().join("watched.md");
+        fs::write(&document, "before").unwrap();
+        let state = AppState::default();
+        let payload = state.open_document(&document).unwrap();
+        fs::write(&document, "after").unwrap();
+
+        assert_eq!(
+            state.read_current_document(payload.generation).unwrap(),
+            "after"
+        );
+        assert!(state
+            .read_current_document(payload.generation + 1)
+            .unwrap_err()
+            .contains("stale"));
+    }
+
+    #[test]
+    fn failed_atomic_replace_reports_the_target_and_removes_the_temporary_file() {
+        let tree = TempTree::new();
+        let document = tree.path().join("failure.md");
+        fs::write(&document, "unchanged").unwrap();
+
+        let error = atomic_write_with(&document, b"replacement", |_temporary, _target| {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "injected rename denial",
+            ))
+        })
+        .unwrap_err();
+
+        assert!(error.contains("cannot atomically replace"));
+        assert!(error.contains("failure.md"));
+        assert_eq!(fs::read_to_string(&document).unwrap(), "unchanged");
+        assert!(fs::read_dir(tree.path()).unwrap().all(|entry| !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".readit-save-")));
     }
 
     #[test]
