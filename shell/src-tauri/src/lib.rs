@@ -125,9 +125,11 @@ pub fn run() {
         )
         .manage(state)
         .manage(PendingUpdate::default())
-        .setup(|app| {
+        // 下划线前缀与下面 app.run(|_app_handle, _event|) 同理：这两个形参都只在
+        // 某一个平台的 cfg 分支里用到，不加前缀就会在另一个平台上留下未使用警告。
+        .setup(|_app| {
             #[cfg(windows)]
-            disable_browser_accelerator_keys(app)?;
+            disable_browser_accelerator_keys(_app)?;
             Ok(())
         })
         .register_asynchronous_uri_scheme_protocol("readit", move |_context, request, responder| {
