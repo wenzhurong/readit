@@ -42,6 +42,13 @@ jobs:
         with:
           workspaces: './shell/src-tauri -> target'
       - run: npm ci
+      # packages/readit 的 dist/ 不进仓库，而 shell 的 vite 构建正是通过 exports 走它
+      # （"readit/element" → ./dist/element.js）。test 与 typecheck 两条路径分别靠
+      # vitest 的 globalSetup 和 typecheck 脚本隐式把它构建出来了，唯独这条发布路径没有。
+      # 2026-08-19 首次真跑，三个 job 全部挂在 vite 阶段：
+      #   Rolldown failed to resolve import "readit/element"
+      # 本地之所以一直没暴露，只是因为开发机上有早先留下的 dist 残留。
+      - run: npm run build
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

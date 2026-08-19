@@ -120,7 +120,22 @@ mod tests {
                 "per-platform bundle override",
                 "--bundles ${{ matrix.bundles }}",
             ),
+            // packages/readit 的 dist/ 不进仓库，而 shell 的 vite 构建通过 exports 走它。
+            // 少了这一步，三个 job 全部挂在 vite 阶段（2026-08-19 首次真跑实测）。
+            ("library build before bundling", "- run: npm run build\n"),
         ];
+        // 顺序同样要钉：构建必须排在打包之前，否则 dist 还没产出就开始 bundle。
+        // contains 检查不到顺序，所以单独比一次位置。
+        assert!(
+            matches!(
+                (
+                    workflow.find("- run: npm run build\n"),
+                    workflow.find("tauri-apps/tauri-action@v1"),
+                ),
+                (Some(build), Some(action)) if build < action
+            ),
+            "npm run build 必须排在 tauri-action 之前"
+        );
         let missing = requirements
             .into_iter()
             .filter_map(|(name, needle)| (!workflow.contains(needle)).then_some(name))
