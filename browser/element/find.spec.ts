@@ -194,9 +194,12 @@ test.describe('mount().find', () => {
     expect(ui).toEqual({ open: 'true', focused: true, visible: true })
   })
 
-  test('宿主选择 fixed 后，长文档查找栏在命中滚动期间留在视口且按钮可用', async ({ page }) => {
+  test('宿主选择 fixed 后，长文档查找栏在命中滚动期间留在视口且按钮真的可点', async ({ page }) => {
+    // 三个命中全部安排在文档尾部：这样 find() 与每一次翻页都会把页面滚得很远，
+    // 「栏还在视口里」这条断言才有内容。只放一个命中的话，翻页按钮点了也无从观测。
+    const needles = new Set([245, 250, 255])
     const value = Array.from({ length: 260 }, (_, index) =>
-      index === 245 ? `paragraph ${index} VIEWPORT_NEEDLE` : `paragraph ${index}`,
+      needles.has(index) ? `paragraph ${index} VIEWPORT_NEEDLE` : `paragraph ${index}`,
     ).join('\n\n')
     await page.goto('/host.html')
     await page.waitForFunction(() => window.readitFixture !== undefined)
@@ -207,22 +210,37 @@ test.describe('mount().find', () => {
     }, value)
 
     await page.evaluate((handle) => window.readitFixture.get(handle).find('VIEWPORT_NEEDLE'), id)
-    const before = await page.evaluate(() => {
-      const host = document.getElementById('a')!
-      const uiHost = host.shadowRoot!.querySelector<HTMLElement>('.readit-find-ui-host')!
-      const rect = uiHost.getBoundingClientRect()
-      return { top: rect.top, right: rect.right, bottom: rect.bottom, height: innerHeight }
-    })
-    expect(before.top).toBeGreaterThanOrEqual(0)
-    expect(before.bottom).toBeLessThanOrEqual(before.height)
 
-    await page.evaluate(() => {
-      const host = document.getElementById('a')!
-      const uiHost = host.shadowRoot!.querySelector<HTMLElement>('.readit-find-ui-host')!
-      uiHost.shadowRoot!.querySelector<HTMLButtonElement>('[data-find-previous]')!.click()
-    })
+    // 前提自检：页面必须真的滚下去了。不滚的话下面那条视口断言恒真、什么也证明不了。
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(500)
+
+    const barRect = async (): Promise<{ top: number; bottom: number; height: number }> =>
+      await page.evaluate(() => {
+        const host = document.getElementById('a')!
+        const uiHost = host.shadowRoot!.querySelector<HTMLElement>('.readit-find-ui-host')!
+        const rect = uiHost.getBoundingClientRect()
+        return { top: rect.top, bottom: rect.bottom, height: innerHeight }
+      })
+
+    const first = await barRect()
+    expect(first.top).toBeGreaterThanOrEqual(0)
+    expect(first.bottom).toBeLessThanOrEqual(first.height)
+
+    // 用 locator 而不是元素上的 .click()：前者带可操作性检查（可见、稳定、能收到指针
+    // 事件），后者是程序化派发，按钮被遮住或滚出屏幕也照样"成功"。
+    await page.locator('[data-find-next]').click()
+    await expect
+      .poll(async () => (await page.evaluate((handle) => window.readitFixture.get(handle).find(), id)).current)
+      .toBe(2)
+
+    // 翻页把页面又滚了一段，栏必须仍在视口里。
+    const second = await barRect()
+    expect(second.top).toBeGreaterThanOrEqual(0)
+    expect(second.bottom).toBeLessThanOrEqual(second.height)
+
+    await page.locator('[data-find-previous]').click()
     expect(await page.evaluate((handle) => window.readitFixture.get(handle).find(), id)).toEqual({
-      query: 'VIEWPORT_NEEDLE', total: 1, current: 1,
+      query: 'VIEWPORT_NEEDLE', total: 3, current: 1,
     })
   })
 
