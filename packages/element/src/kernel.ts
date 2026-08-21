@@ -183,6 +183,7 @@ export function createKernel(host: HTMLElement, opts: MountOptions): Kernel {
     {
       view,
       host,
+      focusTarget: root.root,
       content,
       baseUrl: opts.baseUrl,
       onNavigate: opts.onNavigate,

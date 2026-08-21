@@ -1,11 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   observeLocalResources,
+  resourceProtocolBase,
   rewriteLocalResources,
   toReaditResourceUrl,
 } from '../src/resources.js'
 
 describe('readit resource URLs', () => {
+  it('uses the WebView2 mapped origin on Windows and the custom scheme elsewhere', () => {
+    expect(resourceProtocolBase('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBe(
+      'http://readit.localhost/',
+    )
+    expect(resourceProtocolBase('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')).toBe(
+      'readit://localhost/',
+    )
+  })
+
   it('encodes local paths without double-encoding existing escapes', () => {
     expect(toReaditResourceUrl('images/hello world.png?raw=1#preview')).toBe(
       'readit://localhost/images/hello%20world.png?raw=1#preview',
@@ -67,17 +77,40 @@ describe('readit resource URLs', () => {
     ])
   })
 
+  it('uses one injected protocol base for every supported resource attribute', () => {
+    const root = document.createElement('div')
+    root.innerHTML =
+      '<img src="images/a.png"><video src="movie.mp4" poster="cover.png">' +
+      '<source src="movie.webm"></video><audio src="sound.mp3"></audio>'
+
+    rewriteLocalResources(root, 'http://readit.localhost/')
+
+    expect([
+      root.querySelector('img')?.getAttribute('src'),
+      root.querySelector('video')?.getAttribute('src'),
+      root.querySelector('video')?.getAttribute('poster'),
+      root.querySelector('source')?.getAttribute('src'),
+      root.querySelector('audio')?.getAttribute('src'),
+    ]).toEqual([
+      'http://readit.localhost/images/a.png',
+      'http://readit.localhost/movie.mp4',
+      'http://readit.localhost/cover.png',
+      'http://readit.localhost/movie.webm',
+      'http://readit.localhost/sound.mp3',
+    ])
+  })
+
   it('rewrites resources added by an asynchronous element repaint', async () => {
     const host = document.createElement('div')
     const shadow = host.attachShadow({ mode: 'open' })
-    const stop = observeLocalResources(host)
+    const stop = observeLocalResources(host, 'http://readit.localhost/')
     const image = document.createElement('img')
     image.setAttribute('src', 'after-render.png')
 
     shadow.append(image)
     await Promise.resolve()
 
-    expect(image.getAttribute('src')).toBe('readit://localhost/after-render.png')
+    expect(image.getAttribute('src')).toBe('http://readit.localhost/after-render.png')
     stop()
   })
 })

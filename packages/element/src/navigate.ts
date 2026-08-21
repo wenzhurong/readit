@@ -144,6 +144,7 @@ export interface HistoryEntry {
 export interface NavigationHooks {
   readonly view: Window
   readonly host: HTMLElement
+  readonly focusTarget: HTMLElement
   readonly content: HTMLElement
   readonly baseUrl: string
   readonly onNavigate: ((path: string) => void) | null
@@ -306,16 +307,30 @@ export function createNavigation(hooks: NavigationHooks, disposers: Disposers): 
     if (step(back ? -1 : 1)) event.preventDefault()
   }
 
+  const onPointerDown = (event: Event): void => {
+    const pointer = event as PointerEvent
+    if (pointer.button !== 0) return
+    const interactive = event.composedPath().some((node) =>
+      node instanceof Element && node.matches(
+        'a[href],button,input,textarea,select,summary,' +
+        '[contenteditable]:not([contenteditable="false"]),' +
+        '[tabindex]:not([tabindex="-1"])',
+      ),
+    )
+    if (!interactive) hooks.focusTarget.focus({ preventScroll: true })
+  }
+
   const onMouseUp = (event: Event): void => {
     const mouse = event as MouseEvent
     if (mouse.button !== 3 && mouse.button !== 4) return
     if (step(mouse.button === 3 ? -1 : 1)) event.preventDefault()
   }
 
-  // 三个都挂在宿主上：shadow 内部的事件是 composed 的，会冒到这里，而 composedPath()
+  // 都挂在宿主上：shadow 内部的事件是 composed 的，会冒到这里，而 composedPath()
   // 仍然给得出真正的目标。挂在宿主而不是 document 上，意味着元素只处理自己里面的
   // 按键——全局快捷键归宿主，这是嵌入式组件该有的边界。
   addListener(disposers, hooks.host, 'click', onClick)
+  addListener(disposers, hooks.host, 'pointerdown', onPointerDown)
   addListener(disposers, hooks.host, 'keydown', onKeyDown)
   addListener(disposers, hooks.host, 'mouseup', onMouseUp)
 

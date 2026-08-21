@@ -1,4 +1,5 @@
 const PROTOCOL_BASE = 'readit://localhost/'
+const WINDOWS_PROTOCOL_BASE = 'http://readit.localhost/'
 
 const SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/
 const RESOURCE_ATTRIBUTES = [
@@ -9,7 +10,11 @@ const RESOURCE_ATTRIBUTES = [
   ['video', 'poster'],
 ] as const
 
-export function toReaditResourceUrl(raw: string): string | null {
+export function resourceProtocolBase(userAgent: string): string {
+  return userAgent.includes('Windows') ? WINDOWS_PROTOCOL_BASE : PROTOCOL_BASE
+}
+
+export function toReaditResourceUrl(raw: string, protocolBase = PROTOCOL_BASE): string | null {
   const value = raw.trim()
   if (
     value === '' ||
@@ -46,10 +51,10 @@ export function toReaditResourceUrl(raw: string): string | null {
     }
     encoded.push(encodeURIComponent(segment))
   }
-  return encoded.length === 0 ? null : `${PROTOCOL_BASE}${encoded.join('/')}${suffix}`
+  return encoded.length === 0 ? null : `${protocolBase}${encoded.join('/')}${suffix}`
 }
 
-export function rewriteLocalResources(root: ParentNode): void {
+export function rewriteLocalResources(root: ParentNode, protocolBase = PROTOCOL_BASE): void {
   for (const [selector, attribute] of RESOURCE_ATTRIBUTES) {
     const elements = [...root.querySelectorAll<HTMLElement>(`${selector}[${attribute}]`)]
     if (root instanceof HTMLElement && root.matches(`${selector}[${attribute}]`)) {
@@ -58,21 +63,21 @@ export function rewriteLocalResources(root: ParentNode): void {
     for (const element of elements) {
       const raw = element.getAttribute(attribute)
       if (raw === null) continue
-      const local = toReaditResourceUrl(raw)
+      const local = toReaditResourceUrl(raw, protocolBase)
       if (local !== null) element.setAttribute(attribute, local)
     }
   }
 }
 
-export function observeLocalResources(host: HTMLElement): () => void {
+export function observeLocalResources(host: HTMLElement, protocolBase = PROTOCOL_BASE): () => void {
   const root = host.shadowRoot
   if (root === null) return () => {}
-  rewriteLocalResources(root)
+  rewriteLocalResources(root, protocolBase)
 
   const observer = new MutationObserver((records) => {
     for (const record of records) {
       for (const node of record.addedNodes) {
-        if (node instanceof HTMLElement) rewriteLocalResources(node)
+        if (node instanceof HTMLElement) rewriteLocalResources(node, protocolBase)
       }
     }
   })
@@ -80,4 +85,4 @@ export function observeLocalResources(host: HTMLElement): () => void {
   return () => observer.disconnect()
 }
 
-export { PROTOCOL_BASE }
+export { PROTOCOL_BASE, WINDOWS_PROTOCOL_BASE }

@@ -5,7 +5,7 @@ import { mount, type Mode, type MountHandle } from 'readit/element'
 import './styles.css'
 import { createHighlighterLoader, createMermaidLoader } from './loaders.js'
 import { routeDocumentOpen } from './navigation.js'
-import { observeLocalResources } from './resources.js'
+import { observeLocalResources, resourceProtocolBase } from './resources.js'
 import {
   createWatchedDocumentReloader,
   type WatchedDocumentChange,
@@ -155,7 +155,7 @@ function showDocument(documentPayload: DocumentPayload): void {
       onNavigate: (path) => queueNavigation(path),
       onChange: (value) => saveState.userChanged(value),
     })
-    stopObservingResources = observeLocalResources(host)
+    stopObservingResources = observeLocalResources(host, resourceProtocolBase(navigator.userAgent))
   }
   saveState.load(documentPayload)
 }

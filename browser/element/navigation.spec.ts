@@ -21,6 +21,24 @@ test('相对 .md 链接被拦下并通过 onNavigate 上报', async ({ page }) =
   expect(page.url()).toBe(before)
 })
 
+test('点击普通正文后 Alt+Left 能驱动组件历史，而不要求全局键盘监听', async ({ page }) => {
+  await page.goto('/host.html')
+  await page.waitForFunction(() => window.readitFixture !== undefined)
+  await mountDoc(page, 'a', {
+    value: '[next](./other.md)\n\nordinary paragraph\n',
+    mode: 'read',
+    baseUrl: 'docs/index.md',
+  })
+  await page.locator('#a a').click()
+  await page.getByText('ordinary paragraph', { exact: true }).click()
+  await page.keyboard.press('Alt+ArrowLeft')
+
+  expect(await page.evaluate(() => window.readitFixture.navigations)).toEqual([
+    'docs/other.md',
+    'docs/index.md',
+  ])
+})
+
 test('#slug 由元素自己搭桥，不动 document 的 fragment', async ({ page }) => {
   // 曾经的已知缺陷，已在本批修复：packages/element/src/set-html.ts 第 1 级原来
   // 把 HTML 交给浏览器原生 Element.setHTML() 却不传 sanitizer 配置，落到浏览器

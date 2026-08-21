@@ -307,3 +307,77 @@ Chromium 没有被改写成 WebView2 信号。
 W3 也值得记一笔：方案里推测 `with_webview()` → `ICoreWebView2Settings3` 也许能绕开给
 wry 打补丁，明确标注为「控制端未验证」。**执行方验证了，可行**，省掉了 SPEC §11.3
 当初假设的那笔补丁维护成本。
+
+---
+
+## v0.1.0 Windows 真机缺陷修复与复测（2026-08-22）
+
+### 结论
+
+基于 2026-08-20 首轮发布包真机测试发现的四项问题，先写
+`docs/plans/2026-08-21-windows-v0.1.0-fixes.md`，再按“旧实现定向红 → 最小修复 →
+完整自动化 → 新 release 真 WebView2”推进。四项均已在新构建上通过。
+
+对当前 Windows 11 + Evergreen WebView2 环境，可以给出以下受限结论：**阅读本地 Markdown、
+加载同目录资源、第二实例投递文档、文档内历史导航和长文档查找已符合规格，应用可正常完成
+本轮覆盖的核心阅读路径。** 这不是对所有 Windows 版本和安装场景的无条件放行；文件关联双击、
+无 WebView2 的 Windows 10 bootstrapper、完整编辑/监听矩阵、代码签名与卸载隔离没有在本轮重测。
+
+### 修复内容
+
+| 编号 | 根因 | 修复 |
+|---|---|---|
+| WRF-1 | Windows WebView2 的 Tauri 自定义协议 origin 实际为 `http://readit.localhost/`，DOM 却统一写成 `readit://localhost/` | 新增可测试的平台 base 选择；Windows 对 `img/source/audio/video/poster` 及异步节点统一使用 mapped origin，其他平台保持原协议 |
+| WRF-2 | 壳的 capture 外链门把 `D:/...` 中的单字母盘符当成 scheme | 与元素层统一最小 scheme 长度；盘符路径继续冒泡给文档路由，两个字母以上的 scheme 仍进入安全门且仅放行 http(s) |
+| WRF-3 | 通用查找 UI 为 `position:absolute`，桌面文档滚动时跟随内容离开视口 | 元素提供 `--readit-find-position`，默认仍为 `absolute`；桌面壳的 `#reader` 显式裁决为 `fixed` |
+| WRF-4 | 历史键监听在元素宿主上，但点击普通正文不会使宿主获得焦点 | 普通主按钮 pointerdown 将已有 `.readit-root[tabindex=-1]` 以 `preventScroll` 聚焦；链接、表单、contenteditable 与可 Tab 元素不被抢焦点 |
+
+没有放宽资源路径守卫、外链协议白名单或 Markdown 打开边界；没有把快捷键监听上移到
+`window`/`document`，也没有改变通用元素的默认查找栏定位语义。
+
+### 自动化证据
+
+1. 在修改生产代码前，新增的 5 个定向测试文件共执行 73 项；旧实现结果为
+   `66 passed / 7 failed`，失败分别命中上述四条真机现象。修复后同组为 `73 passed / 0 failed`。
+2. 仓库根完整 Vitest：`97 files / 2914 tests passed / 0 failed`。
+3. `npm run typecheck`：根、browser、各 workspace 与 shell 全部通过。
+4. 完整浏览器矩阵：`80 total / 78 passed / 2 existing WebKit skips / 0 failed`；新增的
+   fixed 查找栏与正文点击历史键用例均在 Chromium、WebKit 通过。
+5. `cargo test` 在 Rust 1.97 GNU 下完成所有依赖和测试程序编译，但生成的 Tauri/WebView2
+   测试 exe 在测试入口前以 `0xc0000139 STATUS_ENTRYPOINT_NOT_FOUND` 退出；LLVM-MinGW 与
+   MSYS2 GCC 链接均相同。普通 Rust hello 在同一工具链可运行，且本轮没有修改 Rust 源码，
+   因此只记录为本机原生测试运行时限制，**不声称 Rust 测试通过**。
+6. `cargo clippy --all-targets -- -D warnings` 编译到项目后命中既有
+   `AppState::enqueue_opened_urls` 的 `dead_code`，所以本轮也没有新的 clippy 全绿结论。
+
+构建日志另有 Vite 大分块提示；它是包体积/首载性能后续项，不影响本轮行为验收。
+
+### 真 WebView2 复测
+
+环境：Windows 11 `10.0.26200`，Edge/WebView2 `151.0.4129.93`，窗口默认 `960×720`。
+测试使用新 release 二进制，并仅为证据采集临时加入本机 `--remote-debugging-port=9222`；
+端口没有写入源码、配置或交付包。
+
+| 项 | 结果 | 实测值 |
+|---|---|---|
+| 相对图片 | **通过** | doc-a 的蓝、红、两张绿色图片均 `complete=true`、自然尺寸 `220×130`；DOM URL 均为 `http://readit.localhost/...` |
+| 第二实例绝对路径 | **通过** | doc-a 已开时以 `D:\...\doc-b.markdown` 再启动；第二进程 exit 0，运行实例数仍为 1，标题和正文切到 doc-b |
+| 普通正文后的 `Alt+Left` | **通过** | 点击后焦点为 `.readit-root[tabindex=-1]`；doc-b 返回 doc-a |
+| 固定查找栏 | **通过** | 查询 `sentinel` 到第 3/6 项，`scrollY=1864.67`；栏为 `fixed`，矩形 `top=8 / bottom=51.53`，完全位于 720px 视口内且按钮可用 |
+
+资源和查找栏均留有真窗口截图，位于仓库外测试目录
+`D:\robot\readit-release-test\screenshots\`，未作为产品资产提交。
+
+### 本地 Windows 构建产物
+
+正式 crate 类型已在构建前恢复，仓库配置未因本地工具链绕行而改变。release 与 unsigned
+NSIS 均成功生成；本地打包通过 CLI override 关闭 updater artifact，只是为了不使用发布
+minisign 私钥，项目的正式 `createUpdaterArtifacts: true` 配置保持不变。
+
+| 产物 | 大小 | SHA-256 |
+|---|---:|---|
+| `shell/src-tauri/target/release/readit-shell.exe` | 30.99 MiB | `9814CF3F97C5EDCB4386E5B0DB4FC83499F5F19867E44A6EAB354DE4BAED4122` |
+| `shell/src-tauri/target/release/bundle/nsis/readit_0.1.0_x64-setup.exe` | 8.70 MiB | `D656D1BBF8771BF64A2CCB08792B5EB99A73040C8BF133568C589B6067E29E3F` |
+
+NSIS 本轮只完成生成，没有覆盖安装旧版、文件关联、卸载和 updater 签名链；不能把直接运行
+release exe 的结果写成“新安装包全流程通过”。

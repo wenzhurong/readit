@@ -228,6 +228,37 @@ describe('历史栈是元素的能力', () => {
   it('没得退时不吞按键', () => {
     expect(key(makeKernel(), { key: 'ArrowLeft', altKey: true }).defaultPrevented).toBe(false)
   })
+
+  it('点击普通正文后导航根取得焦点，真实键盘事件能冒泡到宿主', () => {
+    const kernel = makeKernel()
+    click(kernel, 'rel')
+    kernel.setValue('# next\n\nordinary paragraph\n')
+    const paragraph = kernel.content.querySelector('p')!
+    paragraph.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true }))
+
+    const active = kernel.root.container instanceof ShadowRoot
+      ? kernel.root.container.activeElement
+      : document.activeElement
+    expect(active).toBe(kernel.root.root)
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'ArrowLeft', altKey: true, bubbles: true, composed: true, cancelable: true,
+    })
+    active?.dispatchEvent(event)
+    expect({ prevented: event.defaultPrevented, index: kernel.navigation.index() }).toEqual({
+      prevented: true, index: 0,
+    })
+  })
+
+  it('点击交互元素不把焦点抢到导航根', () => {
+    const kernel = makeKernel()
+    const anchor = kernel.content.querySelector<HTMLAnchorElement>('a')!
+    anchor.focus()
+    anchor.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, composed: true }))
+    expect(kernel.root.container instanceof ShadowRoot
+      ? kernel.root.container.activeElement
+      : document.activeElement).toBe(anchor)
+  })
 })
 
 describe('相对跳转失败的错误态（设计文档 §8）', () => {

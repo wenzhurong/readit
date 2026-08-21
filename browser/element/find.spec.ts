@@ -194,6 +194,38 @@ test.describe('mount().find', () => {
     expect(ui).toEqual({ open: 'true', focused: true, visible: true })
   })
 
+  test('宿主选择 fixed 后，长文档查找栏在命中滚动期间留在视口且按钮可用', async ({ page }) => {
+    const value = Array.from({ length: 260 }, (_, index) =>
+      index === 245 ? `paragraph ${index} VIEWPORT_NEEDLE` : `paragraph ${index}`,
+    ).join('\n\n')
+    await page.goto('/host.html')
+    await page.waitForFunction(() => window.readitFixture !== undefined)
+    const id = await page.evaluate((source) => {
+      const host = document.getElementById('a')!
+      host.style.setProperty('--readit-find-position', 'fixed')
+      return window.readitFixture.mount('a', { value: source, mode: 'read' })
+    }, value)
+
+    await page.evaluate((handle) => window.readitFixture.get(handle).find('VIEWPORT_NEEDLE'), id)
+    const before = await page.evaluate(() => {
+      const host = document.getElementById('a')!
+      const uiHost = host.shadowRoot!.querySelector<HTMLElement>('.readit-find-ui-host')!
+      const rect = uiHost.getBoundingClientRect()
+      return { top: rect.top, right: rect.right, bottom: rect.bottom, height: innerHeight }
+    })
+    expect(before.top).toBeGreaterThanOrEqual(0)
+    expect(before.bottom).toBeLessThanOrEqual(before.height)
+
+    await page.evaluate(() => {
+      const host = document.getElementById('a')!
+      const uiHost = host.shadowRoot!.querySelector<HTMLElement>('.readit-find-ui-host')!
+      uiHost.shadowRoot!.querySelector<HTMLButtonElement>('[data-find-previous]')!.click()
+    })
+    expect(await page.evaluate((handle) => window.readitFixture.get(handle).find(), id)).toEqual({
+      query: 'VIEWPORT_NEEDLE', total: 1, current: 1,
+    })
+  })
+
   test('Mermaid 水合后活动查询改绑到新 SVG 文本节点', async ({ page }) => {
     const markdown = '```mermaid\nflowchart LR\nA[Markdown source] --> B[Safe SVG]\n```\n'
     await page.goto('/host.html')

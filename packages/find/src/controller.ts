@@ -46,7 +46,7 @@ export const FIND_CSS = `
 mark[data-readit-find] { background: #fff8c5; color: inherit; padding: 0; }
 mark[data-readit-find-current] { background: #f2cc60; }
 .readit-find-ui-host {
-  display: none; position: absolute; z-index: 10; top: 8px; right: 8px;
+  display: none; position: var(--readit-find-position, absolute); z-index: 10; top: 8px; right: 8px;
 }
 :host([data-readit-find-open]) .readit-find-ui-host,
 [data-readit-find-open] .readit-find-ui-host { display: block; }

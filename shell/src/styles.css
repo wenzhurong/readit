@@ -21,6 +21,9 @@ body {
 
 #reader {
   min-height: 100vh;
+  /* The reusable element remains host-bounded by default. The desktop shell owns
+     the whole WebView, so its find bar must stay in the window while the document scrolls. */
+  --readit-find-position: fixed;
 }
 
 #status {

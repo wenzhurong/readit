@@ -243,4 +243,8 @@ describe('源码模型与内置 UI', () => {
     })
     controller.destroy()
   })
+
+  it('允许桌面壳把查找栏固定在窗口，同时保留嵌入默认值', () => {
+    expect(FIND_CSS).toContain('position: var(--readit-find-position, absolute)')
+  })
 })

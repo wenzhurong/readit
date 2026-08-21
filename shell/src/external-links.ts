@@ -1,4 +1,4 @@
-const SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/
+const SCHEME = /^([a-zA-Z][a-zA-Z0-9+.-]*):/
 
 export interface ExternalLinkActions {
   openExternal(url: string): Promise<void>
@@ -12,7 +12,11 @@ function normalizedHref(raw: string): string {
 }
 
 function externalCandidate(href: string): boolean {
-  return href.startsWith('//') || SCHEME.test(href)
+  if (href.startsWith('//')) return true
+  const scheme = SCHEME.exec(href)?.[1]
+  // Keep this boundary aligned with @readit/element's classifyHref: a one-letter
+  // prefix is a Windows drive (C:/...), not an external URL scheme.
+  return scheme !== undefined && scheme.length >= 2
 }
 
 export function allowedWebUrl(raw: string): string | null {
