@@ -13,6 +13,8 @@ import { createSetHtml, readEnv } from '../../packages/element/src/set-html.js'
 import { connectExternalLinks } from '../../shell/src/external-links.js'
 import { rewriteLocalResources } from '../../shell/src/resources.js'
 import { connectFindShortcut } from '../../shell/src/find-shortcut.js'
+import { connectModeSwitch, type ModeSwitchHandle } from '../../shell/src/mode-switch.js'
+import { connectDraggable, createStoredPosition } from '../../shell/src/draggable.js'
 
 type MountOpts = NonNullable<Parameters<typeof mount>[1]>
 type Handle = ReturnType<typeof mount>
@@ -54,6 +56,13 @@ export interface ReaditFixtureApi {
    * `<picture><source srcset>` 组合探测，而不是孤立的 `<source>`。
    */
   sanitizeSurvivesTags(tags: string[]): Record<string, boolean>
+  /**
+   * 桌面壳的模式控件（mode-switch + draggable 接在一起）。放进真引擎是因为
+   * happy-dom 证不了这两件事：指针捕获下的拖动（那里 getBoundingClientRect 恒为 0），
+   * 以及拖完松手时浏览器补派的那一次 click 有没有被吃掉——不吃掉，放手就顺手切了模式。
+   */
+  connectShellModeSwitch(): void
+  shellModeSwitchState(): { selections: readonly string[]; left: number; top: number }
 }
 
 const handles = new Map<string, Handle>()
@@ -62,6 +71,10 @@ const changes: string[] = []
 const shellExternalOpened: string[] = []
 const shellExternalFeedback: string[] = []
 const shellExternalStops = new Map<string, () => void>()
+const shellModeSelections: string[] = []
+let shellModeStop: (() => void) | null = null
+const MODE_SWITCH_FIXTURE_ID = 'readit-mode-switch'
+const MODE_SWITCH_FIXTURE_KEY = 'readit-fixture:mode-switch-position'
 let shellFindStop: (() => void) | null = null
 let seq = 0
 
@@ -183,6 +196,43 @@ const api: ReaditFixtureApi = {
     const failures = await runAllCases(cases)
     scratch.remove()
     return failures
+  },
+  connectShellModeSwitch() {
+    shellModeStop?.()
+    shellModeSelections.length = 0
+    // 每次连接都从 CSS 默认位置开始，免得上一条用例的存档影响下一条。
+    window.localStorage.removeItem(MODE_SWITCH_FIXTURE_KEY)
+    document.getElementById(MODE_SWITCH_FIXTURE_ID)?.remove()
+
+    const root = document.createElement('div')
+    root.id = MODE_SWITCH_FIXTURE_ID
+    root.style.cssText = 'position:fixed;top:12px;right:12px;z-index:9;display:flex;'
+    root.innerHTML = ['read', 'source', 'split']
+      .map((mode) => `<button type="button" data-mode="${mode}" aria-pressed="false">${mode}</button>`)
+      .join('')
+    document.body.append(root)
+
+    let handle: ModeSwitchHandle | null = null
+    handle = connectModeSwitch(root, {
+      onSelect: (mode) => {
+        shellModeSelections.push(mode)
+        handle?.setMode(mode)
+      },
+      shortcutModifier: '\u2318',
+    })
+    const stopDrag = connectDraggable(root, {
+      store: createStoredPosition(MODE_SWITCH_FIXTURE_KEY, window.localStorage),
+      viewport: () => ({ width: window.innerWidth, height: window.innerHeight }),
+    })
+    shellModeStop = () => {
+      stopDrag()
+      handle?.destroy()
+      root.remove()
+    }
+  },
+  shellModeSwitchState() {
+    const rect = document.getElementById(MODE_SWITCH_FIXTURE_ID)?.getBoundingClientRect()
+    return { selections: [...shellModeSelections], left: rect?.left ?? -1, top: rect?.top ?? -1 }
   },
   sanitizeSurvivesTags(tags) {
     const inject = createSetHtml(readEnv())

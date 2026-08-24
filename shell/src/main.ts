@@ -17,6 +17,7 @@ import { connectEditShortcuts } from './edit-shortcuts.js'
 import { createCompositionGate } from './composition-gate.js'
 import { createLeavePrompt, type LeaveKind } from './leave-prompt.js'
 import { connectModeSwitch } from './mode-switch.js'
+import { connectDraggable, createStoredPosition } from './draggable.js'
 import { createSaveState, type SaveDocumentRef, type SaveStateSnapshot } from './save-state.js'
 import { documentWindowTitle, normalizeDocumentPath } from './document-path.js'
 
@@ -118,9 +119,25 @@ const stopFindShortcut = connectFindShortcut(window, () => handle)
 
 const isWindows = navigator.userAgent.includes('Windows')
 
-const modeSwitch = connectModeSwitch(requireElement('#mode-switch'), {
+const modeSwitchRoot = requireElement('#mode-switch')
+
+const modeSwitch = connectModeSwitch(modeSwitchRoot, {
   onSelect: (mode) => setShellMode(mode),
   shortcutModifier: isWindows ? 'Ctrl+' : '\u2318',
+})
+
+// 存档写不进去（隐私模式、被策略禁用）不该让控件不可用，所以取不到就当没有存档。
+function optionalLocalStorage(): Storage | null {
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
+
+const stopModeSwitchDrag = connectDraggable(modeSwitchRoot, {
+  store: createStoredPosition('readit:mode-switch-position', optionalLocalStorage()),
+  viewport: () => ({ width: window.innerWidth, height: window.innerHeight }),
 })
 
 function setShellMode(mode: Extract<Mode, 'read' | 'source' | 'split'>): void {
@@ -285,6 +302,7 @@ window.addEventListener('beforeunload', () => {
   stopFindShortcut()
   stopEditShortcuts()
   compositionGate.destroy()
+  stopModeSwitchDrag()
   modeSwitch.destroy()
   leavePrompt.destroy()
   stopObservingResources?.()

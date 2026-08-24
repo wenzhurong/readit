@@ -67,12 +67,20 @@ describe('壳的模式切换按钮', () => {
 
   it('main.ts 接上了控件，并在模式变更后回灌状态', () => {
     const src = main()
-    expect(src).toContain("connectModeSwitch(requireElement('#mode-switch')")
+    expect(src).toContain("requireElement('#mode-switch')")
+    expect(src).toContain('connectModeSwitch(modeSwitchRoot')
     // 回灌这一步掉了的话，从菜单或快捷键切换时按钮会与真实模式脱节。
     expect(src).toContain('modeSwitch.setMode(mode)')
   })
 
   it('快捷键提示按平台给，Windows 上没有菜单可教这件事', () => {
     expect(main()).toMatch(/shortcutModifier:\s*isWindows\s*\?\s*'Ctrl\+'/)
+  })
+
+  it('控件接上了拖拽，位置存档取不到时不能让它不可用', () => {
+    const src = main()
+    expect(src).toContain('connectDraggable(modeSwitchRoot')
+    // localStorage 在隐私模式/被策略禁用时读取本身就会抛，必须包起来。
+    expect(src).toContain('function optionalLocalStorage()')
   })
 })

@@ -21,11 +21,6 @@ body {
 
 #reader {
   min-height: 100vh;
-  /* 给左上角的模式控件留一条窄带：右侧的 #document-state 浮在正文上问题不大（右边
-     通常是空白），但左边每一行正文都从这里开始，不留就会常态遮住首行标题。
-     滚动时正文仍会从控件下方经过——这与查找栏、#document-state 的行为一致，
-     三者都是不透明的浮层芯片。 */
-  padding-top: 2.75rem;
   /* The reusable element remains host-bounded by default. The desktop shell owns
      the whole WebView, so its find bar must stay in the window while the document scrolls. */
   --readit-find-position: fixed;
@@ -43,18 +38,33 @@ body {
   color: #cf222e;
 }
 
-/* 与 #document-state 同类：浮在文档之上的壳控件。放左上是因为右上已经被
-   #document-state 和查找栏（fixed, top 8px right 8px）占了，那两者本身就会重叠。 */
+/* 浮在文档之上的壳控件，默认右上角，可拖动（draggable.ts 会改写 left/top 并把
+   right 让开）。平时半透明地退到背景里，指到、键盘聚焦到、或正在拖动时才完整显示。
+   touch-action/user-select 关掉是为了拖动时不选中文字、不被滚动手势抢走指针。 */
 #mode-switch {
   position: fixed;
   top: 0.75rem;
-  left: 0.75rem;
+  right: 0.75rem;
   z-index: 9;
   display: flex;
   overflow: hidden;
   border: 1px solid ButtonBorder;
   border-radius: 999px;
   background: Canvas;
+  opacity: 0.35;
+  transition: opacity 120ms ease;
+  touch-action: none;
+  user-select: none;
+}
+
+#mode-switch:hover,
+#mode-switch:focus-within,
+#mode-switch[data-dragging='true'] {
+  opacity: 1;
+}
+
+#mode-switch[data-dragging='true'] button {
+  cursor: grabbing;
 }
 
 #mode-switch button {
@@ -75,7 +85,9 @@ body {
 
 #document-state {
   position: fixed;
-  top: 0.75rem;
+  /* 让开右上角：那里默认是 #mode-switch。竖排而不是横排，是因为横排要依赖
+     模式控件的宽度，而它随语言与字体变。 */
+  top: 3.25rem;
   right: 0.75rem;
   z-index: 9;
   margin: 0;
