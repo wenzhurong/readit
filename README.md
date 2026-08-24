@@ -142,6 +142,12 @@ npm run tauri --workspace=readit-shell-frontend -- build --bundles nsis `
 
 ---
 
+## 桌面阅读版面
+
+- 窗口宽过约 52rem 时正文居中，两侧留白随窗口变宽而变宽；窗口更窄时正文照常占满。
+  这是**桌面壳自己的版面决定**（`#reader::part(content)`），不是可复用元素的行为——
+  元素交给嵌入方的宿主布局，不替宿主定行宽。
+
 ## 桌面编辑与保存
 
 - Reading / Source / Split：窗口**右上角有三个按钮**（阅读 / 源码 / 分栏）。它平时

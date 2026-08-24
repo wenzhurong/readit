@@ -206,7 +206,10 @@ const api: ReaditFixtureApi = {
 
     const root = document.createElement('div')
     root.id = MODE_SWITCH_FIXTURE_ID
-    root.style.cssText = 'position:fixed;top:12px;right:12px;z-index:9;display:flex;'
+    // 与 shell/src/styles.css 的 #mode-switch 对齐：width:max-content 是防"挤扁棘轮"的那一条，
+    // 少了它这里测到的就不是壳的真实控件。
+    root.style.cssText =
+      'position:fixed;top:12px;right:12px;z-index:9;display:flex;width:max-content;white-space:nowrap;'
     root.innerHTML = ['read', 'source', 'split']
       .map((mode) => `<button type="button" data-mode="${mode}" aria-pressed="false">${mode}</button>`)
       .join('')

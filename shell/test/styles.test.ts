@@ -33,3 +33,18 @@ it('模式控件与"未保存"芯片不占同一个位置', () => {
   expect(declaration('#mode-switch', 'right')).toBe(declaration('#document-state', 'right'))
   expect(declaration('#mode-switch', 'top')).not.toBe(declaration('#document-state', 'top'))
 })
+
+it('正文有行宽上限并居中 —— 宽窗口下两侧留白随窗口变化', () => {
+  // margin-inline:auto 是"留白随窗口变化"的来源：留白 =（窗口宽 - 上限）/ 2。
+  // 少了它就变成"固定宽度贴左边"，正是这条要防的。
+  expect(declaration('#reader::part(content)', 'max-width')).toBe('var(--readit-shell-measure)')
+  expect(declaration('#reader::part(content)', 'margin-inline')).toBe('auto')
+  // 变量本身用全文匹配：#reader 还出现在 `html, body, #app, #reader {` 这个组选择器里，
+  // 按规则块取会先命中那一个（第一次写这条守卫时就是这么错的）。
+  expect(css()).toMatch(/--readit-shell-measure:\s*\d+(\.\d+)?rem;/)
+})
+
+it('模式控件宽度不可压缩 —— 否则缩窗口会把它挤扁且再也回不来', () => {
+  // 棘轮：压扁后 draggable 读到的宽度变小，clamp 上界跟着变大，控件永远贴在边界外。
+  expect(declaration('#mode-switch', 'width')).toBe('max-content')
+})

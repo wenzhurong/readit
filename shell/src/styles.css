@@ -24,6 +24,8 @@ body {
   /* The reusable element remains host-bounded by default. The desktop shell owns
      the whole WebView, so its find bar must stay in the window while the document scrolls. */
   --readit-find-position: fixed;
+  /* 阅读行宽上限，见下面的 ::part(content) 规则。 */
+  --readit-shell-measure: 52rem;
 }
 
 #status {
@@ -38,6 +40,27 @@ body {
   color: #cf222e;
 }
 
+/*
+ * 阅读行宽上限。窗口宽过这个值时正文居中、两侧留白，且留白随窗口变宽而变宽；
+ * 窗口比它窄时正文照常占满。这是**壳自己的版面决定**，不是元素的行为：可复用元素
+ * 交给嵌入方的宿主布局，不该替宿主定行宽。走 ::part(content) 而不是新加一个 CSS
+ * 变量，是因为 part="content"（kernel.ts 给 .markdown-body 设的）已经是公开 API，
+ * 不必为此扩大元素的接口面。
+ *
+ * 按 CSS Scoping 的跨树层叠，外层树的**普通**声明压过 shadow 树内部的同名声明，
+ * 所以这里不需要 !important。
+ *
+ * 分栏模式下这条同样生效：每个窗格宽过上限时预览侧也会居中，行为一致。
+ * 源码模式下正文不可见，不受影响。
+ */
+#reader::part(content) {
+  box-sizing: border-box;
+  max-width: var(--readit-shell-measure);
+  margin-inline: auto;
+  /* 窄窗口时也别贴着边 */
+  padding-inline: 1.5rem;
+}
+
 /* 浮在文档之上的壳控件，默认右上角，可拖动（draggable.ts 会改写 left/top 并把
    right 让开）。平时半透明地退到背景里，指到、键盘聚焦到、或正在拖动时才完整显示。
    touch-action/user-select 关掉是为了拖动时不选中文字、不被滚动手势抢走指针。 */
@@ -47,6 +70,12 @@ body {
   right: 0.75rem;
   z-index: 9;
   display: flex;
+  /* 宽度不可压缩。少了这条会形成棘轮：窗口缩到 left 右边没地方时，fixed 元素的可用
+     宽度变成 0，浏览器把它压到最小宽度（两字标签竖排折行）；而 draggable 的 clamp
+     又拿这个被压扁的宽度去算上界，于是它再也回不来。用 max-content 之后，测到的
+     永远是自然宽度，clamp 能把它正确拉回视口。2026-08-24 真机缩窗口时发现。 */
+  width: max-content;
+  white-space: nowrap;
   overflow: hidden;
   border: 1px solid ButtonBorder;
   border-radius: 999px;

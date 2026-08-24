@@ -58,4 +58,43 @@ test.describe('shell mode switch', () => {
       topInside: true,
     })
   })
+
+  test('窗口缩小把控件挤到边界外时，它被完整拉回而不是被压扁', async ({ page }) => {
+    // 棘轮回归：压扁之后测到的宽度会变小，clamp 上界跟着变大，控件再也回不来。
+    await page.setViewportSize({ width: 1200, height: 700 })
+    await page.goto('/host.html')
+    await page.waitForFunction(() => window.readitFixture !== undefined)
+    await page.evaluate(() => window.readitFixture.connectShellModeSwitch())
+
+    const natural = (await page.evaluate(() => {
+      const el = document.getElementById('readit-mode-switch')!
+      return el.getBoundingClientRect().width
+    })) as number
+    expect(natural).toBeGreaterThan(60)
+
+    // 先拖到最右边，再把窗口缩窄到那个位置之外。
+    const box = await page.locator('#readit-mode-switch [data-mode="read"]').boundingBox()
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(1100, 60, { steps: 20 })
+    await page.mouse.up()
+    await page.setViewportSize({ width: 420, height: 700 })
+
+    // 轮询而不是立刻断言：resize 之后各引擎更新 innerWidth 与布局的时机不同。
+    await expect
+      .poll(async () =>
+        await page.evaluate(() => {
+          const el = document.getElementById('readit-mode-switch')!
+          const r = el.getBoundingClientRect()
+          return r.left >= 0 && r.right <= window.innerWidth
+        }),
+      )
+      .toBe(true)
+
+    const after = await page.evaluate(() => {
+      const el = document.getElementById('readit-mode-switch')!
+      return el.getBoundingClientRect().width
+    })
+    expect(Math.abs(after - natural)).toBeLessThan(1)
+  })
 })
