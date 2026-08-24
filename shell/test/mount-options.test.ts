@@ -52,3 +52,27 @@ describe('壳的原生窗口标题', () => {
     expect(capability.permissions).toContain('core:window:allow-set-title')
   })
 })
+
+/**
+ * 同样是文本守卫，同样是因为 main.ts 从模块顶层就摸 DOM 与 IPC、导入即有副作用。
+ * `mode-switch.ts` 本身有单测，但「有没有人把它接上、并且在模式变更后回灌状态」测不了——
+ * 而这正是 D2-24 那一类：纯函数对、没人调用，表现和没写一样。
+ */
+describe('壳的模式切换按钮', () => {
+  it('index.html 里三个入口一个都不能少', () => {
+    const html = readFileSync(join(SHELL_DIR, 'index.html'), 'utf8')
+    const modes = [...html.matchAll(/data-mode="([a-z]+)"/g)].map((match) => match[1])
+    expect(modes).toEqual(['read', 'source', 'split'])
+  })
+
+  it('main.ts 接上了控件，并在模式变更后回灌状态', () => {
+    const src = main()
+    expect(src).toContain("connectModeSwitch(requireElement('#mode-switch')")
+    // 回灌这一步掉了的话，从菜单或快捷键切换时按钮会与真实模式脱节。
+    expect(src).toContain('modeSwitch.setMode(mode)')
+  })
+
+  it('快捷键提示按平台给，Windows 上没有菜单可教这件事', () => {
+    expect(main()).toMatch(/shortcutModifier:\s*isWindows\s*\?\s*'Ctrl\+'/)
+  })
+})

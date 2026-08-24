@@ -21,6 +21,11 @@ body {
 
 #reader {
   min-height: 100vh;
+  /* 给左上角的模式控件留一条窄带：右侧的 #document-state 浮在正文上问题不大（右边
+     通常是空白），但左边每一行正文都从这里开始，不留就会常态遮住首行标题。
+     滚动时正文仍会从控件下方经过——这与查找栏、#document-state 的行为一致，
+     三者都是不透明的浮层芯片。 */
+  padding-top: 2.75rem;
   /* The reusable element remains host-bounded by default. The desktop shell owns
      the whole WebView, so its find bar must stay in the window while the document scrolls. */
   --readit-find-position: fixed;
@@ -36,6 +41,36 @@ body {
 
 #status[data-kind='error'] {
   color: #cf222e;
+}
+
+/* 与 #document-state 同类：浮在文档之上的壳控件。放左上是因为右上已经被
+   #document-state 和查找栏（fixed, top 8px right 8px）占了，那两者本身就会重叠。 */
+#mode-switch {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 9;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid ButtonBorder;
+  border-radius: 999px;
+  background: Canvas;
+}
+
+#mode-switch button {
+  margin: 0;
+  padding: 0.35rem 0.7rem;
+  border: 0;
+  background: transparent;
+  color: GrayText;
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+#mode-switch button[aria-pressed='true'] {
+  background: ButtonFace;
+  color: CanvasText;
 }
 
 #document-state {

@@ -144,8 +144,10 @@ npm run tauri --workspace=readit-shell-frontend -- build --bundles nsis `
 
 ## 桌面编辑与保存
 
-- Reading / Source / Split：macOS 从 **View** 菜单切换，也可用 `Cmd+1/2/3`；Windows
-  使用 `Ctrl+1/2/3`。模式跨文档保持。`plain` 只供嵌入方使用，不进入桌面壳。
+- Reading / Source / Split：窗口**左上角有三个按钮**（阅读 / 源码 / 分栏），悬停会显示
+  本平台的快捷键；也可以 macOS 从 **View** 菜单切换或按 `Cmd+1/2/3`，Windows 按
+  `Ctrl+1/2/3`。三条入口共用同一份状态。模式跨文档保持（同一次运行内），
+  重启回到 Reading。`plain` 只供嵌入方使用，不进入桌面壳。
 - 保存：macOS 使用 **File → Save** 或 `Cmd+S`，Windows 使用 `Ctrl+S`。只手动保存，
   不自动保存；标题前的 `●` 和右上角“未保存”表示磁盘还没有当前内容。
 - 保存采用目标文件同目录的临时文件 + 原子替换，Rust 不接受渲染端提供的写入路径；

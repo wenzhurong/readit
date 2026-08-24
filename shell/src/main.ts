@@ -16,6 +16,7 @@ import { connectFindShortcut } from './find-shortcut.js'
 import { connectEditShortcuts } from './edit-shortcuts.js'
 import { createCompositionGate } from './composition-gate.js'
 import { createLeavePrompt, type LeaveKind } from './leave-prompt.js'
+import { connectModeSwitch } from './mode-switch.js'
 import { createSaveState, type SaveDocumentRef, type SaveStateSnapshot } from './save-state.js'
 import { documentWindowTitle, normalizeDocumentPath } from './document-path.js'
 
@@ -115,9 +116,18 @@ const stopExternalLinks = connectExternalLinks(host, {
 })
 const stopFindShortcut = connectFindShortcut(window, () => handle)
 
+const isWindows = navigator.userAgent.includes('Windows')
+
+const modeSwitch = connectModeSwitch(requireElement('#mode-switch'), {
+  onSelect: (mode) => setShellMode(mode),
+  shortcutModifier: isWindows ? 'Ctrl+' : '\u2318',
+})
+
 function setShellMode(mode: Extract<Mode, 'read' | 'source' | 'split'>): void {
   void compositionGate.wait().then(() => {
     currentMode = mode
+    // 菜单、快捷键、按钮三条入口共用这一条真相；按钮只反映结果，不自己记状态。
+    modeSwitch.setMode(mode)
     handle?.setMode(mode)
     return invoke('set_mode_menu', { mode })
   }).catch(displayError)
@@ -127,7 +137,7 @@ function requestSave(): void {
   void compositionGate.wait().then(() => saveState.save())
 }
 
-const stopEditShortcuts = navigator.userAgent.includes('Windows')
+const stopEditShortcuts = isWindows
   ? connectEditShortcuts(window, { setMode: setShellMode, save: requestSave })
   : (): void => {}
 
@@ -248,6 +258,7 @@ void (async () => {
   )
   // Native close/quit interception is enabled only after every corresponding listener exists.
   await invoke('frontend_ready')
+  modeSwitch.setMode(currentMode)
   await invoke('set_mode_menu', { mode: currentMode })
   await drainPendingDocuments()
 })().catch(displayError)
@@ -274,6 +285,7 @@ window.addEventListener('beforeunload', () => {
   stopFindShortcut()
   stopEditShortcuts()
   compositionGate.destroy()
+  modeSwitch.destroy()
   leavePrompt.destroy()
   stopObservingResources?.()
   handle?.destroy()
