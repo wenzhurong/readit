@@ -179,6 +179,13 @@ describe('Windows long-path and Rust coverage is wired into CI', () => {
     expect(job).toContain("$esbuildVersion -ne '0.28.2'")
     expect(job).toContain("'packages\\readit\\node_modules\\esbuild'")
     expect(job).toContain("'node_modules\\tsx\\node_modules\\esbuild'")
+    expect(job).toContain("'node_modules\\chalk\\package.json'")
+    expect(job).toContain("'node_modules\\chalk\\source\\index.js'")
+    expect(job).toContain('$rootChalkPackagePath.Length -ge 260')
+    expect(job).toContain("$rootChalkVersion -ne '5.6.2'")
+    expect(job).toContain("'node_modules\\marked-terminal\\node_modules\\chalk'")
+    expect(job).toContain("'node_modules\\@arethetypeswrong\\cli\\node_modules\\chalk\\package.json'")
+    expect(job).toContain("$attwChalkVersion -ne '4.1.2'")
     expect(job).not.toContain('--ignore-scripts')
     expect(job).not.toMatch(/\bsubst\b/i)
   })
@@ -193,6 +200,7 @@ describe('Windows long-path and Rust coverage is wired into CI', () => {
 })
 
 describe('the Windows long-path dependency graph has one hoisted esbuild binary', () => {
+  const root = JSON.parse(read('package.json')) as { devDependencies: Record<string, string> }
   const core = JSON.parse(read('packages/core/package.json')) as { devDependencies: Record<string, string> }
   const highlight = JSON.parse(read('packages/highlight/package.json')) as {
     devDependencies: Record<string, string>
@@ -222,6 +230,15 @@ describe('the Windows long-path dependency graph has one hoisted esbuild binary'
     expect(windowsBinaryPackages).toEqual(['node_modules/@esbuild/win32-x64'])
     expect(lock.packages['node_modules/esbuild']?.version).toBe('0.28.2')
     expect(lock.packages['node_modules/@esbuild/win32-x64']?.version).toBe('0.28.2')
+  })
+
+  it('hoists Chalk 5 for marked-terminal while preserving ATTW Chalk 4 compatibility', () => {
+    expect(root.devDependencies.chalk).toBe('5.6.2')
+    expect(lock.packages['node_modules/chalk']?.version).toBe('5.6.2')
+    expect(lock.packages['node_modules/marked-terminal']?.dependencies?.chalk).toBe('^5.4.1')
+    expect(lock.packages['node_modules/marked-terminal/node_modules/chalk']).toBeUndefined()
+    expect(lock.packages['node_modules/@arethetypeswrong/cli/node_modules/chalk']?.version).toBe('4.1.2')
+    expect(lock.packages['node_modules/cli-highlight/node_modules/chalk']?.version).toBe('4.1.2')
   })
 })
 

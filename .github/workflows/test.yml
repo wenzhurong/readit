@@ -209,8 +209,34 @@ jobs:
               throw "A nested esbuild copy restored the long native-executable path regression: $nestedPath"
             }
           }
+
+          $rootChalkPackagePath = Join-Path $env:READIT_LONG_PATH_ROOT `
+            'node_modules\chalk\package.json'
+          $rootChalkEntryPath = Join-Path $env:READIT_LONG_PATH_ROOT `
+            'node_modules\chalk\source\index.js'
+          $markedNestedChalkPath = Join-Path $env:READIT_LONG_PATH_ROOT `
+            'node_modules\marked-terminal\node_modules\chalk'
+          $attwChalkPackagePath = Join-Path $env:READIT_LONG_PATH_ROOT `
+            'node_modules\@arethetypeswrong\cli\node_modules\chalk\package.json'
+          if ($rootChalkPackagePath.Length -ge 260 -or $rootChalkEntryPath.Length -ge 260) {
+            throw "Root Chalk exceeds the Node 22 package-import budget: package=$($rootChalkPackagePath.Length) entry=$($rootChalkEntryPath.Length)"
+          }
+          $rootChalkVersion = (Get-Content -LiteralPath $rootChalkPackagePath -Raw | ConvertFrom-Json).version
+          if ($rootChalkVersion -ne '5.6.2') {
+            throw "Root Chalk is not the ESM 5.6.2 copy required by marked-terminal: version='$rootChalkVersion'"
+          }
+          if (Test-Path -LiteralPath $markedNestedChalkPath) {
+            throw "marked-terminal restored the >260-character Chalk 5 package-import path: $markedNestedChalkPath"
+          }
+          $attwChalkVersion = (Get-Content -LiteralPath $attwChalkPackagePath -Raw | ConvertFrom-Json).version
+          if ($attwChalkVersion -ne '4.1.2') {
+            throw "ATTW must retain its compatible Chalk 4 dependency: version='$attwChalkVersion'"
+          }
           Write-Host "npm root=$npmRoot"
           Write-Host "esbuild length=$($esbuildExecutablePath.Length) version=$esbuildVersion"
+          Write-Host `
+            "root Chalk package length=$($rootChalkPackagePath.Length) entry length=$($rootChalkEntryPath.Length) version=$rootChalkVersion"
+          Write-Host "ATTW nested Chalk version=$attwChalkVersion"
       - name: Run unit tests from the deep clone
         shell: pwsh
         run: |
