@@ -134,6 +134,7 @@ describe('Windows long-path and Rust coverage is wired into CI', () => {
   const start = workflow.indexOf('\n  windows-long-path:')
   const end = workflow.indexOf('\n  perf:', start)
   const job = start >= 0 && end > start ? workflow.slice(start, end) : ''
+  const rustDocumentSource = read('shell/src-tauri/src/document.rs')
 
   it('runs as an independent blocking Windows job', () => {
     expect(job).not.toBe('')
@@ -168,7 +169,29 @@ describe('Windows long-path and Rust coverage is wired into CI', () => {
     expect(job).toContain('[IO.File]::ReadAllBytes($longCorpusPath)')
     expect(job).toContain('$longestBuildOutput.FullName.Length -le 260')
     expect(job).toContain('[IO.File]::OpenRead($longestBuildOutput.FullName)')
-    expect(job).toContain('$longestCargoOutput.FullName.Length -le 260')
+  })
+
+  it('uses a fresh physical Cargo target within RUNNER_TEMP without shortening the source clone', () => {
+    expect(job).toContain('$cargoTargetName = "readit-cargo-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"')
+    expect(job).toContain('$cargoTargetPath.StartsWith(')
+    expect(job).toContain('$cargoTargetPath.Length -ge 160')
+    expect(job).toContain('$cargoTargetItem.Attributes -band [IO.FileAttributes]::ReparsePoint')
+    expect(job).toContain("$cargoManifestPath = Join-Path $env:READIT_LONG_PATH_ROOT 'shell\\src-tauri\\Cargo.toml'")
+    expect(job).toContain('$env:CARGO_TARGET_DIR = $cargoTargetPath')
+    expect(job).toContain('$longestCargoOutput.FullName.Length -ge 260')
+    expect(job).not.toContain("Join-Path $env:READIT_LONG_PATH_ROOT 'shell\\src-tauri\\target'")
+  })
+
+  it('keeps the Windows >260 document-open product test in the blocking Rust path', () => {
+    const testName = 'document::tests::opens_an_extended_length_windows_document_path'
+    expect(job).toContain(`$longPathTestName = '${testName}'`)
+    expect(job).toContain('$escapedLongPathTestName = [regex]::Escape($longPathTestName)')
+    expect(job).toContain('$longPathTestMatches = [regex]::Matches(')
+    expect(job).toContain('$longPathTestMatches.Count -ne 1')
+    expect(rustDocumentSource).toContain('#[cfg(windows)]')
+    expect(rustDocumentSource).toContain('fn opens_an_extended_length_windows_document_path()')
+    expect(rustDocumentSource).toContain('encode_wide().count() > 260')
+    expect(rustDocumentSource).toContain('state.open_document(&document).unwrap()')
   })
 
   it('keeps dependencies physical and the unified native executable within its spawn budget', () => {
@@ -195,7 +218,7 @@ describe('Windows long-path and Rust coverage is wired into CI', () => {
     expect(job).toContain('npm ci')
     expect(job).toContain('npm test')
     expect(job).toContain('npm run typecheck')
-    expect(job).toContain('cargo test --manifest-path shell/src-tauri/Cargo.toml')
+    expect(job.match(/cargo test --manifest-path \$cargoManifestPath/g)).toHaveLength(2)
   })
 })
 

@@ -53,7 +53,9 @@ jobs:
   # short runner path and never compiles the Rust shell, so it cannot detect either the historical
   # `spawn cmd.exe ENOENT` failure from a >260-character dependency path or a Windows-only Rust
   # regression. Keep this as a peer gate: every command below runs from a fresh clone whose root is
-  # already long before node_modules, generated dist chunks, and Cargo target files are appended.
+  # already long before node_modules and generated dist chunks are appended. Rust uses the same deep
+  # manifest/source clone, but its physical target stays short because MSVC link.exe cannot create
+  # >260-character /OUT paths; a Windows Rust test separately opens a real >260-character document.
   windows-long-path:
     name: Windows long path + Rust
     runs-on: windows-latest
@@ -278,17 +280,73 @@ jobs:
         shell: pwsh
         run: |
           Set-Location -LiteralPath $env:READIT_LONG_PATH_ROOT
-          cargo test --manifest-path shell/src-tauri/Cargo.toml
+
+          $runnerTempPath = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd(
+            [IO.Path]::DirectorySeparatorChar
+          )
+          $cargoTargetName = "readit-cargo-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $cargoTargetPath = [IO.Path]::GetFullPath((Join-Path $runnerTempPath $cargoTargetName))
+          $runnerTempPrefix = $runnerTempPath + [IO.Path]::DirectorySeparatorChar
+          if (-not $cargoTargetPath.StartsWith(
+              $runnerTempPrefix,
+              [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Cargo target escaped RUNNER_TEMP: target=$cargoTargetPath temp=$runnerTempPath"
+          }
+          if ($cargoTargetPath.Length -ge 160) {
+            throw "Cargo target root leaves too little linker path budget: length=$($cargoTargetPath.Length)"
+          }
+          if (Test-Path -LiteralPath $cargoTargetPath) {
+            throw "Cargo target must be a fresh per-attempt directory: $cargoTargetPath"
+          }
+          New-Item -ItemType Directory -Path $cargoTargetPath | Out-Null
+          $cargoTargetItem = Get-Item -LiteralPath $cargoTargetPath
+          if (($cargoTargetItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Cargo target must be a physical directory, not a reparse point: $cargoTargetPath"
+          }
+
+          $cargoManifestPath = Join-Path $env:READIT_LONG_PATH_ROOT 'shell\src-tauri\Cargo.toml'
+          $env:CARGO_TARGET_DIR = $cargoTargetPath
+          $env:CARGO_TERM_COLOR = 'never'
+          Write-Host `
+            "Cargo source root length=$($env:READIT_LONG_PATH_ROOT.Length) manifest length=$($cargoManifestPath.Length)"
+          Write-Host "Cargo physical target length=$($cargoTargetPath.Length) path=$cargoTargetPath"
+
+          cargo test --manifest-path $cargoManifestPath
           if ($LASTEXITCODE -ne 0) {
             throw "cargo test failed in the deep clone: exit $LASTEXITCODE"
           }
 
-          $cargoTargetPath = Join-Path $env:READIT_LONG_PATH_ROOT 'shell\src-tauri\target'
-          $longestCargoOutput = Get-ChildItem -LiteralPath $cargoTargetPath -File -Recurse |
+          $longPathTestName = 'document::tests::opens_an_extended_length_windows_document_path'
+          $longPathTestOutput = @(
+            cargo test --manifest-path $cargoManifestPath $longPathTestName -- --exact 2>&1
+          )
+          $longPathTestExit = $LASTEXITCODE
+          $longPathTestOutput | ForEach-Object { Write-Host $_ }
+          if ($longPathTestExit -ne 0) {
+            throw "The Windows extended-length document test failed: exit $longPathTestExit"
+          }
+          $longPathTestText = $longPathTestOutput -join [Environment]::NewLine
+          $escapedLongPathTestName = [regex]::Escape($longPathTestName)
+          $longPathTestMatches = [regex]::Matches(
+            $longPathTestText,
+            "(?m)^test $escapedLongPathTestName \.\.\. ok\r?$"
+          )
+          if ($longPathTestMatches.Count -ne 1) {
+            throw "The Windows extended-length document test did not run exactly once"
+          }
+
+          $cargoOutputs = @(Get-ChildItem -LiteralPath $cargoTargetPath -File -Recurse)
+          $longestCargoOutput = $cargoOutputs |
             Sort-Object { $_.FullName.Length } -Descending |
             Select-Object -First 1
-          if ($null -eq $longestCargoOutput -or $longestCargoOutput.FullName.Length -le 260) {
-            throw "Cargo did not produce a file beyond MAX_PATH under $cargoTargetPath"
+          if ($null -eq $longestCargoOutput) {
+            throw "Cargo produced no files under $cargoTargetPath"
+          }
+          if ($longestCargoOutput.FullName.Length -ge 260) {
+            throw "Cargo target did not preserve the MSVC linker budget: longest=$($longestCargoOutput.FullName.Length)"
+          }
+          if ($null -eq ($cargoOutputs | Where-Object Length -gt 0 | Select-Object -First 1)) {
+            throw "Cargo produced no non-empty files under $cargoTargetPath"
           }
           Write-Host `
             "longest Cargo output length=$($longestCargoOutput.FullName.Length) path=$($longestCargoOutput.FullName)"
