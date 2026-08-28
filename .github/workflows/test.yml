@@ -81,15 +81,38 @@ jobs:
           }
 
           $minimumClonePathLength = 200
-          $deepRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP)
+          $targetClonePathLength = 210
+          if ($targetClonePathLength -lt $minimumClonePathLength) {
+            throw "Target clone length $targetClonePathLength is below the $minimumClonePathLength-character gate"
+          }
+
+          # Build an exact-length path instead of accepting a segment-sized overshoot. The dependency graph is
+          # intentionally unified on one root-level esbuild binary; keeping its executable below MAX_PATH lets
+          # vanilla npm lifecycle scripts run while the corpus and generated build outputs remain well above 260.
+          $deepRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar)
           $segment = 0
-          do {
-            $deepRoot = Join-Path $deepRoot ("readit-long-path-{0:D2}-abcdefghij" -f $segment)
+          while ($true) {
+            $candidateRoot = Join-Path $deepRoot ("readit-long-path-{0:D2}-abcdefghij" -f $segment)
+            $candidateClonePath = Join-Path $candidateRoot 'readit'
+            if ($candidateClonePath.Length -gt ($targetClonePathLength - 2)) {
+              break
+            }
+            $deepRoot = $candidateRoot
             $segment += 1
-          } while ((Join-Path $deepRoot 'readit').Length -lt $minimumClonePathLength)
+          }
+
+          $unpaddedClonePath = Join-Path $deepRoot 'readit'
+          $paddingLength = $targetClonePathLength - $unpaddedClonePath.Length - 1
+          if ($paddingLength -lt 1 -or $paddingLength -gt 255) {
+            throw "Cannot construct a $targetClonePathLength-character clone path from RUNNER_TEMP=$env:RUNNER_TEMP"
+          }
+          $deepRoot = Join-Path $deepRoot ('p' * $paddingLength)
+          $clonePath = Join-Path $deepRoot 'readit'
+          if ($clonePath.Length -ne $targetClonePathLength) {
+            throw "Deep clone path length is $($clonePath.Length), expected exactly $targetClonePathLength"
+          }
 
           New-Item -ItemType Directory -Path $deepRoot -Force | Out-Null
-          $clonePath = Join-Path $deepRoot 'readit'
           $sourceHead = (git -C $env:GITHUB_WORKSPACE rev-parse HEAD).Trim()
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($sourceHead)) {
             throw "Could not resolve the current checkout: exit $LASTEXITCODE"
@@ -124,30 +147,125 @@ jobs:
             throw "Deep clone path is only $($clonePath.Length) characters: $clonePath"
           }
 
+          $longCorpusPath = Join-Path $clonePath `
+            'packages\core\test\corpus\adversarial\karlcow\header-level1-hash-sign-trailing-2-spaces.md'
+          if ($longCorpusPath.Length -le 260) {
+            throw "Tracked corpus path is not beyond MAX_PATH: length=$($longCorpusPath.Length) path=$longCorpusPath"
+          }
+          $longCorpusBytes = [IO.File]::ReadAllBytes($longCorpusPath)
+          if ($longCorpusBytes.Length -eq 0) {
+            throw "Tracked long-path corpus is unexpectedly empty: $longCorpusPath"
+          }
+
           Write-Host "LongPathsEnabled=$longPathsEnabled"
           Write-Host "core.longpaths=$configuredLongPaths"
           Write-Host "deep clone length=$($clonePath.Length) path=$clonePath"
+          Write-Host "tracked corpus length=$($longCorpusPath.Length) bytes=$($longCorpusBytes.Length)"
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "READIT_LONG_PATH_ROOT=$clonePath"
       - name: Install dependencies from the deep clone
         shell: pwsh
         run: |
           Set-Location -LiteralPath $env:READIT_LONG_PATH_ROOT
           npm ci
+          if ($LASTEXITCODE -ne 0) {
+            throw "npm ci failed in the deep clone: exit $LASTEXITCODE"
+          }
+
+          $expectedNodeModules = Join-Path $env:READIT_LONG_PATH_ROOT 'node_modules'
+          $npmRoot = (npm root).Trim()
+          if ($LASTEXITCODE -ne 0) {
+            throw "npm root failed in the deep clone: exit $LASTEXITCODE"
+          }
+          if (-not [string]::Equals(
+              [IO.Path]::GetFullPath($npmRoot),
+              [IO.Path]::GetFullPath($expectedNodeModules),
+              [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Dependencies were not installed in the deep clone: npmRoot=$npmRoot expected=$expectedNodeModules"
+          }
+          $nodeModulesItem = Get-Item -LiteralPath $expectedNodeModules
+          if (($nodeModulesItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Deep-clone node_modules must not be a junction or other reparse point: $expectedNodeModules"
+          }
+
+          $esbuildExecutablePath = Join-Path $env:READIT_LONG_PATH_ROOT `
+            'node_modules\@esbuild\win32-x64\esbuild.exe'
+          if (-not (Test-Path -LiteralPath $esbuildExecutablePath -PathType Leaf)) {
+            throw "The unified root-level esbuild executable is missing: $esbuildExecutablePath"
+          }
+          if ($esbuildExecutablePath.Length -ge 260) {
+            throw "The unified esbuild executable exceeds its spawn budget: length=$($esbuildExecutablePath.Length)"
+          }
+          $esbuildVersion = (& $esbuildExecutablePath --version).Trim()
+          if ($LASTEXITCODE -ne 0 -or $esbuildVersion -ne '0.28.2') {
+            throw "Root esbuild executable is not usable as 0.28.2: version='$esbuildVersion' exit=$LASTEXITCODE"
+          }
+
+          $forbiddenNestedEsbuildPaths = @(
+            (Join-Path $env:READIT_LONG_PATH_ROOT 'packages\readit\node_modules\esbuild'),
+            (Join-Path $env:READIT_LONG_PATH_ROOT 'node_modules\tsx\node_modules\esbuild')
+          )
+          foreach ($nestedPath in $forbiddenNestedEsbuildPaths) {
+            if (Test-Path -LiteralPath $nestedPath) {
+              throw "A nested esbuild copy restored the long native-executable path regression: $nestedPath"
+            }
+          }
+          Write-Host "npm root=$npmRoot"
+          Write-Host "esbuild length=$($esbuildExecutablePath.Length) version=$esbuildVersion"
       - name: Run unit tests from the deep clone
         shell: pwsh
         run: |
           Set-Location -LiteralPath $env:READIT_LONG_PATH_ROOT
           npm test
+          if ($LASTEXITCODE -ne 0) {
+            throw "npm test failed in the deep clone: exit $LASTEXITCODE"
+          }
       - name: Build and typecheck from the deep clone
         shell: pwsh
         run: |
           Set-Location -LiteralPath $env:READIT_LONG_PATH_ROOT
           npm run typecheck
+          if ($LASTEXITCODE -ne 0) {
+            throw "npm run typecheck failed in the deep clone: exit $LASTEXITCODE"
+          }
+
+          $distPath = Join-Path $env:READIT_LONG_PATH_ROOT 'packages\readit\dist'
+          $longestBuildOutput = Get-ChildItem -LiteralPath $distPath -File -Recurse |
+            Sort-Object { $_.FullName.Length } -Descending |
+            Select-Object -First 1
+          if ($null -eq $longestBuildOutput) {
+            throw "The deep-clone build produced no files under $distPath"
+          }
+          if ($longestBuildOutput.FullName.Length -le 260) {
+            throw "No generated build output crossed MAX_PATH: longest=$($longestBuildOutput.FullName.Length)"
+          }
+          $buildOutputStream = [IO.File]::OpenRead($longestBuildOutput.FullName)
+          try {
+            if ($buildOutputStream.Length -eq 0) {
+              throw "The longest generated build output is empty: $($longestBuildOutput.FullName)"
+            }
+          } finally {
+            $buildOutputStream.Dispose()
+          }
+          Write-Host `
+            "longest build output length=$($longestBuildOutput.FullName.Length) path=$($longestBuildOutput.FullName)"
       - name: Run the Windows Rust shell tests from the deep clone
         shell: pwsh
         run: |
           Set-Location -LiteralPath $env:READIT_LONG_PATH_ROOT
           cargo test --manifest-path shell/src-tauri/Cargo.toml
+          if ($LASTEXITCODE -ne 0) {
+            throw "cargo test failed in the deep clone: exit $LASTEXITCODE"
+          }
+
+          $cargoTargetPath = Join-Path $env:READIT_LONG_PATH_ROOT 'shell\src-tauri\target'
+          $longestCargoOutput = Get-ChildItem -LiteralPath $cargoTargetPath -File -Recurse |
+            Sort-Object { $_.FullName.Length } -Descending |
+            Select-Object -First 1
+          if ($null -eq $longestCargoOutput -or $longestCargoOutput.FullName.Length -le 260) {
+            throw "Cargo did not produce a file beyond MAX_PATH under $cargoTargetPath"
+          }
+          Write-Host `
+            "longest Cargo output length=$($longestCargoOutput.FullName.Length) path=$($longestCargoOutput.FullName)"
 
   # The wall-clock perf assertions (packages/element/test/*.perf.ts) live outside the default
   # `npm test` on purpose — review C2: running an absolute wall-clock number as a blocking gate

@@ -151,6 +151,8 @@ describe('Windows long-path and Rust coverage is wired into CI', () => {
 
   it('clones the current checkout deeply with repository-local Git long paths enabled', () => {
     expect(job).toContain('$minimumClonePathLength = 200')
+    expect(job).toContain('$targetClonePathLength = 210')
+    expect(job).toContain('$clonePath.Length -ne $targetClonePathLength')
     expect(job).toContain('git -c core.longpaths=true clone --no-hardlinks')
     expect(job).toContain('--no-checkout')
     expect(job).toContain('git -C $clonePath config core.longpaths true')
@@ -161,12 +163,65 @@ describe('Windows long-path and Rust coverage is wired into CI', () => {
     expect(job).toContain('READIT_LONG_PATH_ROOT=$clonePath')
   })
 
+  it('proves that tracked input and generated output really cross MAX_PATH', () => {
+    expect(job).toContain('$longCorpusPath.Length -le 260')
+    expect(job).toContain('[IO.File]::ReadAllBytes($longCorpusPath)')
+    expect(job).toContain('$longestBuildOutput.FullName.Length -le 260')
+    expect(job).toContain('[IO.File]::OpenRead($longestBuildOutput.FullName)')
+    expect(job).toContain('$longestCargoOutput.FullName.Length -le 260')
+  })
+
+  it('keeps dependencies physical and the unified native executable within its spawn budget', () => {
+    expect(job).toContain("$expectedNodeModules = Join-Path $env:READIT_LONG_PATH_ROOT 'node_modules'")
+    expect(job).toContain('[IO.FileAttributes]::ReparsePoint')
+    expect(job).toContain("'node_modules\\@esbuild\\win32-x64\\esbuild.exe'")
+    expect(job).toContain('$esbuildExecutablePath.Length -ge 260')
+    expect(job).toContain("$esbuildVersion -ne '0.28.2'")
+    expect(job).toContain("'packages\\readit\\node_modules\\esbuild'")
+    expect(job).toContain("'node_modules\\tsx\\node_modules\\esbuild'")
+    expect(job).not.toContain('--ignore-scripts')
+    expect(job).not.toMatch(/\bsubst\b/i)
+  })
+
   it('runs install, unit, build/typecheck, and Rust shell tests from that deep clone', () => {
     expect(job.match(/Set-Location -LiteralPath \$env:READIT_LONG_PATH_ROOT/g)).toHaveLength(4)
     expect(job).toContain('npm ci')
     expect(job).toContain('npm test')
     expect(job).toContain('npm run typecheck')
     expect(job).toContain('cargo test --manifest-path shell/src-tauri/Cargo.toml')
+  })
+})
+
+describe('the Windows long-path dependency graph has one hoisted esbuild binary', () => {
+  const core = JSON.parse(read('packages/core/package.json')) as { devDependencies: Record<string, string> }
+  const highlight = JSON.parse(read('packages/highlight/package.json')) as {
+    devDependencies: Record<string, string>
+  }
+  const readit = JSON.parse(read('packages/readit/package.json')) as { devDependencies: Record<string, string> }
+  const lock = JSON.parse(read('package-lock.json')) as {
+    packages: Record<string, { version?: string; dependencies?: Record<string, string> }>
+  }
+
+  it('aligns direct build tools on the esbuild 0.28 line', () => {
+    expect(core.devDependencies.tsx).toBe('4.23.12')
+    expect(highlight.devDependencies.tsx).toBe('4.23.12')
+    expect(readit.devDependencies.esbuild).toBe('0.28.2')
+    expect(lock.packages['node_modules/tsx']?.dependencies?.esbuild).toBe('~0.28.0')
+  })
+
+  it('forbids nested esbuild packages that restore the >260-character executable path', () => {
+    const esbuildPackages = Object.keys(lock.packages).filter(
+      (path) => path === 'node_modules/esbuild' || path.endsWith('/node_modules/esbuild'),
+    )
+    const windowsBinaryPackages = Object.keys(lock.packages).filter(
+      (path) =>
+        path === 'node_modules/@esbuild/win32-x64' || path.endsWith('/node_modules/@esbuild/win32-x64'),
+    )
+
+    expect(esbuildPackages).toEqual(['node_modules/esbuild'])
+    expect(windowsBinaryPackages).toEqual(['node_modules/@esbuild/win32-x64'])
+    expect(lock.packages['node_modules/esbuild']?.version).toBe('0.28.2')
+    expect(lock.packages['node_modules/@esbuild/win32-x64']?.version).toBe('0.28.2')
   })
 })
 

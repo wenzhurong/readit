@@ -70,7 +70,7 @@
     "@readit/math": "0.0.0",
     "@readit/mermaid": "0.0.0",
     "@types/node": "24.10.1",
-    "esbuild": "0.25.12",
+    "esbuild": "0.28.2",
     "publint": "0.3.23",
     "typescript": "5.9.3",
     "vitest": "4.1.10"

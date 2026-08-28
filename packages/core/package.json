@@ -21,7 +21,7 @@
     "hast-util-from-html": "2.0.3",
     "hast-util-sanitize": "5.0.2",
     "hast-util-to-html": "9.0.5",
-    "js-yaml": "4.1.0",
+    "js-yaml": "4.3.2",
     "markdown-it": "15.0.0"
   },
   "devDependencies": {
@@ -29,7 +29,7 @@
     "@types/js-yaml": "4.0.9",
     "@types/node": "24.10.1",
     "@wooorm/starry-night": "3.10.0",
-    "tsx": "4.20.6",
+    "tsx": "4.23.12",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   },

@@ -410,9 +410,9 @@ cd shell/src-tauri && cargo test # Rust 侧
   Windows 壳报告的 2026-08-29 复核。
 - **IME 在 WebKit 上是具名缺口**（`GAP-IME-WEBKIT`）：WKWebView 没有等价于 CDP
   `Input.imeSetComposition` 的入口，四条真机组合测试整体跳过，跳过的标题就是缺口名。
-- **`npm audit` 报 2 high。** 两条都评估过、都不可达：`js-yaml` 的两条通告都依赖
-  merge key，而解析走的 `CORE_SCHEMA` 根本没注册 merge 类型（有守卫测试钉着）；
-  `nanoid` 走 `vite → postcss`，是 devDependency，不进出货代码。详见台账 D2-26。
+- **`npm audit` 的 2 high 已有修复候选。** 2026-08-29 将出货依赖升至
+  `js-yaml 4.3.2`，构建链升至 `nanoid 3.3.18`；本地完整语料、构建与
+  `npm audit --audit-level=high` 已通过。D2-26 等本次远程 browser/visual/offline 结果后关闭。
 - **组合期外部 `setValue()` 会丢弃刚提交的输入法文本**——这是**刻意的语义**
   （`setValue()` 是权威性整体替换），已在 SPEC §9.4 写明，不是缺陷。
 
