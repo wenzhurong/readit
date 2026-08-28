@@ -49,6 +49,9 @@ jobs:
       #   Rolldown failed to resolve import "readit/element"
       # 本地之所以一直没暴露，只是因为开发机上有早先留下的 dist 残留。
       - run: npm run build
+      # workflow_dispatch must enforce the same five-source desktop version invariant as CI;
+      # the post-build smoke intentionally treats tauri.conf.json as the artifact authority.
+      - run: npm test -- shell/test/version-sync.test.ts
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -65,3 +68,18 @@ jobs:
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      # tauri-action only creates a draft. Keep the Windows job red until the exact setup it
+      # produced proves the silent install/uninstall path; interactive UI remains a manual gate.
+      - name: Smoke test Windows installer silent lifecycle
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $version = (Get-Content -Raw -LiteralPath 'shell/src-tauri/tauri.conf.json' | ConvertFrom-Json).version
+          $bundleDirectory = 'shell/src-tauri/target/${{ matrix.target }}/release/bundle/nsis'
+          $installer = Join-Path $bundleDirectory "readit_${version}_x64-setup.exe"
+          if (-not (Test-Path -LiteralPath $installer)) {
+            throw "Expected NSIS setup is missing: $installer"
+          }
+          ./.github/scripts/windows-installer-smoke.ps1 `
+            -InstallerPath $installer `
+            -ExpectedVersion $version

@@ -52,9 +52,10 @@
 
 ## 安装与运行（桌面）
 
-**目前还没有发布版。** macOS 构建只有 ad-hoc 签名（`tauri.conf.json` 里的
-`signingIdentity: "-"`），没有 Apple Developer ID 或公证；Windows 构建没有 Authenticode
-签名。两边的公开分发信任都属于 M7，尚未开始。这一节说明源码构建与手动信任意味着什么。
+**目前已有 GitHub Release（最新验收基线为 `readit-v0.1.2`），但仍没有受信任的 OS 代码
+签名。** macOS 构建只有 ad-hoc 签名（`tauri.conf.json` 里的 `signingIdentity: "-"`），
+没有 Apple Developer ID 或公证；Windows 构建没有 Authenticode 签名。两边的公开分发信任
+仍属于 M7，尚未完成。这一节说明源码构建与手动信任意味着什么。
 
 ### macOS 自己构建
 
@@ -116,7 +117,8 @@ Finder 里选中任意 `.md` → `Cmd+I` → 「打开方式」选 readit → �
 
 ### Windows
 
-Windows 壳可以从源码构建为当前用户 NSIS 安装包；目前仍没有公开发布版或 OS 代码签名。
+Windows 壳可以从源码构建为当前用户 NSIS 安装包，也已有公开的 unsigned Release；仍没有
+Authenticode 代码签名。
 在装好 Node ≥ 22、Rust stable、Visual Studio Build Tools（Desktop development with C++）
 和 WebView2 开发依赖后：
 
@@ -378,7 +380,7 @@ cd shell/src-tauri && cargo test # Rust 侧
 | M3 | element + Shadow DOM + L3b + 高亮双默认 | ✅ |
 | M4 | 编辑器 + 滚动同步 + `plain` 档 + `onChange` | ✅ |
 | M5 | Mermaid | ✅ |
-| **M6** | 壳：关联、单实例、`readit://`、导航、查找、监听、编辑/原子保存、更新器 | 🟡 原六项 macOS 真机验收已执行：5 项通过、1 项按规则留空；新增第 7 项编辑/保存两平台均待真机；Windows 原六项仍受环境阻塞 |
+| **M6** | 壳：关联、单实例、`readit://`、导航、查找、监听、编辑/原子保存、更新器 | 🟡 双平台已有真引擎验收；Windows 核心阅读/编辑及本机当前用户下已覆盖的安装/卸载路径通过，干净 Win10/WebView2、保存时序、真实微软拼音与长路径仍待补验 |
 | M7 | 签名分发 | ⬜ |
 
 ---
@@ -398,13 +400,14 @@ cd shell/src-tauri && cargo test # Rust 侧
   这一轮**抓出四个真缺陷**（出货应用里语法高亮从未生效、Mermaid 长标签被裁、图层护栏
   被 `classDef` 绕过、查找命中不滚进视野），**四个在库层、Rust 层、happy-dom 层乃至
   Playwright 层都是绿的**。全部已修。自动化不能替代真机，这一轮是最直接的证据。
-- **编辑与保存已实现但尚未取得双平台真引擎验收。** 自动化已覆盖用户编辑回调、原子替换、
-  异步保存竞争、watcher 自写回声、冲突选择和原生退出握手；真实 WKWebView/WebView2 的
-  菜单、输入法、文件权限和关闭/退出行为仍以手工清单第 7 项为准。D2-28 已在实现层还清。
-- **Windows 壳已实现，但真 WebView2 仍是零验收覆盖。** 当前可构建当前用户 NSIS，
-  文件关联不抢默认、单实例 argv、扩展长度路径/junction 守卫、Ctrl+F 与跨平台 updater
-  workflow 均有自动化证据；受控测试会话在创建 WebView2 窗口时被系统错误 5 拒绝，
-  七项真机清单保持未执行。详见 Windows 壳报告与新增第 7 项，不能把 Chromium 代理信号写成通过。
+- **编辑与保存已取得双平台真引擎的部分验收。** Windows 上基本保存/CRLF、外部冲突、
+  窗口 × 与 `Alt+F4` 的三动作保护已通过；保存进行中继续编辑与真实微软拼音仍未执行。
+  自动化覆盖不能替代这两条手工空白。D2-28 已在实现层还清。
+- **Windows 真 WebView2 已有发布包实测，不再是零覆盖。** `readit-v0.1.2` 在 Windows 11 /
+  WebView2 151 上完成文件打开、查找、监听、Mermaid、编辑保存和界面补验；2026-08-29 又以
+  完整 UI 与静默两条路径确认卸载无 readit 自有残留。干净 Win10 无 WebView2、三种文件
+  关联起始状态、真实输入法和全仓长路径仍未齐，故不能泛化为 Windows 全面放行。详见
+  Windows 壳报告的 2026-08-29 复核。
 - **IME 在 WebKit 上是具名缺口**（`GAP-IME-WEBKIT`）：WKWebView 没有等价于 CDP
   `Input.imeSetComposition` 的入口，四条真机组合测试整体跳过，跳过的标题就是缺口名。
 - **`npm audit` 报 2 high。** 两条都评估过、都不可达：`js-yaml` 的两条通告都依赖
