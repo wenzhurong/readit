@@ -140,18 +140,16 @@ $mdOpenWithKey = 'HKCU:\Software\Classes\.md\OpenWithProgids'
 $markdownOpenWithKey = 'HKCU:\Software\Classes\.markdown\OpenWithProgids'
 $mdUserChoiceKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.md\UserChoice'
 $markdownUserChoiceKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.markdown\UserChoice'
+$sentinelProgId = "readit.smoke.$([Guid]::NewGuid().ToString('N'))"
+$sentinelProgIdKey = "HKCU:\Software\Classes\$sentinelProgId"
 $startMenuShortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'readit.lnk'
 $desktopShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'readit.lnk'
 $executable = Join-Path $installDirectory 'readit-shell.exe'
 $uninstaller = Join-Path $installDirectory 'uninstall.exe'
 $observedInstallDirectory = $null
 
-$associationBaseline = [ordered]@{
-  MdClassDefault = Get-RegistryValueSnapshot $mdClassKey ''
-  MarkdownClassDefault = Get-RegistryValueSnapshot $markdownClassKey ''
-  MdUserChoice = Get-RegistryKeySnapshot $mdUserChoiceKey
-  MarkdownUserChoice = Get-RegistryKeySnapshot $markdownUserChoiceKey
-}
+$associationBaseline = $null
+$sentinelAdded = $false
 
 function Assert-DefaultAssociationsUnchanged {
   Assert-True (
@@ -166,6 +164,91 @@ function Assert-DefaultAssociationsUnchanged {
   Assert-True (
     (Get-RegistryKeySnapshot $markdownUserChoiceKey) -ceq $associationBaseline.MarkdownUserChoice
   ) '.markdown UserChoice changed during installer smoke'
+}
+
+function Add-AssociationSentinel {
+  $script:sentinelAdded = $true
+  if (-not (Test-Path -LiteralPath $mdClassKey)) {
+    New-Item -Path $mdClassKey | Out-Null
+  }
+  if (-not (Test-Path -LiteralPath $markdownClassKey)) {
+    New-Item -Path $markdownClassKey | Out-Null
+  }
+  if (-not (Test-Path -LiteralPath $mdOpenWithKey)) {
+    New-Item -Path $mdOpenWithKey | Out-Null
+  }
+  if (-not (Test-Path -LiteralPath $markdownOpenWithKey)) {
+    New-Item -Path $markdownOpenWithKey | Out-Null
+  }
+  New-ItemProperty -LiteralPath $mdOpenWithKey `
+    -Name $sentinelProgId `
+    -PropertyType String `
+    -Value '' `
+    -Force | Out-Null
+  New-ItemProperty -LiteralPath $markdownOpenWithKey `
+    -Name $sentinelProgId `
+    -PropertyType String `
+    -Value '' `
+    -Force | Out-Null
+  New-Item -Path $sentinelProgIdKey -Force | Out-Null
+  Set-Item -LiteralPath $sentinelProgIdKey -Value 'Readit installer smoke sentinel'
+}
+
+function Assert-AssociationSentinelPreserved {
+  Assert-True (Test-RegistryValue $mdOpenWithKey $sentinelProgId) `
+    'Installer removed another application from .md OpenWithProgids'
+  Assert-True (Test-RegistryValue $markdownOpenWithKey $sentinelProgId) `
+    'Installer removed another application from .markdown OpenWithProgids'
+  Assert-True (Test-Path -LiteralPath $sentinelProgIdKey) `
+    'Installer removed another application ProgID'
+}
+
+function Restore-AssociationSentinelBaseline {
+  if (-not $sentinelAdded) {
+    return
+  }
+
+  Remove-ItemProperty -LiteralPath $mdOpenWithKey `
+    -Name $sentinelProgId `
+    -ErrorAction SilentlyContinue
+  Remove-ItemProperty -LiteralPath $markdownOpenWithKey `
+    -Name $sentinelProgId `
+    -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $sentinelProgIdKey -Recurse -Force -ErrorAction SilentlyContinue
+
+  foreach ($candidate in @(
+    [pscustomobject]@{ Path = $mdOpenWithKey; Existed = $associationBaseline.MdOpenWithExisted },
+    [pscustomobject]@{ Path = $markdownOpenWithKey; Existed = $associationBaseline.MarkdownOpenWithExisted }
+  )) {
+    if (-not $candidate.Existed -and (Test-Path -LiteralPath $candidate.Path)) {
+      $item = Get-Item -LiteralPath $candidate.Path
+      if ($item.GetValueNames().Count -eq 0 -and $item.GetSubKeyNames().Count -eq 0) {
+        Remove-Item -LiteralPath $candidate.Path -Force
+      }
+    }
+  }
+
+  foreach ($candidate in @(
+    [pscustomobject]@{ Path = $mdClassKey; Existed = $associationBaseline.MdClassExisted },
+    [pscustomobject]@{ Path = $markdownClassKey; Existed = $associationBaseline.MarkdownClassExisted }
+  )) {
+    if (-not $candidate.Existed -and (Test-Path -LiteralPath $candidate.Path)) {
+      $item = Get-Item -LiteralPath $candidate.Path
+      if ($item.GetValueNames().Count -eq 0 -and $item.GetSubKeyNames().Count -eq 0) {
+        Remove-Item -LiteralPath $candidate.Path -Force
+      }
+    }
+  }
+
+  $currentMdOpenWith = Get-RegistryKeySnapshot $mdOpenWithKey
+  $currentMarkdownOpenWith = Get-RegistryKeySnapshot $markdownOpenWithKey
+  Assert-True (
+    $currentMdOpenWith -ceq $associationBaseline.MdOpenWith
+  ) ".md OpenWithProgids was not restored: before=$($associationBaseline.MdOpenWith) after=$currentMdOpenWith"
+  Assert-True (
+    $currentMarkdownOpenWith -ceq $associationBaseline.MarkdownOpenWith
+  ) ".markdown OpenWithProgids was not restored: before=$($associationBaseline.MarkdownOpenWith) after=$currentMarkdownOpenWith"
+  $script:sentinelAdded = $false
 }
 
 function Get-RegisteredReaditPaths {
@@ -301,65 +384,87 @@ if ($initialResidue.Count -gt 0) {
   throw "Runner was not clean before the installer smoke test: $($initialResidue -join ', ')"
 }
 
-$installAttempted = $false
-$lifecycleCompleted = $false
-try {
-  $installAttempted = $true
-  $installProcess = Start-Process -FilePath $resolvedInstaller `
-    -ArgumentList @('/S', "/D=$installDirectory") `
-    -PassThru `
-    -Wait
-  Assert-True ($installProcess.ExitCode -eq 0) "Installer exited with $($installProcess.ExitCode)"
-
-  $registered = Get-RegisteredReaditPaths
-  Assert-True ($null -ne $registered) 'HKCU readit uninstall registration is missing'
-  $observedInstallDirectory = $registered.InstallDirectory
-  Assert-True (
-    $registered.InstallDirectory.Equals($installDirectory, [StringComparison]::OrdinalIgnoreCase)
-  ) "InstallLocation escaped RUNNER_TEMP: $($registered.InstallDirectory)"
-  Assert-True (
-    $registered.Uninstaller.Equals($uninstaller, [StringComparison]::OrdinalIgnoreCase)
-  ) "UninstallString mismatch: $($registered.Uninstaller)"
-
-  Assert-True (Test-Path -LiteralPath $executable) "Installed executable is missing: $executable"
-  Assert-True (Test-Path -LiteralPath $uninstaller) "Uninstaller is missing: $uninstaller"
-  Assert-True (Test-Path -LiteralPath $progIdKey) 'readit ProgID is missing'
-  Assert-True (Test-RegistryValue $mdOpenWithKey 'readit.md') '.md OpenWithProgids is missing readit.md'
-  Assert-True (Test-RegistryValue $markdownOpenWithKey 'readit.md') '.markdown OpenWithProgids is missing readit.md'
-  Assert-True (Test-Path -LiteralPath $startMenuShortcut) 'Start menu shortcut is missing'
-  Assert-True (Test-Path -LiteralPath $desktopShortcut) 'Desktop shortcut is missing'
-  Assert-DefaultAssociationsUnchanged
-
-  $uninstallEntry = Get-ItemProperty -LiteralPath $uninstallKey
-  Assert-True ($uninstallEntry.DisplayVersion -eq $ExpectedVersion) `
-    "DisplayVersion mismatch: expected $ExpectedVersion, got $($uninstallEntry.DisplayVersion)"
-  Assert-True ((Get-SemanticProductVersion $executable) -eq $ExpectedVersion) `
-    'Installed executable ProductVersion does not match the release version'
-  Assert-True ((Get-SemanticProductVersion $uninstaller) -eq $ExpectedVersion) `
-    'Uninstaller ProductVersion does not match the release version'
-
-  $readitEntries = @(
-    Get-ChildItem -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' |
-      Where-Object {
-        (Get-ItemProperty -LiteralPath $_.PSPath -ErrorAction SilentlyContinue).DisplayName -eq 'readit'
-      }
-  )
-  Assert-True ($readitEntries.Count -eq 1) `
-    "Expected one readit uninstall entry, found $($readitEntries.Count)"
-
-  $uninstallProcess = Start-Process -FilePath $uninstaller -ArgumentList '/S' -PassThru -Wait
-  Assert-True ($uninstallProcess.ExitCode -eq 0) `
-    "Uninstaller exited with $($uninstallProcess.ExitCode)"
-
-  $residue = @(Wait-ForNoReaditResidue -Seconds 15)
-  Assert-True ($residue.Count -eq 0) `
-    "Uninstaller left filesystem/registry residue: $($residue -join ', ')"
-  Assert-DefaultAssociationsUnchanged
-  $lifecycleCompleted = $true
-
-  Write-Host "Windows installer silent smoke passed for readit $ExpectedVersion"
-} finally {
-  if ($installAttempted -and -not $lifecycleCompleted) {
-    Invoke-FailedRunCleanup
-  }
+$associationBaseline = [ordered]@{
+  MdClassExisted = Test-Path -LiteralPath $mdClassKey
+  MarkdownClassExisted = Test-Path -LiteralPath $markdownClassKey
+  MdOpenWithExisted = Test-Path -LiteralPath $mdOpenWithKey
+  MarkdownOpenWithExisted = Test-Path -LiteralPath $markdownOpenWithKey
+  MdClassDefault = Get-RegistryValueSnapshot $mdClassKey ''
+  MarkdownClassDefault = Get-RegistryValueSnapshot $markdownClassKey ''
+  MdUserChoice = Get-RegistryKeySnapshot $mdUserChoiceKey
+  MarkdownUserChoice = Get-RegistryKeySnapshot $markdownUserChoiceKey
+  MdOpenWith = Get-RegistryKeySnapshot $mdOpenWithKey
+  MarkdownOpenWith = Get-RegistryKeySnapshot $markdownOpenWithKey
 }
+
+try {
+  Add-AssociationSentinel
+  Assert-AssociationSentinelPreserved
+
+  $installAttempted = $false
+  $lifecycleCompleted = $false
+  try {
+    $installAttempted = $true
+    $installProcess = Start-Process -FilePath $resolvedInstaller `
+      -ArgumentList @('/S', "/D=$installDirectory") `
+      -PassThru `
+      -Wait
+    Assert-True ($installProcess.ExitCode -eq 0) "Installer exited with $($installProcess.ExitCode)"
+
+    $registered = Get-RegisteredReaditPaths
+    Assert-True ($null -ne $registered) 'HKCU readit uninstall registration is missing'
+    $observedInstallDirectory = $registered.InstallDirectory
+    Assert-True (
+      $registered.InstallDirectory.Equals($installDirectory, [StringComparison]::OrdinalIgnoreCase)
+    ) "InstallLocation escaped RUNNER_TEMP: $($registered.InstallDirectory)"
+    Assert-True (
+      $registered.Uninstaller.Equals($uninstaller, [StringComparison]::OrdinalIgnoreCase)
+    ) "UninstallString mismatch: $($registered.Uninstaller)"
+
+    Assert-True (Test-Path -LiteralPath $executable) "Installed executable is missing: $executable"
+    Assert-True (Test-Path -LiteralPath $uninstaller) "Uninstaller is missing: $uninstaller"
+    Assert-True (Test-Path -LiteralPath $progIdKey) 'readit ProgID is missing'
+    Assert-True (Test-RegistryValue $mdOpenWithKey 'readit.md') '.md OpenWithProgids is missing readit.md'
+    Assert-True (Test-RegistryValue $markdownOpenWithKey 'readit.md') '.markdown OpenWithProgids is missing readit.md'
+    Assert-True (Test-Path -LiteralPath $startMenuShortcut) 'Start menu shortcut is missing'
+    Assert-True (Test-Path -LiteralPath $desktopShortcut) 'Desktop shortcut is missing'
+    Assert-DefaultAssociationsUnchanged
+    Assert-AssociationSentinelPreserved
+
+    $uninstallEntry = Get-ItemProperty -LiteralPath $uninstallKey
+    Assert-True ($uninstallEntry.DisplayVersion -eq $ExpectedVersion) `
+      "DisplayVersion mismatch: expected $ExpectedVersion, got $($uninstallEntry.DisplayVersion)"
+    Assert-True ((Get-SemanticProductVersion $executable) -eq $ExpectedVersion) `
+      'Installed executable ProductVersion does not match the release version'
+    Assert-True ((Get-SemanticProductVersion $uninstaller) -eq $ExpectedVersion) `
+      'Uninstaller ProductVersion does not match the release version'
+
+    $readitEntries = @(
+      Get-ChildItem -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' |
+        Where-Object {
+          (Get-ItemProperty -LiteralPath $_.PSPath -ErrorAction SilentlyContinue).DisplayName -eq 'readit'
+        }
+    )
+    Assert-True ($readitEntries.Count -eq 1) `
+      "Expected one readit uninstall entry, found $($readitEntries.Count)"
+
+    $uninstallProcess = Start-Process -FilePath $uninstaller -ArgumentList '/S' -PassThru -Wait
+    Assert-True ($uninstallProcess.ExitCode -eq 0) `
+      "Uninstaller exited with $($uninstallProcess.ExitCode)"
+
+    $residue = @(Wait-ForNoReaditResidue -Seconds 15)
+    Assert-True ($residue.Count -eq 0) `
+      "Uninstaller left filesystem/registry residue: $($residue -join ', ')"
+    Assert-DefaultAssociationsUnchanged
+    Assert-AssociationSentinelPreserved
+    $lifecycleCompleted = $true
+  } finally {
+    if ($installAttempted -and -not $lifecycleCompleted) {
+      Invoke-FailedRunCleanup
+    }
+  }
+} finally {
+  Restore-AssociationSentinelBaseline
+}
+
+Write-Host "Windows installer silent smoke passed for readit $ExpectedVersion"

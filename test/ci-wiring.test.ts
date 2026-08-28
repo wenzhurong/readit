@@ -129,6 +129,47 @@ describe('typecheck actually covers the whole repo', () => {
   )
 })
 
+describe('Windows long-path and Rust coverage is wired into CI', () => {
+  const workflow = read('.github/workflows/test.yml')
+  const start = workflow.indexOf('\n  windows-long-path:')
+  const end = workflow.indexOf('\n  perf:', start)
+  const job = start >= 0 && end > start ? workflow.slice(start, end) : ''
+
+  it('runs as an independent blocking Windows job', () => {
+    expect(job).not.toBe('')
+    expect(job).toContain('runs-on: windows-latest')
+    expect(job).not.toContain('needs:')
+    expect(job).not.toContain('continue-on-error')
+  })
+
+  it('requires the OS long-path policy instead of changing the registry to make the test pass', () => {
+    expect(job).toContain("-Name LongPathsEnabled")
+    expect(job).toContain('if ([int]$longPathsEnabled -ne 1)')
+    expect(job).not.toMatch(/(?:Set|New)-ItemProperty/)
+    expect(job).not.toMatch(/reg(?:\.exe)?\s+add/i)
+  })
+
+  it('clones the current checkout deeply with repository-local Git long paths enabled', () => {
+    expect(job).toContain('$minimumClonePathLength = 200')
+    expect(job).toContain('git -c core.longpaths=true clone --no-hardlinks')
+    expect(job).toContain('--no-checkout')
+    expect(job).toContain('git -C $clonePath config core.longpaths true')
+    expect(job).toContain("git -C $clonePath config --bool core.longpaths")
+    expect(job).toContain('git -C $clonePath checkout --detach $sourceHead')
+    expect(job).toContain('$clonedHead -ne $sourceHead')
+    expect(job).toContain('$clonePath.Length -lt $minimumClonePathLength')
+    expect(job).toContain('READIT_LONG_PATH_ROOT=$clonePath')
+  })
+
+  it('runs install, unit, build/typecheck, and Rust shell tests from that deep clone', () => {
+    expect(job.match(/Set-Location -LiteralPath \$env:READIT_LONG_PATH_ROOT/g)).toHaveLength(4)
+    expect(job).toContain('npm ci')
+    expect(job).toContain('npm test')
+    expect(job).toContain('npm run typecheck')
+    expect(job).toContain('cargo test --manifest-path shell/src-tauri/Cargo.toml')
+  })
+})
+
 /**
  * The perf assertions were moved out of `npm test` for a good reason (review C2: an absolute
  * wall-clock number is the wrong thing to gate a three-OS matrix on). But the move landed them

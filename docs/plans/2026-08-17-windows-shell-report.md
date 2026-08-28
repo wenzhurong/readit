@@ -10,10 +10,12 @@ W1–W6 的仓库内实现已经完成：Windows 壳能生成当前用户 NSIS�
 Open With 策略，Windows `Ctrl+F` 进入 readit 文档查找，路径/目录联接/扩展长度路径已有
 自动化守卫，桌面发布工作流也已覆盖 macOS 双架构与 Windows x64。
 
-**实现和自动化表现符合本方案的预期，但当前证据不足以断言应用已能在普通 Windows 环境
-正常使用或正式发布。** 真实 WebView2 窗口、三种注册表初始状态、无 WebView2 的干净
-Windows 10、以及线上 Release/updater manifest 都没有跑通对应的真实环境。这里的结论是
-“工程链路已建立，真机发布门仍未通过”，不是“Windows 已验收通过”。
+**实现、自动化和本机 Windows 11 核心路径符合本方案预期，0.1.3 草稿的三平台发布构建、
+Windows 静默安装器生命周期以及真 WebView2 保存时序也已通过；但 Windows 仍未完全验收
+放行。** 真实“已有其他默认应用”和“全新用户”文件关联、无 WebView2 的干净 Windows 10、
+真实微软拼音预编辑仍缺环境证据；全仓长路径 job 已实现但尚待下一次远端 CI，0.1.3 也仍是
+未发布草稿，不能完成公开 updater 链。当前结论是“本机覆盖的日常核心路径可用，发布与产品
+下限仍有明确缺口”，不是“Windows 已全面验收通过”。
 
 测试主机为 Windows `10.0.26200.9168`、AMD64，已安装 Microsoft Edge WebView2 Runtime `151.0.4129.86`。干净 Windows 10 且没有 WebView2 Runtime 的场景尚未执行，不以当前主机结果代替该场景。
 
@@ -386,6 +388,9 @@ release exe 的结果写成“新安装包全流程通过”。
 
 ## readit-v0.1.2 Windows 发布包验收（2026-08-27；A4 于 2026-08-29 复核）
 
+本节保留 0.1.2 当次验收的历史口径；2026-08-29 随后的 0.1.3 草稿发布、安装器 sentinel、
+E2 补验和 F3 CI 进展见文末追加节。不要用后续草稿证据反向改写 0.1.2 当时未执行的项目。
+
 ### 结论
 
 远端 `main` 已同步到 `61afc1510d1cc222bf53eec8ba7a6f4df623b077`，该提交正是标签
@@ -480,8 +485,80 @@ Windows 性能预算，所以这里只记录数据，不宣称“性能通过”
 
 ### 发布判断与下一步
 
-当前 0.1.2 在这台 Windows 11 上可以完成日常 Markdown 阅读和本轮覆盖的编辑保存路径，核心
-应用不是“不可用”，本机当前用户下已覆盖的安装/卸载路径也已通过。F1 仍只有 1/3，F2/E5
-等产品下限/真实输入环境仍无证据，因此**当前不是完全验收通过**。最低后续动作是：在“已有其他默认程序”和
-“全新 Windows 用户”状态补齐 F1；再用无 WebView2 的干净 Win10、真实微软拼音和
-`LongPathsEnabled=1 + core.longpaths=true` 的主机补齐 F2/E5/F3，并用真窗口补 E2。
+0.1.2 在这台 Windows 11 上可以完成日常 Markdown 阅读和当轮覆盖的编辑保存路径，核心应用
+不是“不可用”，本机当前用户下已覆盖的安装/卸载路径也已通过。后续 0.1.3 草稿补验已经关闭
+E2 真窗口保存时序缺口，并为 F1 增加第三方 Open With sentinel 证据；但 F1 的两个真实起始
+状态、F2、E5 仍无证据，F3 也必须等新增远端 job 成功，因此**当前仍不是完全验收通过**。
+
+---
+
+## readit-v0.1.3 草稿发布与补充验收（2026-08-29）
+
+### 远端提交、CI 与草稿产物
+
+首次修复提交 `a8b2bc12e2184250d622935ff7a3e11441995f0f` 已推送到 `main`。该 push
+触发的四条 CI 均成功：
+
+| Workflow | Run | 结果 |
+|---|---:|---|
+| browser | `33200841620` | success |
+| test | `33200841621` | success |
+| visual | `33200841655` | success |
+| offline | `33200841632` | success |
+
+随后触发的
+[`release desktop` run 33201027207](https://github.com/wenzhurong/readit/actions/runs/33201027207)
+在 macOS Apple Silicon、macOS Intel、Windows x64 三个 job 上全部成功。Windows job 的真实
+打包后步骤明确输出 `Windows installer silent smoke passed for readit 0.1.3`，因此这不是
+只检查 workflow YAML 的结构性绿灯。
+
+该 run 生成的是 **未发布的 `readit-v0.1.3` draft**，目标提交为 `a8b2bc1`，包含 9 个预期
+资产：单一 `latest.json`、两个 macOS 架构各自的 app tarball/签名/DMG，以及 Windows x64
+NSIS setup/签名。资产数量与平台覆盖已核对，但 draft 没有进入公开 latest release。
+
+### 本地 0.1.3 安装器复测
+
+| 项 | 结果 |
+|---|---|
+| 安装包 | draft 的 `readit_0.1.3_x64-setup.exe` |
+| SHA-256 | `20B904BD6B91A8C649FA98BDAF01F139DD1D08ED053F7F2D27032D2806D0D902` |
+| 版本一致性 | HKCU `DisplayVersion`、`readit-shell.exe` 与 `uninstall.exe` 均为 `0.1.3` |
+| 生命周期 | 静默安装、启动前后状态核对、静默卸载和残留核对通过 |
+
+安装器 smoke 还在 `.md` 与 `.markdown` 的 `OpenWithProgids` 中注入唯一第三方 sentinel
+ProgID；安装后和卸载后它都仍存在，脚本最终恢复了测试前精确基线。这证明 readit 的生命周期
+不会误删其他 Open With 候选。sentinel 不是 Windows 的真实默认应用选择，也不是全新用户，
+所以 F1 手工矩阵仍只能记 1/3，不能因这条自动化扩写为 3/3。
+
+### E2 真 WebView2 + 真 Rust IPC 补验
+
+E2 在 0.1.3 草稿安装版上用真实 WebView2 窗口和真实 Rust `save_document` IPC 执行。测试用
+双闸门稳定控制第一次保存的在途区间，而不是用状态机单测或合成 watcher 代替：
+
+1. 磁盘初始内容为 O；界面改为 A 并触发第一次保存。
+2. 第一次保存仍在途时，界面继续改为 B。
+3. 放行第一次 Rust 写入后，磁盘为 A；watcher 回读 A 没有覆盖界面的 B、没有弹出外部冲突，
+   B 继续保持 dirty。
+4. 第二次保存后磁盘为 B，界面清除 dirty。
+
+结果符合 E2 的全部判据，E2 改判 **通过**；这次没有出现需要修改保存实现的新产品缺陷。
+
+### F3 自动化进展与仍未关闭的门
+
+新的阻塞式 `windows-long-path` CI job 已实现。它要求 runner 的 `LongPathsEnabled=1`，在
+长度至少 200 的临时路径中以仓库局部 `core.longpaths=true` clone 同一提交，并从深路径执行
+`npm ci`、根测试、typecheck 与 Rust 测试。代码和本地静态守卫完成不等于环境通过；只有下次
+远端该 job 成功，F3 才能改判。本节记录时该远端证据尚不存在。
+
+当前仍缺：
+
+- F1 的真实“已有其他默认应用”和“全新 Windows 用户配置”；
+- F2 没有 WebView2 Runtime 的干净 Windows 10；
+- E5 真实微软拼音的预编辑串操作；
+- H1 鼠标悬停 tooltip、H3 指针在窗口外松手等尚未取得的人工小项证据；
+- 0.1.3 的公开 updater 全链。
+
+最后一项尤其不能由草稿资产推断为通过：0.1.3 尚未发布，公开 latest release 仍不能提供该
+版本，因此没有完成旧版发现 0.1.3、下载、验签、安装、重启与版本确认的整条链。当前结论是：
+**0.1.3 草稿安装包在本机覆盖的核心路径可用，E2 与静默生命周期通过；Windows 全面验收和
+updater 发布门仍未通过。**

@@ -6,9 +6,125 @@ on:
 permissions:
   contents: write
 
+# A draft tag is shared mutable state across the three matrix uploads. Keep every desktop release
+# run for this repository serialized so two workflow_dispatch requests cannot mix their assets.
+concurrency:
+  group: release-desktop-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
+  # Reject the wrong ref or version drift before any GitHub Release write happens.
+  preflight:
+    name: Release preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.20.0'
+          cache: npm
+      - name: Require main
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" != 'refs/heads/main' ]]; then
+            echo "release desktop only accepts refs/heads/main, got $GITHUB_REF" >&2
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm test -- shell/test/version-sync.test.ts
+
+  # Resolve or create one draft before any matrix worker starts. Passing its immutable database ID
+  # to tauri-action avoids tag-based discovery (draft tags can temporarily appear as untagged-*).
+  # An existing draft is not retargeted until every build and the Windows smoke test are green.
+  prepare-draft:
+    name: Prepare release draft
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.release.outputs.result }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: release
+        uses: actions/github-script@v8
+        with:
+          result-encoding: string
+          script: |
+            const fs = require('node:fs')
+            const version = JSON.parse(
+              fs.readFileSync('shell/src-tauri/tauri.conf.json', 'utf8'),
+            ).version
+            const tag = `readit-v${version}`
+            const releaseName = `readit v${version}`
+            const releaseBody =
+              'Unsigned macOS and Windows builds. Manual acceptance status is recorded in the repository.'
+
+            try {
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${tag}`,
+              })
+              throw new Error(`Git tag ${tag} already exists; bump the desktop version before publishing`)
+            } catch (error) {
+              if (error.status !== 404) throw error
+            }
+
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+            })
+            const publishedConflicts = releases.filter(
+              (release) => release.draft !== true &&
+                (release.name === releaseName || release.tag_name === tag),
+            )
+            if (publishedConflicts.length !== 0) {
+              throw new Error(`A published release already occupies ${releaseName} or ${tag}`)
+            }
+            const candidates = releases.filter(
+              (release) => release.draft === true &&
+                (release.name === releaseName || release.tag_name === tag),
+            )
+            if (candidates.length > 1) {
+              throw new Error(`Expected at most one draft for ${releaseName}, found ${candidates.length}`)
+            }
+
+            let release
+            if (candidates.length === 0) {
+              const created = await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: tag,
+                target_commitish: context.sha,
+                name: releaseName,
+                body: releaseBody,
+                draft: true,
+                prerelease: false,
+              })
+              release = created.data
+            } else {
+              release = candidates[0]
+            }
+            if (release.draft !== true || !Number.isSafeInteger(release.id)) {
+              throw new Error(`Resolved release is not a valid draft: ${JSON.stringify(release)}`)
+            }
+            core.info(
+              `Prepared draft id=${release.id} tag=${release.tag_name} ` +
+              `target=${release.target_commitish}`,
+            )
+            return String(release.id)
+
   publish:
     name: ${{ matrix.label }}
+    needs: prepare-draft
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -31,6 +147,8 @@ jobs:
             bundles: nsis
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: '22.20.0'
@@ -52,12 +170,13 @@ jobs:
       # workflow_dispatch must enforce the same five-source desktop version invariant as CI;
       # the post-build smoke intentionally treats tauri.conf.json as the artifact authority.
       - run: npm test -- shell/test/version-sync.test.ts
-      - uses: tauri-apps/tauri-action@v1
+      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          releaseId: ${{ needs.prepare-draft.outputs.release_id }}
           projectPath: shell
           tauriScript: npm run tauri
           tagName: readit-v__VERSION__
@@ -83,3 +202,122 @@ jobs:
           ./.github/scripts/windows-installer-smoke.ps1 `
             -InstallerPath $installer `
             -ExpectedVersion $version
+
+  # Only a completely successful matrix may move the draft metadata to this workflow SHA.
+  finalize-draft:
+    name: Finalize release draft
+    needs: [prepare-draft, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/github-script@v8
+        env:
+          RELEASE_ID: ${{ needs.prepare-draft.outputs.release_id }}
+        with:
+          script: |
+            const fs = require('node:fs')
+            const path = require('node:path')
+            const { pathToFileURL } = require('node:url')
+            const releaseId = Number(process.env.RELEASE_ID)
+            if (!Number.isSafeInteger(releaseId) || releaseId <= 0) {
+              throw new Error(`Invalid prepared release id: ${process.env.RELEASE_ID}`)
+            }
+            const version = JSON.parse(
+              fs.readFileSync('shell/src-tauri/tauri.conf.json', 'utf8'),
+            ).version
+            const tag = `readit-v${version}`
+            const releaseName = `readit v${version}`
+            const releaseBody =
+              'Unsigned macOS and Windows builds. Manual acceptance status is recorded in the repository.'
+            const verifier = await import(pathToFileURL(
+              path.join(process.env.GITHUB_WORKSPACE, '.github/scripts/verify-release-draft.mjs'),
+            ).href)
+
+            try {
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${tag}`,
+              })
+              throw new Error(`Git tag ${tag} appeared during the release run`)
+            } catch (error) {
+              if (error.status !== 404) throw error
+            }
+
+            const current = await github.rest.repos.getRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: releaseId,
+            })
+            const release = current.data
+            const actualAssets = release.assets.map((asset) => asset.name).sort()
+            const expectedAssets = verifier.expectedAssetNames(version).sort()
+            if (JSON.stringify(actualAssets) !== JSON.stringify(expectedAssets)) {
+              throw new Error(
+                `Draft assets differ: actual=${JSON.stringify(actualAssets)} ` +
+                `expected=${JSON.stringify(expectedAssets)}`,
+              )
+            }
+            const incompleteAssets = release.assets.filter(
+              (asset) => asset.state !== 'uploaded' || !Number.isSafeInteger(asset.size) || asset.size <= 0,
+            )
+            if (incompleteAssets.length !== 0) {
+              throw new Error(
+                `Draft has incomplete assets: ${incompleteAssets.map((asset) => asset.name).join(', ')}`,
+              )
+            }
+
+            const updated = await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: releaseId,
+              tag_name: tag,
+              target_commitish: context.sha,
+              name: releaseName,
+              body: releaseBody,
+              draft: true,
+              prerelease: false,
+            })
+            if (
+              updated.data.draft !== true || updated.data.prerelease !== false ||
+              updated.data.tag_name !== tag || updated.data.name !== releaseName ||
+              updated.data.target_commitish !== context.sha
+            ) {
+              throw new Error(
+                `Draft finalization failed for id=${releaseId}, tag=${updated.data.tag_name}, ` +
+                `name=${updated.data.name}, target=${updated.data.target_commitish}`,
+              )
+            }
+            core.info(`Finalized draft id=${releaseId} tag=${tag} target=${context.sha}`)
+
+  verify-draft:
+    name: Verify release draft
+    needs: [prepare-draft, finalize-draft]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.20.0'
+      - name: Read desktop version
+        id: desktop_version
+        shell: bash
+        run: |
+          version=$(node -p "JSON.parse(require('fs').readFileSync('shell/src-tauri/tauri.conf.json', 'utf8')).version")
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+      - name: Verify draft metadata, assets, and updater manifest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          node .github/scripts/verify-release-draft.mjs
+          --release-id "${{ needs.prepare-draft.outputs.release_id }}"
+          --version "${{ steps.desktop_version.outputs.value }}"
+          --target-sha "${{ github.sha }}"

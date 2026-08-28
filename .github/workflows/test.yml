@@ -49,6 +49,106 @@ jobs:
       # so this run is offline on every OS, including the two with no unshare.
       - run: npm test
 
+  # D2-27 is deliberately wider than the ordinary Windows unit leg. That leg checks out into a
+  # short runner path and never compiles the Rust shell, so it cannot detect either the historical
+  # `spawn cmd.exe ENOENT` failure from a >260-character dependency path or a Windows-only Rust
+  # regression. Keep this as a peer gate: every command below runs from a fresh clone whose root is
+  # already long before node_modules, generated dist chunks, and Cargo target files are appended.
+  windows-long-path:
+    name: Windows long path + Rust
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.20.0'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Clone the checkout under an extended path
+        shell: pwsh
+        run: |
+          $longPathsEnabled = Get-ItemPropertyValue `
+            -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' `
+            -Name LongPathsEnabled
+          if ([int]$longPathsEnabled -ne 1) {
+            throw "Windows long paths are not enabled on this runner: LongPathsEnabled=$longPathsEnabled"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
+            throw 'RUNNER_TEMP is required for the long-path test'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:GITHUB_WORKSPACE)) {
+            throw 'GITHUB_WORKSPACE is required for the long-path test'
+          }
+
+          $minimumClonePathLength = 200
+          $deepRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP)
+          $segment = 0
+          do {
+            $deepRoot = Join-Path $deepRoot ("readit-long-path-{0:D2}-abcdefghij" -f $segment)
+            $segment += 1
+          } while ((Join-Path $deepRoot 'readit').Length -lt $minimumClonePathLength)
+
+          New-Item -ItemType Directory -Path $deepRoot -Force | Out-Null
+          $clonePath = Join-Path $deepRoot 'readit'
+          $sourceHead = (git -C $env:GITHUB_WORKSPACE rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($sourceHead)) {
+            throw "Could not resolve the current checkout: exit $LASTEXITCODE"
+          }
+          git -c core.longpaths=true clone --no-hardlinks --no-checkout -- `
+            $env:GITHUB_WORKSPACE $clonePath
+          if ($LASTEXITCODE -ne 0) {
+            throw "Deep clone failed with exit code $LASTEXITCODE"
+          }
+
+          # The command-level setting above is needed while Git creates the deep repository.
+          # Persist a repository-local setting before checkout so every later Git operation keeps
+          # the same contract;
+          # never modify the runner's global config or registry to manufacture a green result.
+          git -C $clonePath config core.longpaths true
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not persist core.longpaths in the deep clone: exit $LASTEXITCODE"
+          }
+          $configuredLongPaths = (git -C $clonePath config --bool core.longpaths).Trim()
+          if ($LASTEXITCODE -ne 0 -or $configuredLongPaths -ne 'true') {
+            throw "Deep clone core.longpaths is not true: '$configuredLongPaths'"
+          }
+          git -C $clonePath checkout --detach $sourceHead
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not check out $sourceHead in the deep clone: exit $LASTEXITCODE"
+          }
+          $clonedHead = (git -C $clonePath rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $clonedHead -ne $sourceHead) {
+            throw "Deep clone HEAD mismatch: source=$sourceHead clone=$clonedHead"
+          }
+          if ($clonePath.Length -lt $minimumClonePathLength) {
+            throw "Deep clone path is only $($clonePath.Length) characters: $clonePath"
+          }
+
+          Write-Host "LongPathsEnabled=$longPathsEnabled"
+          Write-Host "core.longpaths=$configuredLongPaths"
+          Write-Host "deep clone length=$($clonePath.Length) path=$clonePath"
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "READIT_LONG_PATH_ROOT=$clonePath"
+      - name: Install dependencies from the deep clone
+        shell: pwsh
+        run: |
+          Set-Location -LiteralPath $env:READIT_LONG_PATH_ROOT
+          npm ci
+      - name: Run unit tests from the deep clone
+        shell: pwsh
+        run: |
+          Set-Location -LiteralPath $env:READIT_LONG_PATH_ROOT
+          npm test
+      - name: Build and typecheck from the deep clone
+        shell: pwsh
+        run: |
+          Set-Location -LiteralPath $env:READIT_LONG_PATH_ROOT
+          npm run typecheck
+      - name: Run the Windows Rust shell tests from the deep clone
+        shell: pwsh
+        run: |
+          Set-Location -LiteralPath $env:READIT_LONG_PATH_ROOT
+          cargo test --manifest-path shell/src-tauri/Cargo.toml
+
   # The wall-clock perf assertions (packages/element/test/*.perf.ts) live outside the default
   # `npm test` on purpose — review C2: running an absolute wall-clock number as a blocking gate
   # across a three-OS matrix, on a Windows runner that is routinely 2-5x slower on CPU-bound Node
