@@ -60,6 +60,58 @@ pub(crate) async fn install_update(
 
 #[cfg(test)]
 mod tests {
+    const PINNED_TAURI_ACTION: &str =
+        "tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f";
+
+    fn workflow_action_references(workflow: &str) -> Vec<(usize, &str)> {
+        workflow
+            .lines()
+            .enumerate()
+            .filter_map(|(line_number, line)| {
+                // A step can start with `- uses:` or put `uses:` below `- name:`.
+                let candidate = line.trim_start();
+                let step = candidate
+                    .strip_prefix('-')
+                    .map(str::trim_start)
+                    .unwrap_or(candidate);
+                let reference = step.strip_prefix("uses:")?.trim_start();
+                let reference = reference
+                    .split_once(" #")
+                    .map_or(reference, |(value, _)| value)
+                    .trim()
+                    .trim_matches(|character| character == '"' || character == '\'');
+
+                reference
+                    .to_ascii_lowercase()
+                    .starts_with("tauri-apps/tauri-action@")
+                    .then_some((line_number, reference))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn release_action_guard_recognizes_direct_and_named_steps() {
+        let workflow = r#"
+steps:
+  # - uses: tauri-apps/tauri-action@ignored-comment
+  - uses: tauri-apps/tauri-action@direct # audit note
+  - name: Named release step
+    uses: "Tauri-Apps/Tauri-Action@named"
+"#;
+        let references = workflow_action_references(workflow)
+            .into_iter()
+            .map(|(_, reference)| reference)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            references,
+            vec![
+                "tauri-apps/tauri-action@direct",
+                "Tauri-Apps/Tauri-Action@named"
+            ]
+        );
+    }
+
     #[test]
     fn updater_is_pinned_and_configured_for_static_github_releases() {
         let manifest = include_str!("../Cargo.toml");
@@ -112,7 +164,7 @@ mod tests {
                 "private key password secret",
                 "TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}",
             ),
-            ("official release action", "tauri-apps/tauri-action@v1"),
+            ("pinned official release action", PINNED_TAURI_ACTION),
             ("static updater JSON", "uploadUpdaterJson: true"),
             ("NSIS updater", "updaterJsonPreferNsis: true"),
             ("serialized manifest merge", "max-parallel: 1"),
@@ -124,17 +176,27 @@ mod tests {
             // 少了这一步，三个 job 全部挂在 vite 阶段（2026-08-19 首次真跑实测）。
             ("library build before bundling", "- run: npm run build\n"),
         ];
-        // 顺序同样要钉：构建必须排在打包之前，否则 dist 还没产出就开始 bundle。
-        // contains 检查不到顺序，所以单独比一次位置。
-        assert!(
-            matches!(
-                (
-                    workflow.find("- run: npm run build\n"),
-                    workflow.find("tauri-apps/tauri-action@v1"),
-                ),
-                (Some(build), Some(action)) if build < action
+        // 不能只用 contains/find：旧 pin 若留在注释里，会让实际 action 已被替换时假绿。
+        // 这里只接受唯一一条真实 uses step，并兼容 YAML 引号与行尾的审计注释。
+        let release_actions = workflow_action_references(workflow);
+        let action_line = match release_actions.as_slice() {
+            [(line_number, reference)] if *reference == PINNED_TAURI_ACTION => *line_number,
+            unexpected => panic!(
+                "发布 workflow 必须且只能有一条固定到审核 commit 的 tauri-action uses step；实际为 {unexpected:?}"
             ),
+        };
+
+        // 顺序同样要钉：构建必须排在真实 action step 前，否则 dist 还没产出就开始 bundle。
+        let build_line = workflow
+            .lines()
+            .position(|line| line.trim() == "- run: npm run build");
+        assert!(
+            matches!(build_line, Some(build_line) if build_line < action_line),
             "npm run build 必须排在 tauri-action 之前"
+        );
+        assert!(
+            !workflow.contains("uses: tauri-apps/tauri-action@v1"),
+            "发布 action 必须固定到审核过的 commit，不能退回浮动 v1 tag"
         );
         let missing = requirements
             .into_iter()

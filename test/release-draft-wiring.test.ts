@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { load } from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 
 const ROOT = join(import.meta.dirname, '..')
+const PINNED_TAURI_ACTION = 'tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f'
 
 function read(path: string): string {
   return readFileSync(join(ROOT, path), 'utf8')
@@ -14,6 +16,23 @@ function between(workflow: string, startMarker: string, endMarker: string): stri
   return start < 0 || end <= start ? '' : workflow.slice(start, end)
 }
 
+interface WorkflowDocument {
+  jobs?: Record<string, { steps?: unknown[] }>
+}
+
+function actionReferences(workflow: string, jobName?: string): string[] {
+  const jobs = (load(workflow) as WorkflowDocument).jobs ?? {}
+  const selectedJobs = jobName === undefined ? Object.values(jobs) : [jobs[jobName]]
+
+  return selectedJobs.flatMap((job) =>
+    (job?.steps ?? []).flatMap((step) => {
+      if (typeof step !== 'object' || step === null || !('uses' in step)) return []
+      const reference = (step as { uses?: unknown }).uses
+      return typeof reference === 'string' ? [reference] : []
+    }),
+  )
+}
+
 describe('release draft verifier workflow wiring', () => {
   const workflow = read('.github/workflows/release-desktop.yml')
   const preflightJob = between(workflow, '\n  preflight:', '\n  prepare-draft:')
@@ -22,6 +41,7 @@ describe('release draft verifier workflow wiring', () => {
   const finalizeJob = between(workflow, '\n  finalize-draft:', '\n  verify-draft:')
   const verifyStart = workflow.indexOf('\n  verify-draft:')
   const verifyJob = verifyStart < 0 ? '' : workflow.slice(verifyStart)
+  const rustUpdaterTest = read('shell/src-tauri/src/updater.rs')
 
   it('serializes every desktop release run instead of allowing mixed draft assets', () => {
     expect(workflow).toMatch(
@@ -56,10 +76,24 @@ describe('release draft verifier workflow wiring', () => {
     expect(publishJob).toMatch(/\n    needs: prepare-draft\n/)
     expect(publishJob).toContain('max-parallel: 1')
     expect(publishJob).toContain('releaseId: ${{ needs.prepare-draft.outputs.release_id }}')
-    expect(publishJob).toContain(
-      'tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f',
-    )
+    expect(
+      actionReferences(workflow).filter((reference) =>
+        reference.toLowerCase().startsWith('tauri-apps/tauri-action@'),
+      ),
+    ).toEqual([PINNED_TAURI_ACTION])
+    expect(actionReferences(workflow, 'publish')).toContain(PINNED_TAURI_ACTION)
     expect(publishJob).toContain('persist-credentials: false')
+  })
+
+  it('keeps the Rust workflow contract on the same pinned release action', () => {
+    expect(rustUpdaterTest).toContain(`"${PINNED_TAURI_ACTION}"`)
+    expect(rustUpdaterTest).toContain('("pinned official release action", PINNED_TAURI_ACTION)')
+    expect(rustUpdaterTest).toContain('workflow_action_references(workflow)')
+    expect(rustUpdaterTest).toContain('.to_ascii_lowercase()')
+    expect(rustUpdaterTest).toContain('match release_actions.as_slice()')
+    expect(rustUpdaterTest).toContain('if *reference == PINNED_TAURI_ACTION')
+    expect(rustUpdaterTest).toContain('build_line < action_line')
+    expect(rustUpdaterTest).toContain('!workflow.contains("uses: tauri-apps/tauri-action@v1")')
   })
 
   it('retargets only after publish and smoke succeed, with exact uploaded nonempty assets', () => {
