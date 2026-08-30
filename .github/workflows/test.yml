@@ -30,6 +30,10 @@ jobs:
       - run: npm ci
       # Root tsconfig (test/, tools/, vitest.config.ts) plus both workspaces.
       - run: npm run typecheck
+      # Run once in an online job after typecheck. npm ci prints advisory counts but does not
+      # fail on a newly disclosed high vulnerability; this explicit gate does.
+      - name: Block high and critical npm advisories
+        run: npm audit --audit-level=high
 
   unit:
     name: unit (${{ matrix.os }})

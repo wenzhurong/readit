@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs'
+import { load } from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 
 /**
@@ -50,6 +51,46 @@ describe('typecheck is wired into CI', () => {
         'If a job here should not gate a merge, delete it and say why — do not leave a check ' +
         'that looks like a gate and is not.',
     ).not.toContain('continue-on-error')
+  })
+})
+
+describe('high npm advisories are a blocking CI gate', () => {
+  const workflow = read('.github/workflows/test.yml')
+  const parsed = load(workflow) as {
+    jobs?: Record<
+      string,
+      {
+        if?: unknown
+        'continue-on-error'?: unknown
+        steps?: Array<{
+          if?: unknown
+          run?: unknown
+          'continue-on-error'?: unknown
+        }>
+      }
+    >
+  }
+  const typecheckJob = parsed.jobs?.typecheck
+  const steps = typecheckJob?.steps ?? []
+  const auditSteps = steps.filter(
+    (step) => typeof step.run === 'string' && step.run.includes('npm audit'),
+  )
+
+  it('runs one explicit full-lock audit in the online single-runner job', () => {
+    expect(auditSteps).toHaveLength(1)
+    expect(auditSteps[0]?.run).toBe('npm audit --audit-level=high')
+  })
+
+  it('runs after typecheck and cannot be skipped or made advisory', () => {
+    const typecheckIndex = steps.findIndex((step) => step.run === 'npm run typecheck')
+    const auditIndex = steps.findIndex((step) => step.run === 'npm audit --audit-level=high')
+
+    expect(typecheckIndex).toBeGreaterThanOrEqual(0)
+    expect(auditIndex).toBeGreaterThan(typecheckIndex)
+    expect(typecheckJob?.if).toBeUndefined()
+    expect(typecheckJob?.['continue-on-error']).toBeUndefined()
+    expect(auditSteps[0]?.if).toBeUndefined()
+    expect(auditSteps[0]?.['continue-on-error']).toBeUndefined()
   })
 })
 
