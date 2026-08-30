@@ -11,11 +11,12 @@ Open With 策略，Windows `Ctrl+F` 进入 readit 文档查找，路径/目录�
 自动化守卫，桌面发布工作流也已覆盖 macOS 双架构与 Windows x64。
 
 **实现、自动化和本机 Windows 11 核心路径符合本方案预期，0.1.3 草稿的三平台发布构建、
-Windows 静默安装器生命周期以及真 WebView2 保存时序也已通过；但 Windows 仍未完全验收
-放行。** 真实“已有其他默认应用”和“全新用户”文件关联、无 WebView2 的干净 Windows 10、
-真实微软拼音预编辑仍缺环境证据；F3 全仓长路径阻塞门已在限定预算下通过并关闭 D2-27，
-但 0.1.3 仍是未发布草稿，不能完成公开 updater 链。当前结论是“本机覆盖的日常核心路径
-可用，发布与产品下限仍有明确缺口”，不是“Windows 已全面验收通过”。
+Windows 静默安装器生命周期、精确草稿资产/updater 签名校验以及真 WebView2 保存时序也已
+通过；但 Windows 仍未完全验收放行。** 真实“已有其他默认应用”和“全新用户”文件关联、
+无 WebView2 的干净 Windows 10、真实微软拼音预编辑仍缺环境证据；F3 全仓长路径阻塞门已在
+限定预算下通过并关闭 D2-27，但 0.1.3 仍是未发布草稿，不能完成公开 updater 链。当前结论
+是“本机覆盖的日常核心路径可用，草稿发布链可复现，公开发布与产品下限仍有明确缺口”，
+不是“Windows 已全面验收通过”。
 
 测试主机为 Windows `10.0.26200.9168`、AMD64，已安装 Microsoft Edge WebView2 Runtime `151.0.4129.86`。干净 Windows 10 且没有 WebView2 Runtime 的场景尚未执行，不以当前主机结果代替该场景。
 
@@ -576,3 +577,52 @@ E2 在 0.1.3 草稿安装版上用真实 WebView2 窗口和真实 Rust `save_doc
 版本，因此没有完成旧版发现 0.1.3、下载、验签、安装、重启与版本确认的整条链。当前结论是：
 **0.1.3 草稿安装包在本机覆盖的核心路径可用，E2 与静默生命周期通过；Windows 全面验收和
 updater 发布门仍未通过。**
+
+---
+
+## readit-v0.1.3 草稿 verifier 修复复验（2026-08-30）
+
+### 修复与基础 CI
+
+前一轮 [`release desktop` run 33284682516](https://github.com/wenzhurong/readit/actions/runs/33284682516)
+已成功构建三平台、通过 Windows 安装器 smoke 并 finalize 9 个资产，唯一失败是 read-scoped
+verifier 第一次 `GET` draft ID 就收到 `403 Resource not accessible by integration`。GitHub
+草稿只对具备 push access 的主体可见，因此修复提交
+`eb1a22ca5fbe74e55eba9ad945b2d3d15f343802` 只将 `verify-draft` job 恢复为
+`contents: write`；verifier 本身仍只发 GET、无 body，checkout 不持久化凭据。测试还以 YAML
+完整 allowlist 锁定该 job，防止高权限 token 后续被新增命令或步骤用于写入。
+
+| Workflow | Run | 结果 |
+|---|---:|---|
+| test | [`33285437524`](https://github.com/wenzhurong/readit/actions/runs/33285437524) | 6/6 jobs success；typecheck、0 high/critical npm advisory、三平台单测、性能与 Windows 深路径/Rust 全过 |
+| browser | [`33285437554`](https://github.com/wenzhurong/readit/actions/runs/33285437554) | 5/5 jobs success |
+| visual | [`33285437520`](https://github.com/wenzhurong/readit/actions/runs/33285437520) | success |
+| offline | [`33285437534`](https://github.com/wenzhurong/readit/actions/runs/33285437534) | no-egress 完整 suite success |
+
+本机修复提交另通过完整 typecheck、`103 files / 2977 tests` 与 diff check。远端深路径 job 同样
+运行 2977 项前端测试与 40/40 Rust 测试；clone/语料/dist/Cargo source/manifest 的路径预算
+分别为 `210/301/287/210/237`，短实体 Cargo target 为 `37`，没有回退 F3 的既定证据口径。
+
+### 完整草稿发布复验
+
+[`release desktop` run 33285696875](https://github.com/wenzhurong/readit/actions/runs/33285696875)
+整体成功：
+
+- macOS Apple Silicon 与 Intel 均上传 DMG、app updater tarball、`.sig` 与 `latest.json`；updater
+  包签名存在，但 App 本体仍是 ad-hoc 签名且未做 Apple notarization；
+- [Windows x64 job](https://github.com/wenzhurong/readit/actions/runs/33285696875/job/99188474009)
+  构建并上传 6,779,187-byte NSIS setup、416-byte `.sig` 与 3,503-byte `latest.json`。真实静默
+  安装/卸载 smoke 对版本、注册表、ProgID/OpenWith、快捷方式、默认项/第三方 sentinel 保留与
+  零残留的全部强断言通过；
+- finalize 将复用的 draft `378698760` 精确指向
+  `eb1a22ca5fbe74e55eba9ad945b2d3d15f343802`；
+- [最终 verifier](https://github.com/wenzhurong/readit/actions/runs/33285696875/job/99189551971)
+  以 release ID 成功下载并核对 `latest.json` 与三份 detached signature，确认 9 个精确资产和
+  6 个签名 updater 平台。本机随后用同一脚本、ID、版本与 SHA 独立复验，结果一致。
+
+最终 API 状态仍为 `draft: true`、`prerelease: false`、`published_at: null`，9 个资产全部
+`uploaded` 且非空。由此，草稿可见性 403 与发布 workflow 回归已关闭，Windows x64 当前
+NSIS 包的自动化安装生命周期也通过；但这仍不是公开 Release，也没有从旧版完成线上发现、
+下载、验签、安装、重启。结合 F1 尚缺两个真实起始状态、F2、E5 和零星人工项，最终判断仍是：
+**当前 Windows 核心使用与草稿发布链符合预期，但 Windows 全面验收和公开 updater 发布门
+尚未通过。**
