@@ -259,9 +259,15 @@ macOS 侧对照数字：dmg 7.7 MB / `.app` 18 MB；冷启动中位 459 ms（最
 
 ### 3.3 长路径（台账 D2-27）
 
-D2-27 记着 Windows 长路径**仍未测量**（不是通过）。若你的机器
-`LongPathsEnabled=1` 且 git `core.longpaths=true`，跑一遍 `windows-test-plan.md` §5.2
-就能把它还清。**不要为了压绿去改注册表然后不声明。**
+D2-27 已由提交 `1d192c552743369dc4325be7be6bb5d77380885d` 的
+[`Windows long path + Rust` job](https://github.com/wenzhurong/readit/actions/runs/33213146527/job/98990778378)
+还清：hosted Windows 自带 `LongPathsEnabled=1`，仓库局部 `core.longpaths=true`，从 210
+字符 clone 完成 install/test/build/typecheck、Rust 40/40，并实际打开 >260 的跟踪语料、
+dist 产物和产品文档。Cargo target 因 MSVC linker 限制保持短路径，所以这不是“任意深度
+原生工具都支持”的证明。
+
+本节仍可作为以后复测步骤；**不要为了压绿去改注册表然后不声明**。若阻塞 job 或同等环境
+以后回归失败，应重新打开 D2-27 并记录新的首个失败边界。
 
 ---
 
@@ -285,7 +291,8 @@ macOS 那轮踩过的，别再踩一次：
 - **六项结果**：写回 `docs/plans/2026-08-13-m6-manual-acceptance.md` 的 Windows 列，
   **逐项写口径不只是打勾**（照 macOS 侧那一份的形状）。**不要新建第二份清单。**
 - **§3 的三项与过程细节**：追加到 `docs/plans/2026-08-17-windows-shell-report.md`。
-- **台账**：`D2-21`（真引擎验收门）按结果更新；`D2-27` 若跑了长路径就还清。
+- **台账**：`D2-21`（真引擎验收门）按结果更新；`D2-27` 已由上述阻塞 job 还清，后续失败
+  时重新打开，而不是把成功范围外推。
 - **README**：里程碑行与「已知缺口」里的 Windows 口径按结果改。
 
 **报告里必须分开写的两件事**（这是本项目 ≥10 次记录的失效模式）：

@@ -1,6 +1,6 @@
 # M6 桌面壳真机手工验收清单
 
-**日期**：2026-08-13（**macOS 执行日期 2026-08-17；Windows 补验日期 2026-08-22、2026-08-27、2026-08-29**）
+**日期**：2026-08-13（**macOS 执行日期 2026-08-17；Windows 补验日期 2026-08-22、2026-08-27、2026-08-29；F3 远程通过 2026-08-29、文档收口 2026-08-30**）
 **产品下限**：macOS 14 + Safari ≥ 17.2；Windows 10 + Evergreen WebView2
 **状态规则**：只有在对应平台的真实安装包与系统 WebView 中完成操作后才能记为通过。
 未执行表示验收未达成；Playwright、Rust/TypeScript 单元测试或恒跳过测试都不能替代这里的结果。
@@ -23,11 +23,12 @@
 2026-08-27 已在普通交互式 Windows 11 会话安装 GitHub Release `readit-v0.1.2`，并直接操作
 真实 WebView2 窗口完成上述项目。2026-08-29 对同一发布包从点击 `Uninstall`、完成页到 `Close`
 及进程退出全程复核，并另跑静默生命周期；安装目录、卸载项、`readit.md` ProgID、两个扩展名
-的 `OpenWithProgids` 及开始/桌面快捷方式均无残留，A4 改判通过。结论仍不是“Windows 全面
-放行”：干净 Windows 10 无 WebView2、另外两种文件关联起始状态、全仓长路径的远端 CI 和
-真实微软拼音仍未完成。0.1.3 草稿安装版随后以真 WebView2 + 真 Rust IPC 双闸门补验 E2
-保存时序并通过；草稿未发布，不据此宣称 updater 通过。详见 Windows 壳报告的 2026-08-29
-复核与 0.1.3 补验。
+的 `OpenWithProgids` 及开始/桌面快捷方式均无残留，A4 改判通过。0.1.3 草稿安装版随后以真
+WebView2 + 真 Rust IPC 双闸门补验 E2 保存时序并通过；F3/D2-27 又由 hosted Windows 阻塞门
+在 210 字符 clone 中完成 install/test/build/typecheck、Rust 40/40 与真实 >260 文档打开。
+F3 是环境/工具链自动化证据，不冒充本表的真 WebView2 手工操作。结论仍不是“Windows 全面
+放行”：干净 Windows 10 无 WebView2、另外两种文件关联起始状态和真实微软拼音仍未完成，
+草稿也未发布，不据此宣称 updater 通过。详见 Windows 壳报告的最新复核与 0.1.3 补验。
 
 ## 1. 双击 Markdown 文件
 

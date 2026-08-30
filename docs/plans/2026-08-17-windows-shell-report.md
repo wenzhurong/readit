@@ -13,9 +13,9 @@ Open With 策略，Windows `Ctrl+F` 进入 readit 文档查找，路径/目录�
 **实现、自动化和本机 Windows 11 核心路径符合本方案预期，0.1.3 草稿的三平台发布构建、
 Windows 静默安装器生命周期以及真 WebView2 保存时序也已通过；但 Windows 仍未完全验收
 放行。** 真实“已有其他默认应用”和“全新用户”文件关联、无 WebView2 的干净 Windows 10、
-真实微软拼音预编辑仍缺环境证据；全仓长路径 job 已实现但尚待下一次远端 CI，0.1.3 也仍是
-未发布草稿，不能完成公开 updater 链。当前结论是“本机覆盖的日常核心路径可用，发布与产品
-下限仍有明确缺口”，不是“Windows 已全面验收通过”。
+真实微软拼音预编辑仍缺环境证据；F3 全仓长路径阻塞门已在限定预算下通过并关闭 D2-27，
+但 0.1.3 仍是未发布草稿，不能完成公开 updater 链。当前结论是“本机覆盖的日常核心路径
+可用，发布与产品下限仍有明确缺口”，不是“Windows 已全面验收通过”。
 
 测试主机为 Windows `10.0.26200.9168`、AMD64，已安装 Microsoft Edge WebView2 Runtime `151.0.4129.86`。干净 Windows 10 且没有 WebView2 Runtime 的场景尚未执行，不以当前主机结果代替该场景。
 
@@ -488,7 +488,8 @@ Windows 性能预算，所以这里只记录数据，不宣称“性能通过”
 0.1.2 在这台 Windows 11 上可以完成日常 Markdown 阅读和当轮覆盖的编辑保存路径，核心应用
 不是“不可用”，本机当前用户下已覆盖的安装/卸载路径也已通过。后续 0.1.3 草稿补验已经关闭
 E2 真窗口保存时序缺口，并为 F1 增加第三方 Open With sentinel 证据；但 F1 的两个真实起始
-状态、F2、E5 仍无证据，F3 也必须等新增远端 job 成功，因此**当前仍不是完全验收通过**。
+状态、F2、E5 仍无证据；F3 后续已由新增远端 job 通过并限定性关闭，但这不改变上述手工
+环境缺口，因此**当前仍不是完全验收通过**。
 
 ---
 
@@ -543,12 +544,25 @@ E2 在 0.1.3 草稿安装版上用真实 WebView2 窗口和真实 Rust `save_doc
 
 结果符合 E2 的全部判据，E2 改判 **通过**；这次没有出现需要修改保存实现的新产品缺陷。
 
-### F3 自动化进展与仍未关闭的门
+### F3 自动化通过与适用范围
 
-新的阻塞式 `windows-long-path` CI job 已实现。它要求 runner 的 `LongPathsEnabled=1`，在
-长度至少 200 的临时路径中以仓库局部 `core.longpaths=true` clone 同一提交，并从深路径执行
-`npm ci`、根测试、typecheck 与 Rust 测试。代码和本地静态守卫完成不等于环境通过；只有下次
-远端该 job 成功，F3 才能改判。本节记录时该远端证据尚不存在。
+提交 `1d192c552743369dc4325be7be6bb5d77380885d` 的
+[`test` run 33213146527](https://github.com/wenzhurong/readit/actions/runs/33213146527) /
+[`Windows long path + Rust` job](https://github.com/wenzhurong/readit/actions/runs/33213146527/job/98990778378)
+整体成功。hosted Windows 已有 `LongPathsEnabled=1`，job 只设置仓库局部
+`core.longpaths=true`，没有修改注册表压绿；Node 为 `22.20.0`。
+
+- clone 根 `210`；安装前实际读取跟踪语料绝对路径 `301`、`59` bytes；
+- `npm ci` 从深 clone 原样执行，根测试 `103 files / 2975 tests`，完整 build/typecheck 成功；
+- 构建后实际打开最长 `287` 字符的非空 `packages/readit/dist` 产物；
+- Rust source/manifest 长度 `210/237`；完整 suite `40 passed / 0 failed`，随后精确重跑
+  `document::tests::opens_an_extended_length_windows_document_path` 为 `1 passed / 39 filtered`；
+- 为避开已实证的 MSVC `/OUT` 限制，实体 Cargo target 在 `$RUNNER_TEMP` 下仅 `37` 字符，
+  最长 Cargo 产物 `153`。
+
+因此 F3/D2-27 按既定验收条件关闭。结论只覆盖该提交、hosted Windows/Node 22.20.0、
+210 字符 clone 与已证明的 >260 输入/输出/产品文档读写；不宣称 MSVC linker 支持 >260
+输出目录、任意深度 Node 原生 executable、UNC/网络盘或已安装 GUI/Explorer 文件关联场景。
 
 当前仍缺：
 

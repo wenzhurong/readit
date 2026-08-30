@@ -36,3 +36,25 @@
 - README 和 D2-26 更新为已修复，历史报告保留当时实测数据而不回写。
 
 只有上述门全部通过，D2-26 才可关闭。本规格不将 npm 结果外推为 Cargo/Rust 依赖审计结论。
+
+## 4. 执行结果与清账
+
+提交 `d2a54d91db81264704bc41090b82a29ea0ff0322` 的四条基础工作流全部成功：
+
+| Workflow | Run | 结果 |
+|---|---:|---|
+| browser | [`33284072318`](https://github.com/wenzhurong/readit/actions/runs/33284072318) | 5 个 browser jobs 全部成功 |
+| visual | [`33284072134`](https://github.com/wenzhurong/readit/actions/runs/33284072134) | L4 visual regression 成功 |
+| offline | [`33284072150`](https://github.com/wenzhurong/readit/actions/runs/33284072150) | 无出口网络 namespace 内完整 suite 成功 |
+| test | [`33284072185`](https://github.com/wenzhurong/readit/actions/runs/33284072185) | 6 个 jobs 全部成功 |
+
+[`typecheck` job](https://github.com/wenzhurong/readit/actions/runs/33284072185/job/99184083975)
+先完成完整 build/typecheck，再真实执行名为 `Block high and critical npm advisories` 的阻塞步骤；
+日志中的原始命令为 `npm audit --audit-level=high`，输出 `found 0 vulnerabilities`，没有 skip、
+`continue-on-error` 或 shell 吞错。CI wiring 通过 YAML 语义解析钉住唯一 audit step、精确命令、
+顺序及无条件跳过，不能用 `|| true`、`--omit` 或 `if: false` 假绿。
+
+同一 `test` run 的根测试为 `103 files / 2977 tests`，三平台、深路径 build/typecheck 及 Windows
+Rust `40/40` 均成功。`js-yaml 4.3.2` 与 `nanoid 3.3.18` 的静态版本守卫继续通过。因此本规格
+全部验收门已满足，D2-26 改判 **已还清**。该结论不包含 Cargo/Rust advisory 审计；npm
+registry/API 不可用时 audit 会失败关闭，这是持续安全门的明确可用性权衡。

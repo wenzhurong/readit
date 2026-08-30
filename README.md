@@ -380,7 +380,7 @@ cd shell/src-tauri && cargo test # Rust 侧
 | M3 | element + Shadow DOM + L3b + 高亮双默认 | ✅ |
 | M4 | 编辑器 + 滚动同步 + `plain` 档 + `onChange` | ✅ |
 | M5 | Mermaid | ✅ |
-| **M6** | 壳：关联、单实例、`readit://`、导航、查找、监听、编辑/原子保存、更新器 | 🟡 双平台已有真引擎验收；Windows 核心阅读/编辑及本机当前用户下已覆盖的安装/卸载路径通过，干净 Win10/WebView2、保存时序、真实微软拼音与长路径仍待补验 |
+| **M6** | 壳：关联、单实例、`readit://`、导航、查找、监听、编辑/原子保存、更新器 | 🟡 双平台已有真引擎验收；Windows 核心阅读/编辑、保存时序、本机当前用户下已覆盖的安装/卸载路径及限定的全仓长路径门通过，另外两种文件关联初态、干净 Win10/WebView2、真实微软拼音与公开 updater 全链仍待补验 |
 | M7 | 签名分发 | ⬜ |
 
 ---
@@ -400,19 +400,22 @@ cd shell/src-tauri && cargo test # Rust 侧
   这一轮**抓出四个真缺陷**（出货应用里语法高亮从未生效、Mermaid 长标签被裁、图层护栏
   被 `classDef` 绕过、查找命中不滚进视野），**四个在库层、Rust 层、happy-dom 层乃至
   Playwright 层都是绿的**。全部已修。自动化不能替代真机，这一轮是最直接的证据。
-- **编辑与保存已取得双平台真引擎的部分验收。** Windows 上基本保存/CRLF、外部冲突、
-  窗口 × 与 `Alt+F4` 的三动作保护已通过；保存进行中继续编辑与真实微软拼音仍未执行。
-  自动化覆盖不能替代这两条手工空白。D2-28 已在实现层还清。
+- **编辑与保存已取得双平台真引擎的部分验收。** Windows 上基本保存/CRLF、保存进行中继续
+  编辑、外部冲突、窗口 × 与 `Alt+F4` 的三动作保护已通过；真实微软拼音仍未执行，自动化
+  覆盖不能替代这条手工空白。D2-28 已在实现层还清。
 - **Windows 真 WebView2 已有发布包实测，不再是零覆盖。** `readit-v0.1.2` 在 Windows 11 /
   WebView2 151 上完成文件打开、查找、监听、Mermaid、编辑保存和界面补验；2026-08-29 又以
-  完整 UI 与静默两条路径确认卸载无 readit 自有残留。干净 Win10 无 WebView2、三种文件
-  关联起始状态、真实输入法和全仓长路径仍未齐，故不能泛化为 Windows 全面放行。详见
-  Windows 壳报告的 2026-08-29 复核。
+  完整 UI 与静默两条路径确认卸载无 readit 自有残留。F3/D2-27 又由启用系统/Git 长路径的
+  hosted Windows 阻塞门在 210 字符 clone 中完成 install/test/build/typecheck、Rust 40/40
+  和真实 >260 文档打开；该结论有明确路径预算，不等于任意深度原生工具都可运行。干净
+  Win10 无 WebView2、文件关联另外两种起始状态和真实输入法仍未齐，故不能泛化为 Windows
+  全面放行。详见 Windows 壳报告的 2026-08-29/30 复核。
 - **IME 在 WebKit 上是具名缺口**（`GAP-IME-WEBKIT`）：WKWebView 没有等价于 CDP
   `Input.imeSetComposition` 的入口，四条真机组合测试整体跳过，跳过的标题就是缺口名。
-- **`npm audit` 的 2 high 已有修复候选。** 2026-08-29 将出货依赖升至
-  `js-yaml 4.3.2`，构建链升至 `nanoid 3.3.18`；本地完整语料、构建与
-  `npm audit --audit-level=high` 已通过。D2-26 等本次远程 browser/visual/offline 结果后关闭。
+- **`npm audit` 的 2 high 已修复。** 出货依赖已升至 `js-yaml 4.3.2`，构建链解析到
+  `nanoid 3.3.18`；完整语料、三平台测试、browser/visual/offline 与显式阻塞式
+  `npm audit --audit-level=high` 均通过，D2-26 已关闭。该结论只覆盖 npm，不外推为 Rust
+  advisory 审计。
 - **组合期外部 `setValue()` 会丢弃刚提交的输入法文本**——这是**刻意的语义**
   （`setValue()` 是权威性整体替换），已在 SPEC §9.4 写明，不是缺陷。
 
