@@ -16,8 +16,26 @@ function between(workflow: string, startMarker: string, endMarker: string): stri
   return start < 0 || end <= start ? '' : workflow.slice(start, end)
 }
 
+interface WorkflowStep {
+  readonly env?: Record<string, unknown>
+  readonly id?: string
+  readonly name?: string
+  readonly run?: string
+  readonly shell?: string
+  readonly uses?: string
+  readonly with?: Record<string, unknown>
+}
+
+interface WorkflowJob {
+  readonly name?: string
+  readonly needs?: string | string[]
+  readonly permissions?: Record<string, unknown>
+  readonly 'runs-on'?: string
+  readonly steps?: WorkflowStep[]
+}
+
 interface WorkflowDocument {
-  jobs?: Record<string, { steps?: unknown[] }>
+  jobs?: Record<string, WorkflowJob>
 }
 
 function actionReferences(workflow: string, jobName?: string): string[] {
@@ -35,12 +53,14 @@ function actionReferences(workflow: string, jobName?: string): string[] {
 
 describe('release draft verifier workflow wiring', () => {
   const workflow = read('.github/workflows/release-desktop.yml')
+  const workflowDocument = load(workflow) as WorkflowDocument
   const preflightJob = between(workflow, '\n  preflight:', '\n  prepare-draft:')
   const prepareJob = between(workflow, '\n  prepare-draft:', '\n  publish:')
   const publishJob = between(workflow, '\n  publish:', '\n  finalize-draft:')
   const finalizeJob = between(workflow, '\n  finalize-draft:', '\n  verify-draft:')
   const verifyStart = workflow.indexOf('\n  verify-draft:')
   const verifyJob = verifyStart < 0 ? '' : workflow.slice(verifyStart)
+  const verifyJobDocument = workflowDocument.jobs?.['verify-draft']
   const rustUpdaterTest = read('shell/src-tauri/src/updater.rs')
 
   it('serializes every desktop release run instead of allowing mixed draft assets', () => {
@@ -110,17 +130,44 @@ describe('release draft verifier workflow wiring', () => {
     expect(finalizeJob).not.toContain('continue-on-error')
   })
 
-  it('runs the verifier as a blocking read-only job for the same release ID and workflow SHA', () => {
+  it('gives the GET-only verifier draft visibility for the same release ID and workflow SHA', () => {
     expect(verifyJob).not.toBe('')
-    expect(verifyJob).toContain('needs: [prepare-draft, finalize-draft]')
-    expect(verifyJob).toMatch(/\n    permissions:\n      contents: read\n/)
-    expect(verifyJob).toContain('node .github/scripts/verify-release-draft.mjs')
-    expect(verifyJob).toContain('--release-id "${{ needs.prepare-draft.outputs.release_id }}"')
-    expect(verifyJob).toContain('--version "${{ steps.desktop_version.outputs.value }}"')
-    expect(verifyJob).toContain('--target-sha "${{ github.sha }}"')
-    expect(verifyJob).toContain('GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}')
-    expect(verifyJob).toContain('persist-credentials: false')
-    expect(verifyJob).not.toContain('continue-on-error')
+    expect(verifyJobDocument).toEqual({
+      name: 'Verify release draft',
+      needs: ['prepare-draft', 'finalize-draft'],
+      'runs-on': 'ubuntu-latest',
+      permissions: { contents: 'write' },
+      steps: [
+        {
+          uses: 'actions/checkout@v7',
+          with: { 'persist-credentials': false },
+        },
+        {
+          uses: 'actions/setup-node@v6',
+          with: { 'node-version': '22.20.0' },
+        },
+        {
+          name: 'Read desktop version',
+          id: 'desktop_version',
+          shell: 'bash',
+          run: [
+            'version=$(node -p "JSON.parse(require(\'fs\').readFileSync(\'shell/src-tauri/tauri.conf.json\', \'utf8\')).version")',
+            'echo "value=$version" >> "$GITHUB_OUTPUT"',
+            '',
+          ].join('\n'),
+        },
+        {
+          name: 'Verify draft metadata, assets, and updater manifest',
+          env: { GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' },
+          run: [
+            'node .github/scripts/verify-release-draft.mjs',
+            '--release-id "${{ needs.prepare-draft.outputs.release_id }}"',
+            '--version "${{ steps.desktop_version.outputs.value }}"',
+            '--target-sha "${{ github.sha }}"',
+          ].join(' '),
+        },
+      ],
+    })
   })
 
   it('verifies by exact release ID, rejects a live tag ref, and downloads detached signatures', () => {

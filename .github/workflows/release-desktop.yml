@@ -298,8 +298,10 @@ jobs:
     name: Verify release draft
     needs: [prepare-draft, finalize-draft]
     runs-on: ubuntu-latest
+    # Draft releases are visible only to push-capable principals. The verifier itself remains
+    # GET-only (covered by unit tests); write scope is needed for visibility, not mutation.
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v7
         with:

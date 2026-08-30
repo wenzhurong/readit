@@ -96,8 +96,12 @@ function remoteFixture(overrides: { existingTag?: boolean; wrongSignature?: bool
       .filter((asset) => asset.name.endsWith('.sig'))
       .map((asset) => [asset.url, asset.name]),
   )
-  const fetchImpl = vi.fn(async (input: string | URL) => {
-    const url = String(input)
+  const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const request = new Request(input, init)
+    expect(request.method).toBe('GET')
+    expect(request.body).toBeNull()
+
+    const url = request.url
     if (url === releaseUrl) return jsonResponse(data.release)
     if (url === tagRefUrl) {
       return overrides.existingTag
