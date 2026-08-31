@@ -36,7 +36,10 @@ unset readit_signing_password
 
 ## 发布步骤
 
-1. 同步 `shell/src-tauri/tauri.conf.json` 与 `shell/src-tauri/Cargo.toml` 的版本号。
+1. 同步五处桌面版本声明：`shell/src-tauri/tauri.conf.json`、
+   `shell/src-tauri/Cargo.toml`、`shell/src-tauri/Cargo.lock` 中的 `readit-shell`、
+   `shell/package.json` 与根 `package-lock.json` 的 `packages.shell`；运行
+   `npm test -- shell/test/version-sync.test.ts`，不得只手工核对其中两处。
 2. 完成 `docs/plans/2026-08-13-m6-manual-acceptance.md` 中本次发布要求的两个平台真机验收；
    未执行项目必须作为发布缺口保留，不能写成已经通过。
 3. 在 GitHub Actions 手动运行 `release desktop`。矩阵串行构建 macOS Apple Silicon、

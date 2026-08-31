@@ -3,9 +3,9 @@
 **日期：** 2026-08-29
 **范围：** 台账 D2-26；不改前置物解析 schema，不改业务 API，不宣称 Rust advisory 已审计。
 
-## 1. 现状与目标
+## 1. 修复前现状与目标
 
-`npm audit --json` 在当前 lockfile 上报告 **2 high / 0 critical**：
+`npm audit --json` 在本规格开始时的 lockfile 上报告 **2 high / 0 critical**：
 
 - 直接出货依赖 `js-yaml 4.1.0`，当前通告要求至少 `4.3.2`；
 - 构建链 `vite → postcss → nanoid 3.3.17`，通告要求至少 `3.3.18`。

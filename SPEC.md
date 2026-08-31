@@ -715,8 +715,14 @@ readit 查找栏。** Tauri 2.11.5 虽未暴露 wry 的 builder 开关，但
 选择这条路是为了守住第 7 点：WebView2 原生栏只查 DOM，CodeMirror 视口外的文档模型会被
 静默漏掉。代价是 WebView2 的整组浏览器加速键一起关闭，包括 Ctrl+P、Ctrl+R、F12；以后
 若产品需要其中任何一项，必须由壳显式重新提供入口与测试，不能重新放开整组。上述 COM
-路径已经通过 Windows 编译与接口守卫，**真 WebView2 窗口行为仍未执行**：2026-08-18 的
-受控会话在 Tauri 创建窗口阶段被系统错误 5 拒绝，不能把编译证据写成运行时通过。
+路径在 2026-08-18 当时只通过了 Windows 编译与接口守卫，**当时的真 WebView2
+窗口行为尚未执行**：受控会话在 Tauri 创建窗口阶段被系统错误 5 拒绝，不能把
+那次编译证据写成运行时通过。
+
+> **2026-08-29/30 当前更新：** 上一段是历史记录，不再是当前状态。公开 Release
+> `readit-v0.1.2` 已在 Windows 11 25H2 + WebView2 `151.0.4129.107` 的真窗口中验证
+> readit 自建查找栏：阅读/源码模式的正反向循环、计数与 Escape 清理均通过。
+> 这一结果只补上了本节的真 WebView2 查找行为证据，不等于 Windows 全面验收。
 
 预算：3–6 KB 手写代码 + 2–3 KB 降级路径，无依赖。
 
@@ -926,16 +932,26 @@ readit 查找栏。** Tauri 2.11.5 虽未暴露 wry 的 builder 开关，但
 
 详见 `docs/plans/2026-08-08-plan2-debt.md` 的 D2-20（已还清）与 D2-22（残留 2px，未还）。
 
-⚠️ **M3 / M4 共同的一条缺口：§13.2 自己定的「真引擎才算验收」从未满足（本条 2026-08-11 补记）。**
+⚠️ **M3 / M4 曾有一条共同缺口：§13.2 自己定的「真引擎才算验收」在
+2026-08-11 补记时从未满足。以下保留当时的原始证据，当前状态见段末更新。**
 §13.2 原文要求「验收门必须包含真 WKWebView（macOS runner）与真 WebView2（Windows runner）
 里的一次运行」，理由是 Playwright 的 WebKit 是打过补丁的 main 分支构建、跑在已发布 Safari 前面，
-**只能当廉价预筛**。而计划二交付的全部 L3b/L4 job 都只在 `ubuntu-latest` 的
+**只能当廉价预筛**。而当时计划二交付的全部 L3b/L4 job 都只在 `ubuntu-latest` 的
 `mcr.microsoft.com/playwright:v1.62.1-noble` 容器里跑 Playwright 自带的引擎。
 `test.yml` 的 `unit` job 虽然覆盖 macos/windows，但它跑的是 vitest，从不包含 `browser/*.spec.ts`。
 
-这比「全部 Windows 实测被用户推迟」更宽——**macOS 侧的真 WKWebView 同样从未跑过**，
-而且 `docs/windows-test-plan.md` 写于计划二开工前、此后未更新，
-所以目前连「以后怎么做真机验证」的计划都不存在。**记为 D2-21。**
+那次记录比「全部 Windows 实测被用户推迟」更宽——**截至当时，macOS 侧的真
+WKWebView 同样从未跑过**，而且 `docs/windows-test-plan.md` 写于计划二开工前、此后未更新，
+所以当时连「以后怎么做真机验证」的计划都不存在。**记为 D2-21。**
+
+> **2026-08-29/30 当前更新：D2-21 现为「双平台已有真引擎证据，Windows 完整放行仍未
+> 达成」。** Windows 侧已不再是真 WebView2 零覆盖：公开 `readit-v0.1.2` 在 Windows 11 /
+> WebView2 151 的真窗口中完成文件打开、单实例路由、查找、监听、Mermaid、基本编辑
+> 保存、外部冲突与脏关闭保护；首轮 `a8b2bc1` 的 `readit-v0.1.3` 草稿安装版又以真
+> WebView2 + 真 Rust IPC 补验并通过保存时序。当前 `eb1a22c` 草稿安装器经过自动化
+> 生命周期 smoke，但尚未重跑同一套完整 GUI 验收。剩余缺口还包括另外两种文件关联
+> 初始状态、无 WebView2 的干净 Windows 10、真实微软拼音和公开 updater 全链，
+> 所以不得写成 Windows 全面验收通过。
 
 ⚠️ **M4 的 IME 验收线实际落地情况（2026-08-09 批次 7 实测，本条 2026-08-10 补记）：Chromium 可自动化验证，WebKit 是具名覆盖缺口，且缺口的边界比"4 条用例跳过"更宽。** Chromium 走 CDP `Input.imeSetComposition` + `Input.insertText` 真实驱动组合，不是 `dispatchEvent()` 自我肯定。WebKit 侧：
 
@@ -1091,12 +1107,15 @@ readit 查找栏。** Tauri 2.11.5 虽未暴露 wry 的 builder 开关，但
 - **§13.1 需补一步：删 `data-line`**（readit 自有产物，GitHub 没有）
 - **§13.1 第 4 步的选择器要注意**：GitHub 的 octicon svg 首个属性是 `data-component` 而非 `class`，写选择器时按 class 属性**匹配**而不是按"以 class 开头"匹配，否则会漏掉全部 octicon
 - **§13.4 的限流描述不完整**：`POST /markdown` 与 `GET /repos/...` 走**不同的**限额桶。实测 7 次 POST 跑完后 `GET /rate_limit` 显示 core 桶仍是 `used: 7`。"未认证 60 次/小时"只约束 core 那一桶
-- **§13.3 的语料规模只剩 2 个余量**：实测 58 个（gfm 12 / github-only 25 / frontend 15 / real-world 6），上限是 60。§8 的 159 条护栏语料是独立一类，**必须排除在快照发现范围之外**，否则直接冲破上限
+- **§13.3 的语料规模只剩 2 个余量**：截至 2026-08-30 实测 68 个
+  （gfm 13 / github-only 34 / frontend 15 / real-world 6），上限是 70。§8 的 159 条护栏语料
+  是独立一类，**必须排除在快照发现范围之外**，否则直接冲破上限
 - **L1 规格套件需要且只需要一条归一化**：规格文件发 XHTML 自闭合 `<br />`，readit 用 `xhtmlOut: false`（GitHub 发 `<br>`）。不归一化的话 CommonMark 只有 591/652，其中 58 条纯粹是这个配置差异。加一条只对 13 个空元素名（HTML5 现行空元素集；param 已从规范移除）生效的归一化，其余保持字节级比较。**这条要写死，别让后来的人以为可以随手往里加更多归一化**——那会把保真度测试悄悄稀释掉
 
 ### 17.6 §5 定版表的补充
 
-**新增运行时依赖**：`js-yaml@4.1.0` + `@types/js-yaml@4.0.9`（frontmatter 解析）、`@types/hast@3.0.5`（类型）。
+**当时新增的运行时依赖**：`js-yaml@4.1.0` + `@types/js-yaml@4.0.9`（frontmatter 解析）、`@types/hast@3.0.5`（类型）。
+`js-yaml` 已于 2026-08-30 升至 `4.3.2` 并由依赖安全门防回退；这里保留 `4.1.0` 作为计划一落地时的历史版本。
 
 **新增 devDependency**：`@wooorm/starry-night@3.10.0` —— 只给 `scripts/build-lang-scopes.ts` 用，**运行时零引用**（计划一里还没有高亮器）。
 

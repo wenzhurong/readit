@@ -622,7 +622,10 @@ verifier 第一次 `GET` draft ID 就收到 `403 Resource not accessible by inte
 
 最终 API 状态仍为 `draft: true`、`prerelease: false`、`published_at: null`，9 个资产全部
 `uploaded` 且非空。由此，草稿可见性 403 与发布 workflow 回归已关闭，Windows x64 当前
-NSIS 包的自动化安装生命周期也通过；但这仍不是公开 Release，也没有从旧版完成线上发现、
-下载、验签、安装、重启。结合 F1 尚缺两个真实起始状态、F2、E5 和零星人工项，最终判断仍是：
+NSIS 包的自动化安装生命周期也通过。严格按产物口径，§“E2 真 WebView2 + 真 Rust IPC 补验”
+操作的是首轮 `a8b2bc1` 草稿安装包；当前 `eb1a22c` 草稿是后续重建的精确产物，尚未重跑
+同一套完整 GUI/E2 验收，不能由保存代码未变和 lifecycle smoke 反推为已跑。但这仍不是
+公开 Release，也没有从旧版完成线上发现、下载、验签、安装、重启。结合 F1 尚缺两个真实
+起始状态、F2、E5 和零星人工项，最终判断仍是：
 **当前 Windows 核心使用与草稿发布链符合预期，但 Windows 全面验收和公开 updater 发布门
 尚未通过。**

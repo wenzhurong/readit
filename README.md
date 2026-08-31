@@ -6,9 +6,11 @@
 它想解决的问题很具体：**渲染效果对齐 GitHub 网页版，而且这个对齐是可证伪的**——
 由对 GitHub 真实输出的快照回归守住，不靠肉眼。
 
-> ⚠️ **预发布 / 内部工程状态。** 8 个包全部 `private: true` + `0.0.0`，没有任何
-> GitHub Release；桌面壳只能从源码构建，尚无面向普通用户的已签名下载。这份 README
-> 描述的是仓库里已经存在并被测试守住的东西，不是路线图。
+> ⚠️ **预发布 / 内部工程状态。** 8 个 JS 包仍全部 `private: true` + `0.0.0`，
+> 没有发布到 npm。GitHub 的公开 latest Release 是 `readit-v0.1.2`；当前源码版本与
+> `readit-v0.1.3` Release 草稿是 `0.1.3`，草稿尚未公开发布。桌面产物仍未获得受
+> OS 信任的代码签名，M7 尚未完成。这份 README 描述的是仓库里已经存在
+> 并被测试守住的东西，不是路线图。
 
 ---
 
@@ -52,8 +54,9 @@
 
 ## 安装与运行（桌面）
 
-**目前已有 GitHub Release（最新验收基线为 `readit-v0.1.2`），但仍没有受信任的 OS 代码
-签名。** macOS 构建只有 ad-hoc 签名（`tauri.conf.json` 里的 `signingIdentity: "-"`），
+**GitHub 的公开 latest Release 是 `readit-v0.1.2`；仓库源码和未公开的
+`readit-v0.1.3` Release 草稿已到 `0.1.3`。公开版与草稿的桌面产物都没有受信任的
+OS 代码签名。** macOS 构建只有 ad-hoc 签名（`tauri.conf.json` 里的 `signingIdentity: "-"`），
 没有 Apple Developer ID 或公证；Windows 构建没有 Authenticode 签名。两边的公开分发信任
 仍属于 M7，尚未完成。这一节说明源码构建与手动信任意味着什么。
 
@@ -117,8 +120,9 @@ Finder 里选中任意 `.md` → `Cmd+I` → 「打开方式」选 readit → �
 
 ### Windows
 
-Windows 壳可以从源码构建为当前用户 NSIS 安装包，也已有公开的 unsigned Release；仍没有
-Authenticode 代码签名。
+Windows 壳可以从源码构建为当前用户 NSIS 安装包，也已有公开的 unsigned
+`readit-v0.1.2`；`readit-v0.1.3` 仍是草稿，尚不是公开 latest Release。Windows
+产物仍没有 Authenticode 代码签名。
 在装好 Node ≥ 22、Rust stable、Visual Studio Build Tools（Desktop development with C++）
 和 WebView2 开发依赖后：
 
@@ -345,8 +349,12 @@ cd shell && npm run dev          # 开发
 cd shell/src-tauri && cargo test # Rust 侧
 ```
 
-**当前基线**：`npm test` 2844 通过 / 86 文件 / 0 失败；`cargo test` 28 通过；
-浏览器五个 project 118 通过 / 6 具名跳过 / 0 失败。
+**截至 2026-08-30 `main@56157ca` 的基线**：`npm test` 103 文件 / 2977 通过 / 0 失败；Rust
+`cargo test` 在 Windows 为 40/40、macOS 为 39/39（计数差异来自平台专用测试）；
+L3b 的五个 Playwright project 在固定 Linux 容器中合计 154 通过 /
+6 具名跳过 / 0 失败（Firefox 为 advisory，Chromium/WebKit 才承重）；
+L4 视觉回归只在固定 Linux 容器中判定，14/14 通过。这些 Playwright 数字不代替
+macOS WKWebView 或 Windows WebView2 真机验收。
 
 ---
 
@@ -357,7 +365,7 @@ cd shell/src-tauri && cargo test # Rust 侧
 | **L1** | CommonMark 0.31.2 与 GFM 0.29 规格套件 | `npm test`，离线 |
 | **L2** | 语料对 GitHub 快照的逐字节比对 + 三向棘轮 | 同上 |
 | **L3** | 单元与集成（含泄漏探针、纯度扫描、导出面钉桩） | 同上 |
-| **L3b** | 真浏览器：Shadow DOM、编辑器、IME、查找、Mermaid | Playwright，Chromium/WebKit/Firefox |
+| **L3b** | 真浏览器：Shadow DOM、编辑器、IME、查找、Mermaid | 固定 Linux 容器的 Playwright；Chromium/WebKit 承重，Firefox advisory |
 | **L4** | 视觉回归，7 张基线，含**敌意宿主**页 | 固定 Linux 容器，`maxDiffPixelRatio: 0.002` |
 | **perf** | 重渲染防抖的 p95 与记忆化比值哨兵 | `npm run test:perf` |
 

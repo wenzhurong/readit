@@ -1,13 +1,20 @@
-# Windows 侧验证方案
+# Windows 侧验证方案（历史计划 + 当前摘要）
 
-给在 Windows 机器上工作的 agent。**保持克制——大部分自动化面已由 CI 的 `windows-latest` job
-覆盖，这份方案只做 CI 做不到的事。** 重做 CI 已经证明的东西不产生信息，还会制造
-「我们验过 Windows 了」的错觉。
+这份文件最初给在 Windows 机器上工作的 agent 使用。**§1–§8 保留的是 2026-08-18 前后
+用于首次补证的执行方案，不是当前未完成项清单。** 当前结论以本节摘要、
+`docs/plans/2026-08-13-m6-manual-acceptance.md` 顶部汇总和
+`docs/plans/2026-08-17-windows-shell-report.md` 文末追加记录为准。
 
-**现状（2026-08-18）**：仓库有 8 个包
+**当前摘要（2026-08-30，基于当日 `main` 与已写回的验收记录）**：仓库有 8 个包
 （`core` / `element` / `editor` / `find` / `highlight` / `math` / `mermaid` / `readit`）
-外加一个可产出 NSIS 的 Tauri 桌面壳。M0–M5 已交付；M6 的 macOS 真机验收已执行，
-Windows 壳实现和自动化已落地，但真 WebView2 六项验收仍未执行。
+和可产出当前用户 NSIS 的 Tauri 桌面壳。M0–M5 已交付；Windows 11 + 真 WebView2 已完成
+文件打开、单实例、查找、监听、Mermaid、性能取数及 E1–E4 编辑保存主路径，不能再写成
+“真 WebView2 验收为零”。F3 长路径也已由 hosted Windows 阻塞门按限定范围关闭。
+
+当前仍未全面放行：F1 三种文件关联起始状态只完成 1/3，F2 干净 Windows 10 无 WebView2、
+E5 真实微软拼音预编辑串、H1 tooltip 与 H3 指针在窗口外松手等小项仍缺证据；0.1.3 仍是
+草稿，尚未完成公开旧版发现更新、下载、验签、安装、重启的 updater 全链。0.1.3 最新草稿
+的发布流水线和 Windows 静默安装生命周期已通过，但不能替代当前精确安装器的完整 GUI 回归。
 
 > ⚠️ **这份文档于 2026-08-14 重写。** 上一版写于 2026-08-08，当时仓库只有两个纯 Node 包，
 > 文末写着「浏览器 element —— M3，尚未开工」「编辑器与 IME —— M4，尚未开工」。
@@ -23,11 +30,15 @@ Windows 壳实现和自动化已落地，但真 WebView2 六项验收仍未执�
 | **引擎与库**（8 个包） | ✅ 可验。跨平台，`npm test` 在 Windows CI 上每次推送都跑。 |
 | **浏览器层**（L3b：element / editor / find / mermaid） | ✅ Windows 侧已跑过 Chromium/WebKit；Chromium 仍只是 WebView2 的代理信号。 |
 | **视觉层**（L4） | ❌ 不要在 Windows 上跑。基线只在固定 Linux 容器里生成（SPEC §13.2），Windows 的字体栈不同，比对必然红且没有信息量。 |
-| **桌面壳** | 🟡 **已构建、尚未完成真窗口验收。** 可生成当前用户 NSIS，具备非劫持文件关联、单实例 argv、`readit://`、文件监听、Ctrl+F 和桌面发布矩阵；当前受控会话在创建 WebView2 窗口时被系统错误 5 拒绝。 |
+| **桌面壳** | 🟡 **已构建且核心真窗口路径已通过，全面验收未完成。** 2026-08-27/29 已在 Windows 11 + Evergreen WebView2 操作公开 0.1.2 与 0.1.3 草稿安装版；当前缺口见上方摘要。 |
 
 **不要再回复「Windows 壳尚未构建」。** 壳已经存在；相关任务应运行本文件 §5.5 与
-`docs/plans/2026-08-13-m6-manual-acceptance.md`，并把无法取得真 WebView2 窗口的情况记为
-环境阻塞或未执行，不能退回“没有实现”的旧口径。
+`docs/plans/2026-08-13-m6-manual-acceptance.md` 中尚未完成的精确项目，并把无法取得真
+WebView2 窗口的情况记为环境阻塞或未执行，不能退回“没有实现”或“真引擎证据为零”的旧口径。
+
+> **历史执行说明**：下面保留原始命令、判断纪律和报告模板，便于回归或在新机器上复测。
+> 其中“下一步”“首次”“当前基线”等措辞描述的是当时起点；若与上方 2026-08-30 摘要冲突，
+> 以上方摘要和两份结果文档为准。
 
 ---
 
@@ -49,14 +60,15 @@ Visual Studio Build Tools（Desktop development with C++）和系统 WebView2 Ru
 
 ## 2. CI 已经证明了什么——不要重做
 
-`.github/workflows/test.yml` 的 `unit` job **每次推送都在 `windows-latest` 上跑 `npm test`**，
-且当前是绿的。所以下面这些**已经被证明**，不需要你再验一遍：
+`.github/workflows/test.yml` 的 `unit` job **每次推送都在 `windows-latest` 上跑 `npm test`**。
+2026-08-30 的 `main` 流水线为绿；下面这些**已经被证明**，不需要仅为增加一次相同记录而重跑：
 
 - 全部 vitest 套件（含 8 个包与壳前端的单测）在 Windows 上通过
 - 路径解析、行尾、大小写这三类**在 CI 那条干净短路径上**没有问题
 
-**你的价值不在重跑，在于 CI 跑不到的条件**：真实开发机的长路径、带空格与非 ASCII
-的目录、不同的 `core.autocrlf`、以及**真浏览器引擎**。
+**手工补证的价值在于 CI 跑不到的条件**：真实开发机的带空格与非 ASCII 目录、不同的
+`core.autocrlf`、真浏览器引擎及系统交互。长路径已另有 hosted Windows 阻塞门，复测时要
+区分该自动化证据与真实安装 GUI/Explorer 证据。
 
 ---
 
@@ -70,8 +82,8 @@ npm test
 npm run typecheck
 ```
 
-**期望**：`npm test` 全绿（当前基线 **2844 通过 / 86 文件 / 0 失败**，以你 clone 到的
-提交为准，数字可能已增长）；`npm run typecheck` exit 0。
+**期望**：`npm test` 全绿（2026-08-30 参考基线 **2977 通过 / 103 文件 / 0 失败**，仍以
+你 clone 到的提交为准）；`npm run typecheck` exit 0。
 
 > ⚠️ `npm run typecheck` **会先跑一次构建**（`npm run build`，约 5 秒）。这是有意的：
 > 壳的前端 import 的是发布外观包 `readit/element`，它解析到 `packages/readit/dist` 的
@@ -95,8 +107,8 @@ npx playwright install firefox
 npx playwright test --project=element-firefox
 ```
 
-**期望**：与 Linux 上一致。参考基线：macOS 本机跑上面全部五个 project 是
-**118 通过 / 6 具名跳过 / 0 失败**；只跑前两条命令数字会小一些。
+**期望**：与承重的 Linux CI 一致。截至 2026-08-30 `main@56157ca`，五个 project 的
+参考基线是 **154 通过 / 6 具名跳过 / 0 失败**；只跑前两条命令数字会小一些。
 那 6 条具名跳过是设计内的（IME 在 WebKit 上的 `GAP-IME-WEBKIT` 等），**不是失败**。
 
 ### ⚠️ 关于引擎选择，有一件事要想清楚
@@ -108,19 +120,19 @@ Playwright 在 Windows 上确实能跑 WebKit，但那是一个**没有任何真
 - **`element-chromium` / `editor-chromium` 的结果最有价值**：同属 Chromium 系，
   能抓到 Windows 特有的路径、字体、渲染差异，而未来的 Windows 壳正是跑在 WebView2 上。
 - `element-webkit` 的结果**只作参考**：红了值得报，但它不代表任何 Windows 用户的体验。
-- **真正的 WebView2 验收仍为零**（SPEC §13.2 要求「验收门必须包含真 WebView2 里的一次运行」，
-  记为 D2-21）。现在缺的不是壳，而是一次不受桌面沙箱阻塞的真实窗口执行。
-  **不要用 Playwright 的 Chromium 或单元测试冒充它**。
+- **真正的 WebView2 验收不再为零**：2026-08-22、27、29 已取得真实 readit WebView2
+  窗口证据，核心路径结果写在 M6 汇总与 Windows 壳报告中。仍然**不要用 Playwright 的
+  Chromium 或单元测试扩写未完成的 F1/F2/E5/H1/H3，也不要把部分覆盖写成全面放行**。
 
 **不要跑 `npm run test:visual`**（L4）。基线是 Linux 容器里生成的，Windows 字体栈不同，
 必然全红且无信息量。同理 `npm run visual:baseline` 需要 bash + docker，不适用。
 
 ---
 
-## 5. 只有真机能测的四件事
+## 5. 历史真机补证方案
 
-CI 跑在 `D:\a\readit\readit` 这种干净短路径上。真实开发机不是。
-**这四条是这份方案存在的理由。**
+本节记录首次补证时使用的四类环境检查。后续 CI 已增加长路径阻塞门，但真实开发机的目录、
+Git 配置和系统交互仍可能不同；执行时只复测目标风险，不把本节当成“当前全部未执行”。
 
 ### 5.1 路径里有空格或非 ASCII
 
@@ -183,8 +195,9 @@ npm run tauri --workspace=readit-shell-frontend -- build --bundles nsis `
 ```
 
 **分步操作手册见 `docs/plans/2026-08-18-windows-acceptance-runbook.md`。**
-那份文件给出六项在 Windows 上的逐条操作、判据、以及五条「已知会被误当成缺陷的东西」；
-夹具用 `npm run acceptance:fixtures` 生成（与 macOS 侧同一套，结果才可比）。
+那份文件给出当时六项在 Windows 上的逐条操作、判据、以及五条「已知会被误当成缺陷的东西」；
+夹具用 `npm run acceptance:fixtures` 生成（与 macOS 侧同一套，结果才可比）。这些六项后来
+已在真 WebView2 中取得主体结果；现在只应用它回归特定路径或补齐上方摘要列出的缺口。
 
 这里只留三条硬约束：
 
@@ -235,23 +248,24 @@ Windows 上引擎与浏览器层是否可用；失败项是**测试基建**问�
 
 ---
 
-## 7. 明确不在本次范围
+## 7. 明确不在当时执行范围
 
 | 项 | 原因 |
 |---|---|
 | **L4 视觉回归** | 基线只在固定 Linux 容器里生成，Windows 上跑没有信息量。 |
 | **OS 代码签名与 SmartScreen 信任** | 归 M7。Windows 侧 Azure Trusted Signing 对个人的辖区限制是预算/资格问题，不是本轮工程项。 |
-| **干净 Win10 且无 WebView2 的安装行为** | 只有具备该环境时才测；当前 `downloadBootstrapper` 设计需要联网，不能用已有 Runtime 的主机代替。 |
+| **干净 Win10 且无 WebView2 的安装行为** | 当时只有具备该环境时才测；`downloadBootstrapper` 设计需要联网，不能用已有 Runtime 的主机代替。该项后来仍是 F2 未完成缺口。 |
 
 桌面壳、真 WebView2、性能和 updater 已经属于本计划范围，不得再列进这张排除表。
 
 ---
 
-## 8. 做完之后
+## 8. 2026-08-30 后续工作
 
-把报告交回。若 §4 的浏览器层在 Windows 上全绿，那是一条**新信息**——
-它此前从未被验证过；若有失败，请按 §6 最后一段把基建与缺陷分开判断。
+新的验证结果继续写回 M6 清单和 Windows 壳报告，不在本文件复制出第二套当前状态；若有失败，
+仍按 §6 最后一段把测试基建与产品缺陷分开判断。
 
-**下一步的 Windows 工作是补齐普通交互式会话里的真 WebView2 六项验收**，再实跑一次
-`release desktop` 草稿发布，核对 `latest.json` 同时包含 macOS 与 Windows 的签名条目。
-实现过程与受阻证据见 `docs/plans/2026-08-17-windows-shell-report.md`。
+**下一步不是“首次跑真 WebView2 六项”**。应补 F1 另外两种真实文件关联起始状态、F2 无
+WebView2 的干净 Windows 10、E5 真实微软拼音，以及 H1/H3 的零星人工项；对当前精确 0.1.3
+草稿安装器补完整 GUI 回归。0.1.3 公开后，再从旧版实跑发现、下载、验签、安装、重启的
+updater 全链。实现、实测与受阻证据见 `docs/plans/2026-08-17-windows-shell-report.md`。
