@@ -34,10 +34,16 @@ it('模式控件与"未保存"芯片不占同一个位置', () => {
   expect(declaration('#mode-switch', 'top')).not.toBe(declaration('#document-state', 'top'))
 })
 
-it('正文有行宽上限并居中 —— 宽窗口下两侧留白随窗口变化', () => {
-  // margin-inline:auto 是"留白随窗口变化"的来源：留白 =（窗口宽 - 上限）/ 2。
-  // 少了它就变成"固定宽度贴左边"，正是这条要防的。
-  expect(declaration('#reader::part(content)', 'max-width')).toBe('var(--readit-shell-measure)')
+it('正文居中，两侧留白随窗口变化且只有"行宽封顶"写法的一半', () => {
+  // 留白 =（窗口宽 − measure）/ 4。式子里的两样缺一不可：
+  //   · margin-inline:auto —— 没有它就是"固定宽度贴左边"，留白不随窗口变；
+  //   · max-width 里的那个 50% —— 没有它（即直接写 var(--readit-shell-measure)）
+  //     留白就回到 / 2，也就是 2026-09-11 要减掉的那一半。
+  // 这里只守 CSS 文本。「新写法的留白正好是旧写法一半」是像素级的断言，两个引擎里
+  // 实测在 browser/element/shell-measure.spec.ts。
+  expect(declaration('#reader::part(content)', 'max-width')).toBe(
+    'calc(50% + var(--readit-shell-measure) / 2)',
+  )
   expect(declaration('#reader::part(content)', 'margin-inline')).toBe('auto')
   // 变量本身用全文匹配：#reader 还出现在 `html, body, #app, #reader {` 这个组选择器里，
   // 按规则块取会先命中那一个（第一次写这条守卫时就是这么错的）。

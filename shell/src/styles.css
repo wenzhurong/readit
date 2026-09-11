@@ -24,7 +24,8 @@ body {
   /* The reusable element remains host-bounded by default. The desktop shell owns
      the whole WebView, so its find bar must stay in the window while the document scrolls. */
   --readit-find-position: fixed;
-  /* 阅读行宽上限，见下面的 ::part(content) 规则。 */
+  /* 留白起点：窗口宽过它才开始出现留白，此时行宽正好等于它本身。
+     它**不是**行宽上限——见下面的 ::part(content) 规则。 */
   --readit-shell-measure: 52rem;
 }
 
@@ -41,21 +42,37 @@ body {
 }
 
 /*
- * 阅读行宽上限。窗口宽过这个值时正文居中、两侧留白，且留白随窗口变宽而变宽；
- * 窗口比它窄时正文照常占满。这是**壳自己的版面决定**，不是元素的行为：可复用元素
- * 交给嵌入方的宿主布局，不该替宿主定行宽。走 ::part(content) 而不是新加一个 CSS
- * 变量，是因为 part="content"（kernel.ts 给 .markdown-body 设的）已经是公开 API，
- * 不必为此扩大元素的接口面。
+ * 阅读行宽与两侧留白。窗口宽过 --readit-shell-measure 时正文居中、两侧留白，且留白
+ * 随窗口变宽而变宽；窗口比它窄时正文照常占满。这是**壳自己的版面决定**，不是元素的
+ * 行为：可复用元素交给嵌入方的宿主布局，不该替宿主定行宽。走 ::part(content) 而不是
+ * 新加一个 CSS 变量，是因为 part="content"（kernel.ts 给 .markdown-body 设的）已经
+ * 是公开 API，不必为此扩大元素的接口面。
+ *
+ * 行宽 = min(100%, 50% + measure/2)，于是**单侧留白 =（窗口宽 − measure）/ 4**，
+ * 正好是 `max-width: measure` 那种写法的一半。2026-09-11 真机上看下来，原来那版
+ * 留白过大，这次按公式等比减半。留白**仍然随窗口变宽而变宽**——来源是 margin-inline:
+ * auto 加上式子里的那个 50%。改成写死一个更大的定值（比如 72rem）做不到这件事：
+ * 定值只在某一个窗口宽度上恰好等于「一半」，窄窗口会过度减到几乎不留白、宽屏又减得
+ * 不够。
+ *
+ * measure 的含义随之变了：它不再是行宽上限，而是**留白开始出现的那个窗口宽度**
+ * （此时行宽正好等于它）。窄于它时式子给出的上限大于 100%、不起约束，正文照常占满，
+ * 与改动前逐像素一致。
+ *
+ * 已知取舍，不是遗漏：行宽随窗口无上限地变长，超宽屏下行会偏长。要封顶就给 max-width
+ * 包一层 min()，那是另一个决定，这里没有做。
+ *
+ * 百分比按**包含块**解析，两种模式因此各自正确，且都在两个引擎里实测过
+ * （browser/element/shell-measure.spec.ts）：阅读模式下 .markdown-body 的包含块是
+ * 铺满 #reader 的 .readit-root，50% 就是窗口宽；分栏模式下它是 grid item，包含块是
+ * 自己的网格区域，于是**每个窗格各自减半**。源码模式下正文不可见，不受影响。
  *
  * 按 CSS Scoping 的跨树层叠，外层树的**普通**声明压过 shadow 树内部的同名声明，
  * 所以这里不需要 !important。
- *
- * 分栏模式下这条同样生效：每个窗格宽过上限时预览侧也会居中，行为一致。
- * 源码模式下正文不可见，不受影响。
  */
 #reader::part(content) {
   box-sizing: border-box;
-  max-width: var(--readit-shell-measure);
+  max-width: calc(50% + var(--readit-shell-measure) / 2);
   margin-inline: auto;
   /* 窄窗口时也别贴着边 */
   padding-inline: 1.5rem;
