@@ -3,7 +3,7 @@ import {
   clampPosition,
   connectDraggable,
   createStoredPosition,
-  type Position,
+  type Placement,
 } from '../src/draggable.js'
 
 const VIEWPORT = { width: 1000, height: 800 }
@@ -73,10 +73,18 @@ describe('clampPosition', () => {
 })
 
 describe('位置存档', () => {
-  it('存进去能原样读回来', () => {
+  it('位置连同拖动时的窗口尺寸一起存，能原样读回来', () => {
     const store = createStoredPosition('k', memoryStorage())
-    store.write({ left: 12, top: 34 })
-    expect(store.read()).toEqual({ left: 12, top: 34 })
+    const placement: Placement = { position: { left: 12, top: 34 }, viewport: VIEWPORT }
+    store.write(placement)
+    expect(store.read()).toEqual(placement)
+  })
+
+  it('clear() 之后读为空', () => {
+    const store = createStoredPosition('k', memoryStorage())
+    store.write({ position: { left: 12, top: 34 }, viewport: VIEWPORT })
+    store.clear()
+    expect(store.read()).toBeNull()
   })
 
   it.each([
@@ -84,21 +92,31 @@ describe('位置存档', () => {
     ['不是对象', '42'],
     ['字段不是数字', '{"left":"a","top":2}'],
     ['字段是 NaN', '{"left":null,"top":2}'],
+    // 修复前的格式只有 left/top。没记窗口尺寸，就无从判断它在当前尺寸下是否有效。
+    ['旧格式：没有拖动时的窗口尺寸', '{"left":12,"top":34}'],
+    ['窗口尺寸不是正数', '{"left":12,"top":34,"width":0,"height":800}'],
   ])('%s 一律当作没有存档，回到默认角落', (_name, raw) => {
     const storage = memoryStorage()
     storage.setItem('k', raw)
     expect(createStoredPosition('k', storage).read()).toBeNull()
   })
 
-  it('没有 storage 时读为空、写不抛', () => {
+  it('没有 storage 时读为空、写与清都不抛', () => {
     const store = createStoredPosition('k', null)
-    expect(() => store.write({ left: 1, top: 2 })).not.toThrow()
+    expect(() => store.write({ position: { left: 1, top: 2 }, viewport: VIEWPORT })).not.toThrow()
+    expect(() => store.clear()).not.toThrow()
     expect(store.read()).toBeNull()
   })
 
-  it('storage 写入抛异常时也不能让控件挂掉', () => {
-    const hostile = { ...memoryStorage(), setItem: () => { throw new Error('quota') } } as Storage
-    expect(() => createStoredPosition('k', hostile).write({ left: 1, top: 2 })).not.toThrow()
+  it('storage 写入或删除抛异常时也不能让控件挂掉', () => {
+    const hostile = {
+      ...memoryStorage(),
+      setItem: () => { throw new Error('quota') },
+      removeItem: () => { throw new Error('denied') },
+    } as Storage
+    const store = createStoredPosition('k', hostile)
+    expect(() => store.write({ position: { left: 1, top: 2 }, viewport: VIEWPORT })).not.toThrow()
+    expect(() => store.clear()).not.toThrow()
   })
 })
 
@@ -107,7 +125,7 @@ describe('拖拽', () => {
     document.body.innerHTML = ''
   })
 
-  it('超过阈值后控件跟着指针走，松手把位置存下来', () => {
+  it('超过阈值后控件跟着指针走，松手把位置连同当时的窗口尺寸存下来', () => {
     const { element } = makeControl()
     const store = createStoredPosition('k', memoryStorage())
     connectDraggable(element, { store, viewport: () => VIEWPORT })
@@ -126,7 +144,7 @@ describe('拖拽', () => {
       whileDragging: 'true',
       afterDrop: undefined,
       style: { left: '60px', top: '40px', right: 'auto' },
-      stored: { left: 60, top: 40 },
+      stored: { position: { left: 60, top: 40 }, viewport: VIEWPORT },
     })
   })
 
@@ -178,10 +196,10 @@ describe('拖拽', () => {
     expect(onClick).toHaveBeenCalledTimes(1)
   })
 
-  it('连接时套用已存位置，并且照样过一遍 clamp', () => {
+  it('窗口尺寸与存档相同：连接时套用已存位置，并且照样过一遍 clamp', () => {
     const { element } = makeControl()
     const storage = memoryStorage()
-    storage.setItem('k', JSON.stringify({ left: 99999, top: -50 } satisfies Position))
+    storage.setItem('k', JSON.stringify({ left: 99999, top: -50, width: 1000, height: 800 }))
     connectDraggable(element, {
       store: createStoredPosition('k', storage),
       viewport: () => VIEWPORT,
@@ -190,6 +208,21 @@ describe('拖拽', () => {
     expect({ left: element.style.left, top: element.style.top }).toEqual({
       left: `${1000 - 8}px`,
       top: '8px',
+    })
+  })
+
+  it('窗口尺寸与存档不同：不套用，留在默认右上角，并清掉存档', () => {
+    // readit 每次都以 960×720 启动；在最大化窗口里拖的位置，重启后不该出现在 960 宽的窗口里。
+    const { element } = makeControl()
+    const storage = memoryStorage()
+    storage.setItem('k', JSON.stringify({ left: 1500, top: 300, width: 1920, height: 1080 }))
+    const store = createStoredPosition('k', storage)
+    connectDraggable(element, { store, viewport: () => VIEWPORT })
+
+    expect({ left: element.style.left, top: element.style.top, stored: store.read() }).toEqual({
+      left: '',
+      top: '',
+      stored: null,
     })
   })
 
@@ -205,5 +238,91 @@ describe('拖拽', () => {
     element.dispatchEvent(pointer('pointermove', 200, 200))
 
     expect(element.style.left).toBe('')
+  })
+})
+
+describe('窗口尺寸变化', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  function dragged(viewport: { current: { width: number; height: number } }) {
+    const { element } = makeControl()
+    const store = createStoredPosition('k', memoryStorage())
+    connectDraggable(element, { store, viewport: () => viewport.current })
+    element.dispatchEvent(pointer('pointerdown', 100, 100))
+    element.dispatchEvent(pointer('pointermove', 160, 140))
+    element.dispatchEvent(pointer('pointerup', 160, 140))
+    return { element, store }
+  }
+
+  function inlinePosition(element: HTMLElement) {
+    return { left: element.style.left, top: element.style.top, right: element.style.right }
+  }
+
+  it.each([
+    ['最大化（变大）', { width: 1920, height: 1080 }],
+    ['缩小', { width: 600, height: 500 }],
+    ['只变高度', { width: 1000, height: 900 }],
+  ])('拖过之后%s：控件回到 CSS 默认的右上角，存档清空', (_name, next) => {
+    const viewport = { current: VIEWPORT }
+    const { element, store } = dragged(viewport)
+
+    viewport.current = next
+    window.dispatchEvent(new Event('resize'))
+
+    expect({ style: inlinePosition(element), stored: store.read() }).toEqual({
+      style: { left: '', top: '', right: '' },
+      stored: null,
+    })
+  })
+
+  it('默认位置写在内联样式上时，回到默认是还原那几项，而不是把它们删掉', () => {
+    const { element } = makeControl()
+    element.style.top = '12px'
+    element.style.right = '12px'
+    const viewport = { current: VIEWPORT }
+    connectDraggable(element, {
+      store: createStoredPosition('k', memoryStorage()),
+      viewport: () => viewport.current,
+    })
+    element.dispatchEvent(pointer('pointerdown', 100, 100))
+    element.dispatchEvent(pointer('pointermove', 160, 140))
+    element.dispatchEvent(pointer('pointerup', 160, 140))
+
+    viewport.current = { width: 1920, height: 1080 }
+    window.dispatchEvent(new Event('resize'))
+
+    expect(inlinePosition(element)).toEqual({ left: '', top: '12px', right: '12px' })
+  })
+
+  it('尺寸没变的 resize 不动已拖的位置', () => {
+    const viewport = { current: VIEWPORT }
+    const { element, store } = dragged(viewport)
+
+    viewport.current = { ...VIEWPORT }
+    window.dispatchEvent(new Event('resize'))
+
+    expect({ style: inlinePosition(element), stored: store.read() }).toEqual({
+      style: { left: '60px', top: '40px', right: 'auto' },
+      stored: { position: { left: 60, top: 40 }, viewport: VIEWPORT },
+    })
+  })
+
+  it('回到默认位置之后还能再拖，新位置按新的窗口尺寸记', () => {
+    const viewport = { current: VIEWPORT }
+    const { element, store } = dragged(viewport)
+    viewport.current = { width: 1920, height: 1080 }
+    window.dispatchEvent(new Event('resize'))
+
+    element.dispatchEvent(pointer('pointerdown', 300, 300))
+    element.dispatchEvent(pointer('pointermove', 350, 320))
+    element.dispatchEvent(pointer('pointerup', 350, 320))
+
+    // happy-dom 的 rect 恒为 0，所以起点是 0,0，位移 50,20。
+    expect(store.read()).toEqual({
+      position: { left: 50, top: 20 },
+      viewport: { width: 1920, height: 1080 },
+    })
   })
 })

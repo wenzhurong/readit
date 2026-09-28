@@ -1,4 +1,4 @@
-import { expect, test } from '../support/harness.js'
+import { expect, test, type Page } from '../support/harness.js'
 
 /**
  * 桌面壳的模式控件在真引擎里的两条：拖得动，且拖完不会顺手切换模式。
@@ -96,5 +96,52 @@ test.describe('shell mode switch', () => {
       return el.getBoundingClientRect().width
     })
     expect(Math.abs(after - natural)).toBeLessThan(1)
+  })
+
+  // 2026-09-28 改判：拖过的位置只在拖动时的那个窗口尺寸下有效，尺寸一变就回到右上角。
+  // 此前它按左上角记绝对坐标，拖过一次（哪怕 4px）之后最大化，控件就停在屏幕中间：
+  // 960→1920 时右边距从 22px 变成 982px（Chromium 与 WebKit 同样复现）。
+  // fixture 的默认位置是 top:12px; right:12px，与壳的 0.75rem 对齐。
+  const cornerGap = (page: Page): Promise<{ right: number; top: number }> =>
+    page.evaluate(() => {
+      const r = document.getElementById('readit-mode-switch')!.getBoundingClientRect()
+      return { right: Math.round(window.innerWidth - r.right), top: Math.round(r.top) }
+    })
+
+  async function dragAwayFromCorner(page: Page): Promise<void> {
+    const box = await page.locator('#readit-mode-switch [data-mode="read"]').boundingBox()
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box!.x - 300, box!.y + 200, { steps: 16 })
+    await page.mouse.up()
+  }
+
+  test('拖过之后最大化：控件回到右上角', async ({ page }) => {
+    await page.setViewportSize({ width: 960, height: 720 })
+    await page.goto('/host.html')
+    await page.waitForFunction(() => window.readitFixture !== undefined)
+    await page.evaluate(() => window.readitFixture.connectShellModeSwitch())
+
+    await dragAwayFromCorner(page)
+    // 反空断言：先证明真的拖离了角落，否则下面的「回到右上角」可以由「根本没拖动」满足。
+    expect((await cornerGap(page)).right).toBeGreaterThan(200)
+
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await expect.poll(() => cornerGap(page)).toEqual({ right: 12, top: 12 })
+  })
+
+  test('拖过之后最大化再还原：控件仍在右上角，不回到拖过的位置', async ({ page }) => {
+    await page.setViewportSize({ width: 960, height: 720 })
+    await page.goto('/host.html')
+    await page.waitForFunction(() => window.readitFixture !== undefined)
+    await page.evaluate(() => window.readitFixture.connectShellModeSwitch())
+
+    await dragAwayFromCorner(page)
+    expect((await cornerGap(page)).right).toBeGreaterThan(200)
+
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await expect.poll(() => cornerGap(page)).toEqual({ right: 12, top: 12 })
+    await page.setViewportSize({ width: 960, height: 720 })
+    await expect.poll(() => cornerGap(page)).toEqual({ right: 12, top: 12 })
   })
 })
