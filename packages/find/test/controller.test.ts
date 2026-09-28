@@ -247,4 +247,8 @@ describe('源码模型与内置 UI', () => {
   it('允许桌面壳把查找栏固定在窗口，同时保留嵌入默认值', () => {
     expect(FIND_CSS).toContain('position: var(--readit-find-position, absolute)')
   })
+
+  it('允许宿主把查找栏往下让（桌面壳要让开标签栏），默认仍是 8px', () => {
+    expect(FIND_CSS).toContain('top: var(--readit-find-top, 8px)')
+  })
 })
