@@ -268,4 +268,58 @@ test.describe('desktop shell tabs', () => {
     await expect(labels(page)).toHaveText(['b.md'])
     expect(navigated).toBe(0)
   })
+
+  test('查找栏的按钮点得到：点「关闭查找」关掉查找栏，不会点到模式按钮', async ({ page }) => {
+    // 第 2 批评审 Critical 1：#reader 若是 position: fixed 会自成层叠上下文，查找栏（z 10）被困在
+    // 里面，模式按钮（z 9）反而盖在它上面——点「关闭查找」实际点中的是「分栏」。
+    await openShell(page, { files: { '/docs/a.md': LONG('Alpha') }, pending: ['/docs/a.md'] })
+    await page.locator('#mode-switch [data-mode="source"]').click()
+    await expect(activeHost(page).locator('.cm-content')).toBeVisible()
+    await page.keyboard.press('ControlOrMeta+f')
+    await expect(activeHost(page)).toHaveAttribute('data-readit-find-open', 'true')
+    await activeHost(page).getByRole('button', { name: '关闭查找' }).click({ timeout: 3000 })
+    await expect(activeHost(page)).not.toHaveAttribute('data-readit-find-open', 'true')
+    await expect(page.locator('#mode-switch [data-mode="source"]')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  test('标签栏能用键盘操作：方向键与 Home/End 切换（首尾循环），焦点留在标签栏上', async ({ page }) => {
+    // 第 2 批评审 Important 2：原先只有当前标签能聚焦、没有方向键，重画还把焦点丢到 body。
+    await openShell(page, {
+      files: { '/docs/a.md': '# A\n', '/docs/b.md': '# B\n', '/docs/c.md': '# C\n' },
+      pending: ['/docs/a.md', '/docs/b.md', '/docs/c.md'],
+    })
+    await expect(tabs(page)).toHaveCount(3)
+    await tabs(page).nth(2).focus()
+    await page.keyboard.press('ArrowLeft')
+    await expect(tabs(page).nth(1)).toHaveAttribute('aria-selected', 'true')
+    await expect(tabs(page).nth(1)).toBeFocused()
+    await page.keyboard.press('Home')
+    await expect(tabs(page).nth(0)).toHaveAttribute('aria-selected', 'true')
+    await expect(tabs(page).nth(0)).toBeFocused()
+    await page.keyboard.press('ArrowLeft')
+    await expect(tabs(page).nth(2)).toHaveAttribute('aria-selected', 'true')
+    await expect(tabs(page).nth(2)).toBeFocused()
+  })
+
+  test('Ctrl+Tab 切过去之后焦点跟着到新标签；切回来接着在原处打字', async ({ page }) => {
+    // 第 2 批评审 Important 3：原先焦点留在已 inert 的旧标签里，之后敲的字全丢。
+    await openShell(page, {
+      files: { '/docs/a.md': '# A\n', '/docs/b.md': '# B\n' },
+      pending: ['/docs/a.md', '/docs/b.md'],
+    })
+    await makeDirty(page, 0, '# A one')
+    await page.keyboard.press('Control+Tab')
+    await expect(tabs(page).nth(1)).toHaveAttribute('aria-selected', 'true')
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.activeElement?.closest('.document-tab')?.classList.contains('is-active') ?? false,
+        ),
+      )
+      .toBe(true)
+    await page.keyboard.press('Control+Shift+Tab')
+    await expect(tabs(page).nth(0)).toHaveAttribute('aria-selected', 'true')
+    await page.keyboard.type(' two')
+    await expect(activeHost(page).locator('.cm-content')).toContainText('# A one two')
+  })
 })

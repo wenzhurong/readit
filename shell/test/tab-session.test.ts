@@ -56,6 +56,7 @@ function fakeTab(payload: DocumentPayload, mode: ShellMode): FakeTab {
     setMode: (next) => {
       tab.modes.push(next)
     },
+    focus: () => {},
     save: async () => true,
     resolveConflict: () => {},
     prepareToLeave: async (decision) => {

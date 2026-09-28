@@ -73,3 +73,10 @@ it('模式按钮、未保存提示与查找栏都让开标签栏', () => {
   expect(declaration('#document-state', 'top')).toContain('var(--tab-strip-height)')
   expect(css()).toMatch(/--readit-find-top:\s*calc\(var\(--tab-strip-height\) \+ 8px\);/)
 })
+
+it('#reader 不能自成层叠上下文，否则查找栏被困在里面、被模式按钮盖住', () => {
+  // 第 2 批评审 Critical 1：position: fixed 总会创建层叠上下文；absolute 且 z-index 为 auto 不会。
+  // html/body 不滚，所以 absolute 的包含块就是视口，几何与 fixed 相同。
+  expect(declaration('#reader', 'position')).toBe('absolute')
+  expect(declaration('#reader', 'z-index')).toBe('')
+})

@@ -130,7 +130,12 @@ function withTab(id: number, action: (tab: DocumentTab) => void): void {
 }
 
 const tabStrip = connectTabStrip(tabStripRoot, {
-  activate: (id) => withTab(id, (tab) => session.activate(tab)),
+  activate: (id, source) =>
+    withTab(id, (tab) => {
+      session.activate(tab)
+      // 鼠标点了标签就把焦点交给文档；键盘在标签栏里走时留在标签栏（tab-strip 自己放回去）。
+      if (source === 'pointer') tab.focus()
+    }),
   close: (id) => withTab(id, (tab) => void session.closeTab(tab).catch(displayError)),
   open: () => requestOpen(),
   shortcutModifier: isWindows ? 'Ctrl+' : '\u2318',
@@ -220,6 +225,16 @@ function render(): void {
   renderTitle(active)
   renderDocumentState(active)
   conflict.hidden = active === null || active.snapshot().conflictValue === null
+  // 焦点落空（body）或困在已变成后台的旧标签里时，交给当前标签——关标签、离开提示答完之后都会
+  // 这样。原先 Ctrl+Tab 之后焦点留在 inert 的旧标签里，敲的字全丢（第 2 批评审 Important 3）。
+  const focused = document.activeElement
+  const stranded =
+    focused === null ||
+    focused === document.body ||
+    (focused instanceof HTMLElement &&
+      focused.classList.contains('document-tab') &&
+      focused !== active?.host)
+  if (stranded) active?.focus()
   const mode = active?.mode() ?? session.idleMode()
   if (mode !== shownMode) {
     shownMode = mode
@@ -262,8 +277,14 @@ const stopEditShortcuts = isWindows
     })
   : (): void => {}
 const stopTabShortcuts = connectTabShortcuts(window, {
-  next: () => session.cycle(1),
-  previous: () => session.cycle(-1),
+  next: () => {
+    session.cycle(1)
+    session.active()?.focus()
+  },
+  previous: () => {
+    session.cycle(-1)
+    session.active()?.focus()
+  },
 })
 
 useDisk.addEventListener('click', () => session.active()?.resolveConflict('use-disk'))

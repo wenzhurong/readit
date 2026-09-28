@@ -10,9 +10,12 @@ function strip() {
   const root = document.createElement('nav')
   root.innerHTML = '<div role="tablist"></div><button type="button" data-action="open">+</button>'
   document.body.append(root)
-  const calls = { activate: [] as number[], close: [] as number[], open: 0 }
+  const calls = { activate: [] as number[], sources: [] as string[], close: [] as number[], open: 0 }
   const handle = connectTabStrip(root, {
-    activate: (id) => calls.activate.push(id),
+    activate: (id, source) => {
+      calls.activate.push(id)
+      calls.sources.push(source)
+    },
     close: (id) => calls.close.push(id),
     open: () => {
       calls.open += 1
@@ -41,10 +44,11 @@ describe('tab strip', () => {
       title: tab.title,
       conflict: tab.dataset['conflict'] ?? null,
       tabIndex: tab.tabIndex,
+      name: tab.getAttribute('aria-label'),
     }))
     expect(tabs).toEqual([
-      { label: 'a.md', selected: 'true', title: '/docs/a.md', conflict: null, tabIndex: 0 },
-      { label: '● b.md', selected: 'false', title: '/docs/b.md', conflict: 'true', tabIndex: -1 },
+      { label: 'a.md', selected: 'true', title: '/docs/a.md', conflict: null, tabIndex: 0, name: 'a.md' },
+      { label: '● b.md', selected: 'false', title: '/docs/b.md', conflict: 'true', tabIndex: -1, name: 'b.md' },
     ])
   })
 
@@ -52,7 +56,11 @@ describe('tab strip', () => {
     const { tab, calls } = strip()
     tab(2).querySelector<HTMLElement>('.tab-label')?.click()
     tab(1).querySelector<HTMLButtonElement>('.tab-close')?.click()
-    expect({ activate: calls.activate, close: calls.close }).toEqual({ activate: [2], close: [1] })
+    expect({ activate: calls.activate, sources: calls.sources, close: calls.close }).toEqual({
+      activate: [2],
+      sources: ['pointer'],
+      close: [1],
+    })
   })
 
   it('middle-click closes a tab', () => {
@@ -87,5 +95,27 @@ describe('tab strip', () => {
     handle.destroy()
     tab(2).querySelector<HTMLElement>('.tab-label')?.click()
     expect(calls.activate).toEqual([])
+  })
+
+  it('arrow keys and Home/End move the selection (wrapping) and report keyboard activation', () => {
+    const { tab, calls } = strip()
+    const key = (id: number, name: string): void => {
+      tab(id).dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }))
+    }
+    key(1, 'ArrowRight')
+    key(1, 'ArrowLeft')
+    key(2, 'Home')
+    key(1, 'End')
+    expect({ activate: calls.activate, sources: [...new Set(calls.sources)] }).toEqual({
+      activate: [2, 2, 1, 2],
+      sources: ['keyboard'],
+    })
+  })
+
+  it('keeps keyboard focus on the active tab across a re-render', () => {
+    const { root, handle, tab } = strip()
+    tab(1).focus()
+    handle.render(VIEWS, 2)
+    expect(document.activeElement).toBe(root.querySelector('[role="tab"][aria-selected="true"]'))
   })
 })

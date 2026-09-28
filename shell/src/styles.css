@@ -99,8 +99,11 @@ body {
   background: color-mix(in srgb, CanvasText 10%, transparent);
 }
 
+/* absolute 而不是 fixed：fixed 总会自成层叠上下文，把查找栏（z 10）困在里面，被模式按钮（z 9）
+   盖住，点「关闭查找」会点中「分栏」（第 2 批评审 Critical 1）。html/body 不滚，所以 absolute
+   的包含块就是视口，几何与 fixed 相同；z-index 保持 auto，才不会成为层叠上下文。 */
 #reader {
-  position: fixed;
+  position: absolute;
   top: var(--tab-strip-height);
   right: 0;
   bottom: 0;

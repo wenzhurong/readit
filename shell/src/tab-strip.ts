@@ -8,7 +8,8 @@ export interface TabView {
 }
 
 export interface TabStripOptions {
-  activate(id: number): void
+  /** source 让壳决定焦点：鼠标点了就把焦点交给文档，键盘在标签栏里走就留在标签栏。 */
+  activate(id: number, source: 'pointer' | 'keyboard'): void
   close(id: number): void
   open(): void
   /** 快捷键前缀：macOS 是 `⌘`，Windows 是 `Ctrl+`。只用于 title 提示。 */
@@ -44,7 +45,7 @@ export function connectTabStrip(root: HTMLElement, options: TabStripOptions): Ta
     if (id === null) return
     const onClose = event.target instanceof Element && event.target.closest('.tab-close') !== null
     if (onClose) options.close(id)
-    else options.activate(id)
+    else options.activate(id, 'pointer')
   }
   // 中键：按下时就吃掉，免得 Windows 上进入自动滚动；松开（auxclick）时关闭。
   const onMouseDown = (event: MouseEvent): void => {
@@ -58,11 +59,31 @@ export function connectTabStrip(root: HTMLElement, options: TabStripOptions): Ta
     options.close(id)
   }
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.key !== 'Enter' && event.key !== ' ') return
     const id = tabIdOf(event.target)
     if (id === null) return
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      options.activate(id, 'keyboard')
+      return
+    }
+    // WAI-ARIA 标签页模式：方向键与 Home/End 在标签间移动（首尾循环），移到哪个就切到哪个。
+    const ids = [...list.querySelectorAll<HTMLElement>('[role="tab"]')].map((tab) =>
+      Number(tab.dataset['tabId']),
+    )
+    const index = ids.indexOf(id)
+    const target =
+      event.key === 'ArrowRight'
+        ? ids[(index + 1) % ids.length]
+        : event.key === 'ArrowLeft'
+          ? ids[(index - 1 + ids.length) % ids.length]
+          : event.key === 'Home'
+            ? ids[0]
+            : event.key === 'End'
+              ? ids[ids.length - 1]
+              : undefined
+    if (target === undefined) return
     event.preventDefault()
-    options.activate(id)
+    options.activate(target, 'keyboard')
   }
   const onOpen = (): void => options.open()
 
@@ -74,6 +95,8 @@ export function connectTabStrip(root: HTMLElement, options: TabStripOptions): Ta
 
   return {
     render(tabs, activeId) {
+      // 重画会换掉所有标签节点。焦点原本在标签栏里的，重画后放回当前标签上：键盘用户不丢位置。
+      const hadFocus = list.contains(doc.activeElement)
       list.replaceChildren(
         ...tabs.map((view) => {
           const tab = doc.createElement('div')
@@ -82,6 +105,8 @@ export function connectTabStrip(root: HTMLElement, options: TabStripOptions): Ta
           tab.setAttribute('aria-selected', String(view.id === activeId))
           tab.tabIndex = view.id === activeId ? 0 : -1
           tab.title = view.path
+          // 可访问名称只是文件名；× 按钮在标签里面，不写的话会读成「a.md 关闭 a.md」。
+          tab.setAttribute('aria-label', view.label)
           if (view.conflict) tab.dataset['conflict'] = 'true'
           const label = doc.createElement('span')
           label.className = 'tab-label'
@@ -96,12 +121,12 @@ export function connectTabStrip(root: HTMLElement, options: TabStripOptions): Ta
           return tab
         }),
       )
+      const active = list.querySelector<HTMLElement>('[aria-selected="true"]')
+      if (hadFocus) active?.focus()
       // 只在切换当前标签时把它滚进标签栏视野；每次重画都滚会跟打字抢。
       if (activeId !== shownActive) {
         shownActive = activeId
-        list
-          .querySelector<HTMLElement>('[aria-selected="true"]')
-          ?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+        active?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
       }
     },
 

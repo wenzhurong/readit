@@ -42,6 +42,8 @@ export interface DocumentTab {
   resolveConflict(decision: ConflictDecision): void
   prepareToLeave(decision: LeaveDecision): Promise<boolean>
   whenSavesSettle(): Promise<void>
+  /** 把焦点还给这个标签：上次在它里面聚焦的位置（常见是编辑器），没有就给宿主本身。 */
+  focus(): void
   /** Rust 报告某个 generation 的文件在磁盘上变了。不是本标签当前的 generation 就忽略。 */
   diskChanged(generation: number): void
   /** 拆掉挂载与宿主，并把 generation 交还 Rust。调用方负责先裁决未保存修改、等保存落定。 */
@@ -66,6 +68,8 @@ export function createDocumentTab(
   const host = deps.container.ownerDocument.createElement('div')
   host.className = 'document-tab'
   host.dataset['tabId'] = String(id)
+  // 可编程聚焦：切到这个标签时焦点要有地方落，宿主上的键盘处理（Alt+←/→）也要它。
+  host.tabIndex = -1
   deps.container.append(host)
 
   let generation = first.generation
@@ -73,6 +77,7 @@ export function createDocumentTab(
   let currentMode = mode
   let tab: DocumentTab | null = null
   let navigationTail: Promise<void> = Promise.resolve()
+  let lastFocus: Element | null = null
 
   const saveState = createSaveState({
     write: (content, target) => deps.backend.saveDocument(content, target),
@@ -139,6 +144,12 @@ export function createDocumentTab(
     mode: () => currentMode,
     snapshot: () => saveState.snapshot(),
     setActive(active) {
+      if (!active) {
+        // 变成后台之前记下焦点在它里面的哪儿（常见是编辑器）；切回来时还给它，接着打字。
+        const inside = host.shadowRoot?.activeElement ?? null
+        if (inside !== null) lastFocus = inside
+        else if (host.ownerDocument.activeElement === host) lastFocus = host
+      }
       host.classList.toggle('is-active', active)
       // 非当前标签保留排版，但不可交互、不进无障碍树（多标签设计 §4）。
       host.inert = !active
@@ -146,6 +157,15 @@ export function createDocumentTab(
     setMode(next) {
       currentMode = next
       handle.setMode(next)
+    },
+    focus() {
+      const target =
+        lastFocus instanceof HTMLElement &&
+        lastFocus.isConnected &&
+        lastFocus.getRootNode() === host.shadowRoot
+          ? lastFocus
+          : host
+      target.focus({ preventScroll: true })
     },
     save: () => saveState.save(),
     resolveConflict: (decision) => saveState.resolveConflict(decision),
