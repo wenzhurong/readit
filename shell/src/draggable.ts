@@ -39,12 +39,14 @@ export function clampPosition(
   size: Size,
   viewport: Size,
   margin = EDGE_MARGIN,
+  topInset = 0,
 ): Position {
+  const minTop = topInset + margin
   const maxLeft = Math.max(margin, viewport.width - size.width - margin)
-  const maxTop = Math.max(margin, viewport.height - size.height - margin)
+  const maxTop = Math.max(minTop, viewport.height - size.height - margin)
   return {
     left: Math.min(Math.max(desired.left, margin), maxLeft),
-    top: Math.min(Math.max(desired.top, margin), maxTop),
+    top: Math.min(Math.max(desired.top, minTop), maxTop),
   }
 }
 
@@ -107,6 +109,8 @@ function sameSize(a: Size, b: Size): boolean {
 export interface DraggableOptions {
   readonly store: PositionStore
   viewport(): Size
+  /** 视口顶部被占掉的高度（桌面壳的标签栏）。控件拖不进这一段。 */
+  topInset?(): number
 }
 
 /**
@@ -124,7 +128,13 @@ export function connectDraggable(element: HTMLElement, options: DraggableOptions
 
   const apply = (desired: Position, viewport: Size): void => {
     const rect = element.getBoundingClientRect()
-    const clamped = clampPosition(desired, { width: rect.width, height: rect.height }, viewport)
+    const clamped = clampPosition(
+      desired,
+      { width: rect.width, height: rect.height },
+      viewport,
+      EDGE_MARGIN,
+      options.topInset?.() ?? 0,
+    )
     element.style.left = `${clamped.left}px`
     element.style.top = `${clamped.top}px`
     // 默认位置来自 CSS 的 right；一旦按 left 定位就必须把它让开，否则两边同时生效。

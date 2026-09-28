@@ -63,6 +63,13 @@ describe('clampPosition', () => {
     })
   })
 
+  it('顶部让出 topInset（标签栏），拖不进去', () => {
+    expect(clampPosition({ left: 300, top: 5 }, { width: 120, height: 30 }, VIEWPORT, 8, 36)).toEqual({
+      left: 300,
+      top: 44,
+    })
+  })
+
   it('控件比视口还大时取下界，而不是算出一个负数', () => {
     // 上界会低于下界，这时必须让下界赢——否则窗口被缩到极小后控件会飞出屏幕。
     expect(clampPosition({ left: 400, top: 400 }, { width: 4000, height: 4000 }, VIEWPORT)).toEqual({
@@ -224,6 +231,21 @@ describe('拖拽', () => {
       top: '',
       stored: null,
     })
+  })
+
+  it('拖到标签栏里会被挡在它下沿', () => {
+    const { element } = makeControl()
+    connectDraggable(element, {
+      store: createStoredPosition('k', memoryStorage()),
+      viewport: () => VIEWPORT,
+      topInset: () => 36,
+    })
+
+    element.dispatchEvent(pointer('pointerdown', 100, 100))
+    element.dispatchEvent(pointer('pointermove', 150, 20))
+    element.dispatchEvent(pointer('pointerup', 150, 20))
+
+    expect(element.style.top).toBe('44px')
   })
 
   it('destroy() 之后不再响应指针', () => {
