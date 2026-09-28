@@ -66,7 +66,7 @@
 
 **目标**
 
-1. 打开单个 `.md` 文件，渲染效果与 GitHub 网页版一致（按 §4 三档定义）
+1. 打开一个或多个 `.md` 文件（同一窗口，多标签），渲染效果与 GitHub 网页版一致（按 §4 三档定义）
 2. 可切换到源码编辑并保存
 3. 文中的 `./other.md` 相对链接在同窗口打开，支持前进/后退
 4. 核心可被任意技术栈的项目 `import` 内嵌
@@ -74,11 +74,16 @@
 
 **非目标（v1 明确不做）**
 
-- 文件树、多标签页、全局搜索、笔记库/vault 概念
+- 文件树、全局搜索、笔记库/vault 概念
 - WYSIWYG 实时渲染编辑
 - 导出 PDF / 打印优化（见 §15，这是最可能在 v1.1 反过来推翻壳选型的需求）
 - 服务端渲染 Mermaid
 - 协作、同步、插件市场
+
+> ⚠️ 2026-09-28 修订：原文目标 1 为「打开单个 `.md` 文件」，非目标第一条为「文件树、多标签页、
+> 全局搜索、笔记库/vault 概念」。用户实际使用后要求像 Windows 记事本那样在一个窗口里同时开多个
+> 文档（仍然不要文件树），多标签因此移出非目标。九条决策与理由见
+> `docs/superpowers/specs/2026-09-28-multi-tab-design.md`。
 
 ---
 
@@ -611,15 +616,15 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 
 | 项 | 做法 |
 |---|---|
-| 资源协议 | 自注册 `readit://` 异步 URI scheme（`register_asynchronous_uri_scheme_protocol`），在 Rust 侧把作用域限定到当前文档所在目录。**不用**内置 asset 协议 + 持久化 scope——静态 glob 作用域对"用户双击任意文件"这个形态是错的。⚠️ CSP 里 `readit:` 和 `http://readit.localhost` **都要加**，两个引擎的 scheme 形态不同，一边对另一边就静默坏图 |
+| 资源协议 | 自注册 `readit://` 异步 URI scheme（`register_asynchronous_uri_scheme_protocol`），在 Rust 侧按文档限定作用域：URL 首段是该文档的 generation，只解析到那份文档所在的目录（⚠️ 2026-09-28 多标签：原为「限定到当前文档所在目录」，全局只有一个作用域）。**不用**内置 asset 协议 + 持久化 scope——静态 glob 作用域对"用户双击任意文件"这个形态是错的。⚠️ CSP 里 `readit:` 和 `http://readit.localhost` **都要加**，两个引擎的 scheme 形态不同，一边对另一边就静默坏图 |
 | 文件关联 | `bundle.fileAssociations`，`ext: ["md","markdown"]` + `LSHandlerRank` |
 | macOS 打开事件 | `RunEvent::Opened` 的路径存进 `AppState`，前端挂载后来取。**事件在任何 JS 监听器存在之前就触发**（顺序 Opened → Ready → Window），不这么做会间歇性开出空窗口，且随机器速度复现不稳 |
 | Windows argv | 直接读裸 argv，**不要当 URL 解析**——Tauri 官方的文件关联示例就是这么错的，会丢掉 `C:\Users\…\file.md` |
-| 单实例 | `tauri-plugin-single-instance` 2.4.3，**第一个注册**，早于其他所有插件。第二次调用的 argv 路由进已开窗口的导航历史 |
+| 单实例 | `tauri-plugin-single-instance` 2.4.3，**第一个注册**，早于其他所有插件。第二次调用的 argv 在已开窗口里新开标签，已开着的文件切到那个标签（⚠️ 2026-09-28：原为「路由进已开窗口的导航历史」） |
 | 文件监听 | `notify`。⚠️ 原子保存的 rename 语义会骗过朴素 watcher |
-| 当前文档与保存 | Rust 独立持有规范化后的文件路径与单调 generation；资源根目录不是文件路径。`save_document` 不收路径，只接受内容与 generation，旧文档请求不能写到新文档 |
+| 当前文档与保存 | Rust 持有以 generation 为键的已开文档表（规范化路径 + watcher + 资源根），generation 全局单调。`save_document` 不收路径，只接受内容与 generation；已关闭或被替换的 generation 写不进任何文件（⚠️ 2026-09-28：原为只有一个「当前文档」） |
 | 原子写 | 目标同目录唯一临时文件 + flush/sync + 原子替换；保留权限，成功/失败都不留临时文件 |
-| 原生菜单与退出 | macOS 从 Tauri 完整默认菜单扩展 File/Save 与 View 模式项，**但应用菜单的 Quit 必须换成自建菜单项**：预定义 Quit 接的是 Cocoa `terminate:`，而 tao 没有实现 `applicationShouldTerminate:`，`RunEvent::ExitRequested` 根本不会发出——照抄默认菜单等于让 ⌘Q 静默丢弃未保存修改（2026-08-18 真机实测）。换掉之后，关窗、自建 Quit 与 ⌘Q 三条路径都经前端脏状态裁决；前端尚未 ready 时保持原生退出退路。⚠️ **Apple Event 退出（注销、关机、`osascript … to quit`）仍拦不住**，它同样落在 `terminate:` 上，在 tao 补上 `applicationShouldTerminate:` 之前没有拦截点 |
+| 原生菜单与退出 | macOS 从 Tauri 完整默认菜单扩展 File/Save 与 View 模式项，**但应用菜单的 Quit 必须换成自建菜单项**：预定义 Quit 接的是 Cocoa `terminate:`，而 tao 没有实现 `applicationShouldTerminate:`，`RunEvent::ExitRequested` 根本不会发出——照抄默认菜单等于让 ⌘Q 静默丢弃未保存修改（2026-08-18 真机实测）。换掉之后，关窗、自建 Quit 与 ⌘Q 三条路径都经前端脏状态裁决；前端尚未 ready 时保持原生退出退路。⚠️ **Apple Event 退出（注销、关机、`osascript … to quit`）仍拦不住**，它同样落在 `terminate:` 上，在 tao 补上 `applicationShouldTerminate:` 之前没有拦截点 File 菜单另有 Open…（⌘O）与 Close Tab（⌘W）；默认菜单的 Close Window 预定义项移除，⌘W 只关标签，找不到该项即启动失败（⚠️ 2026-09-28 多标签）。 |
 | 更新 | 官方 updater + minisign 密钥对 + GitHub Releases 上的静态 `latest.json`。**不依赖 OS 代码签名**，证书没到位也能发更新 |
 
 ### 10.2 macOS 的 WebKit 版本
@@ -668,7 +673,7 @@ Mermaid 的已发布 Safari / 真 WKWebView 矩阵仍是 M6 的具名手工验�
 ### 11.1 数据流
 
 ```
-双击 / readit x.md / 点击 ./other.md
+双击 / readit x.md / 「打开…」→ 新标签；点击 ./other.md → 当前标签
   └→ shell 读字节 + 解析基准目录
       └→ prepare(src)          [唯一 await：扫 $、```math、```mermaid、围栏语言 → 按需 import]
           └→ render(src, opts)  [纯同步：markdown-it → GitHub 形状 hast → 卫生化 → MathJax SVG → 字符串]
@@ -734,7 +739,7 @@ readit 查找栏。** Tauri 2.11.5 虽未暴露 wry 的 builder 开关，但
 
 七条固定语义：
 
-1. `save_document` 不接受路径；Rust 只写当前文档 generation 对应的权威路径。
+1. `save_document` 不接受路径；Rust 只写该标签 generation 对应的权威路径（⚠️ 2026-09-28 多标签：原为「当前文档 generation」）。
 2. 保存使用同目录临时文件和原子替换，并保留原权限。
 3. watcher 自写识别使用内容快照，不使用“保存后 N 毫秒忽略”时间窗。
 4. 外部变更遇到未保存修改时不覆盖，显示“使用磁盘版本 / 保留我的修改”。
