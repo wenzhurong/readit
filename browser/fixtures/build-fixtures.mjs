@@ -37,3 +37,35 @@ await build({
     },
   },
 })
+
+/**
+ * 真壳前端：shell/index.html + main.ts + styles.css 原样打包，挂在 /assets/shell/ 下
+ * （serve.mjs 把 /assets/ 映射到 .fixtures-dist）。Tauri IPC 由 browser/support/shell.ts
+ * 在页面脚本之前装上的假后端顶替。
+ *
+ * `readit/*` 指向发布外观包的**源码**而不是 dist：CI 的浏览器 job 只跑 npm ci，不跑
+ * npm run build，dist 在那里不存在。configFile: false 是为了不带上壳自己的 vite 配置——
+ * 它的 closeBundle 会把 emoji 拷进 shell/dist，这里用不上，也不该写那里。
+ */
+await build({
+  root: fileURLToPath(new URL('../../shell/', import.meta.url)),
+  configFile: false,
+  base: '/assets/shell/',
+  logLevel: 'info',
+  resolve: {
+    alias: [
+      {
+        find: /^readit\/(.+)$/,
+        replacement: `${fileURLToPath(new URL('../../packages/readit/src/', import.meta.url))}$1.ts`,
+      },
+    ],
+  },
+  build: {
+    outDir: fileURLToPath(new URL('../.fixtures-dist/shell/', import.meta.url)),
+    emptyOutDir: true,
+    target: 'es2023',
+    sourcemap: 'inline',
+    minify: false,
+    modulePreload: false,
+  },
+})
