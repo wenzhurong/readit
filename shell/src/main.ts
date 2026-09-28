@@ -156,7 +156,13 @@ function requestSave(): void {
 }
 
 const stopEditShortcuts = isWindows
-  ? connectEditShortcuts(window, { setMode: setShellMode, save: requestSave })
+  ? connectEditShortcuts(window, {
+      setMode: setShellMode,
+      save: requestSave,
+      // 标签接线在 Task 11；在那之前这两个快捷键什么也不做。
+      open: () => {},
+      closeTab: () => {},
+    })
   : (): void => {}
 
 useDisk.addEventListener('click', () => saveState.resolveConflict('use-disk'))

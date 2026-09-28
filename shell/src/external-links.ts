@@ -19,6 +19,11 @@ function externalCandidate(href: string): boolean {
   return scheme !== undefined && scheme.length >= 2
 }
 
+/** 与 @readit/element 的 classifyHref 对齐的「外链」判定。修饰键点击（modifier-clicks.ts）也要用。 */
+export function isExternalHref(raw: string): boolean {
+  return externalCandidate(normalizedHref(raw))
+}
+
 export function allowedWebUrl(raw: string): string | null {
   const href = normalizedHref(raw)
   if (!externalCandidate(href)) return null
@@ -30,7 +35,7 @@ export function allowedWebUrl(raw: string): string | null {
   }
 }
 
-function closestAnchor(event: Event): HTMLAnchorElement | null {
+export function closestAnchor(event: Event): HTMLAnchorElement | null {
   for (const node of event.composedPath()) {
     if (node instanceof HTMLAnchorElement) return node
   }
