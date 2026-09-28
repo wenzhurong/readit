@@ -11,6 +11,7 @@ use std::sync::Arc;
 use document::{AppState, DocumentPayload};
 use serde::Serialize;
 use tauri::{Emitter, Manager, Runtime};
+use tauri_plugin_dialog::DialogExt;
 use updater::PendingUpdate;
 
 const DOCUMENTS_PENDING_EVENT: &str = "readit-documents-pending";
@@ -84,6 +85,33 @@ async fn read_document(
     tauri::async_runtime::spawn_blocking(move || state.read_document(generation))
         .await
         .map_err(|error| format!("document reload task failed: {error}"))?
+}
+
+/// 「打开…」。选中的路径进待打开队列并广播，与 Finder、命令行走同一条管道：前端既不需要
+/// dialog 权限，也不经手路径。同步命令在主线程上跑；pick_files 本身不阻塞，选完才回调。
+#[tauri::command]
+fn open_dialog(
+    app: tauri::AppHandle,
+    generation: Option<u64>,
+    state: tauri::State<'_, Arc<AppState>>,
+) {
+    let mut dialog = app
+        .dialog()
+        .file()
+        .add_filter("Markdown", &["md", "markdown"]);
+    if let Some(directory) = generation.and_then(|generation| state.document_directory(generation)) {
+        dialog = dialog.set_directory(directory);
+    }
+    let state = Arc::clone(state.inner());
+    dialog.pick_files(move |selection| {
+        let paths = selection
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|file| file.into_path().ok());
+        if state.enqueue_paths(paths) > 0 {
+            announce_pending_documents(&app);
+        }
+    });
 }
 
 fn announce_pending_documents<R: Runtime>(app: &tauri::AppHandle<R>) {
@@ -162,6 +190,7 @@ pub fn run() {
                 .open_js_links_on_click(false)
                 .build(),
         )
+        .plugin(tauri_plugin_dialog::init())
         .manage(state)
         .manage(PendingUpdate::default())
         .manage(leave::LeaveState::default())
@@ -186,6 +215,7 @@ pub fn run() {
             save_document,
             close_document,
             read_document,
+            open_dialog,
             leave::frontend_ready,
             leave::cancel_leave,
             leave::complete_leave,
@@ -281,5 +311,27 @@ mod tests {
         assert!(manifest.contains("windows-core = \"=0.61.2\""));
         assert!(source.contains("SetAreBrowserAcceleratorKeysEnabled(false)"));
         assert!(source.contains("disable_browser_accelerator_keys(app)?"));
+    }
+
+    /// 对话框只从 Rust 侧打开：前端没有任何 dialog 权限（上面那条能力清单精确相等的测试
+    /// 守着），「打开…」经 open_dialog 命令把选择塞进待打开队列，与 Finder、命令行同一条管道。
+    /// 版本钉在 2.7.3：2.8.0 要求 tauri ^2.12，与钉死的 2.11.5 冲突（2026-09-28 实测）。
+    #[test]
+    fn dialog_plugin_is_pinned_and_opened_only_from_rust() {
+        let manifest = include_str!("../Cargo.toml");
+        let source = include_str!("lib.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("lib.rs must contain production code before tests");
+        assert_eq!(
+            (
+                manifest.contains("tauri-plugin-dialog = \"=2.7.3\""),
+                production.contains(".plugin(tauri_plugin_dialog::init())"),
+                production.contains("fn open_dialog("),
+                production.contains("state.enqueue_paths(paths)"),
+            ),
+            (true, true, true, true)
+        );
     }
 }

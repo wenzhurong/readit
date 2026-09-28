@@ -78,9 +78,11 @@ pub(crate) fn complete_leave(
     match kind.as_str() {
         "close" => {
             state.allow_close.store(true, Ordering::Release);
-            // Closing the only window exits on some platforms. Let that immediately-following
-            // ExitRequested pass too; macOS keeps running and simply consumes this on a later
-            // no-window quit, where there is no dirty document left to protect.
+            // Closing the only window exits on every platform: tauri-runtime-wry emits
+            // ExitRequested as soon as the last window is destroyed (2.11.4, src/lib.rs, the
+            // TaoWindowEvent::Destroyed arm) and exits unless it is prevented. Let that
+            // immediately-following ExitRequested pass too. (An earlier version of this comment
+            // said macOS keeps running; the runtime source says otherwise.)
             state.allow_exit.store(true, Ordering::Release);
             app.get_webview_window("main")
                 .ok_or_else(|| "cannot close: the main window no longer exists".to_owned())?
