@@ -7,8 +7,8 @@
 由对 GitHub 真实输出的快照回归守住，不靠肉眼。
 
 > ⚠️ **预发布 / 内部工程状态。** 8 个 JS 包仍全部 `private: true` + `0.0.0`，
-> 没有发布到 npm。GitHub 的公开 latest Release 是 `readit-v0.1.2`；当前源码版本与
-> `readit-v0.1.3` Release 草稿是 `0.1.3`，草稿尚未公开发布。桌面产物仍未获得受
+> 没有发布到 npm。GitHub 的公开 latest Release 是 `readit-v0.1.5`，与当前源码版本一致
+> （`readit-v0.1.3` 被跳过，至今仍是未公开的草稿）。桌面产物仍未获得受
 > OS 信任的代码签名，M7 尚未完成。这份 README 描述的是仓库里已经存在
 > 并被测试守住的东西，不是路线图。
 
@@ -54,8 +54,8 @@
 
 ## 安装与运行（桌面）
 
-**GitHub 的公开 latest Release 是 `readit-v0.1.2`；仓库源码和未公开的
-`readit-v0.1.3` Release 草稿已到 `0.1.3`。公开版与草稿的桌面产物都没有受信任的
+**GitHub 的公开 latest Release 是 `readit-v0.1.5`，与仓库源码版本一致（`readit-v0.1.3`
+被跳过，仍是未公开的草稿）。公开版与草稿的桌面产物都没有受信任的
 OS 代码签名。** macOS 构建只有 ad-hoc 签名（`tauri.conf.json` 里的 `signingIdentity: "-"`），
 没有 Apple Developer ID 或公证；Windows 构建没有 Authenticode 签名。两边的公开分发信任
 仍属于 M7，尚未完成。这一节说明源码构建与手动信任意味着什么。
@@ -121,7 +121,7 @@ Finder 里选中任意 `.md` → `Cmd+I` → 「打开方式」选 readit → �
 ### Windows
 
 Windows 壳可以从源码构建为当前用户 NSIS 安装包，也已有公开的 unsigned
-`readit-v0.1.2`；`readit-v0.1.3` 仍是草稿，尚不是公开 latest Release。Windows
+`readit-v0.1.5`（latest；`readit-v0.1.3` 被跳过，仍是草稿）。Windows
 产物仍没有 Authenticode 代码签名。
 在装好 Node ≥ 22、Rust stable、Visual Studio Build Tools（Desktop development with C++）
 和 WebView2 开发依赖后：
