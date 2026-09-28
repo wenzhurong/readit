@@ -231,6 +231,55 @@ test.describe('desktop shell tabs', () => {
     expect(control!.y).toBeGreaterThanOrEqual(strip!.y + strip!.height)
   })
 
+  test('「+」紧跟在最右边的标签后面，文件名长也一样', async ({ page }) => {
+    // 多标签设计 §2：`+` 只在溢出时才固定到标签栏右端。文件名要长——2026-09-28 用户报告
+    // 「+ 离最右边的标签太远」，按日期命名的文档正是这种名字。
+    const paths = [
+      '/docs/plans/2026-08-13-m6-manual-acceptance.md',
+      '/docs/plans/2026-08-24-windows-remaining-checklist.md',
+      '/docs/superpowers/specs/2026-09-28-multi-tab-design.md',
+    ]
+    await openShell(page, { files: Object.fromEntries(paths.map((path) => [path, '# T\n'])), pending: paths })
+    await expect(tabs(page)).toHaveCount(3)
+    const last = await tabs(page).last().boundingBox()
+    const plus = await page.locator('#tab-strip [data-action="open"]').boundingBox()
+    expect(Math.round(plus!.x - (last!.x + last!.width))).toBe(0)
+  })
+
+  test('标签多到溢出时「+」固定在标签栏右端，仍然看得见', async ({ page }) => {
+    // 守住上一条的修法不把溢出搞坏：标签缩到最小宽度之后由 tablist 横向滚动，`+` 不跟着滚走。
+    await page.setViewportSize({ width: 640, height: 480 })
+    const paths = Array.from({ length: 10 }, (_, index) => `/docs/2026-09-28-long-document-name-${index}.md`)
+    await openShell(page, { files: Object.fromEntries(paths.map((path) => [path, '# T\n'])), pending: paths })
+    await expect(tabs(page)).toHaveCount(10)
+    // 反空断言：先证明真的溢出了，否则「+ 在右端」可以由「标签根本没排满」满足。
+    const list = page.locator('#tab-strip [role="tablist"]')
+    expect(await list.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
+    const strip = await page.locator('#tab-strip').boundingBox()
+    const plus = await page.locator('#tab-strip [data-action="open"]').boundingBox()
+    expect(Math.round(strip!.x + strip!.width - (plus!.x + plus!.width))).toBe(0)
+  })
+
+  test('模式按钮与「未保存」默认让开滚动条，仍贴着右上角', async ({ page }) => {
+    // 2026-09-28 用户报告：默认位置太靠右，和滚动条重合。滚动条在各标签自己的滚动盒右缘。
+    // 按最宽的目标平台留道：Windows WebView2 的常驻滚动条 17px；macOS 常驻的 15px，浮层的
+    // 展开时也不超过它。不现场量宽度，是因为测试引擎里的滚动条常是浮层或被隐藏，量出来是 0。
+    const SCROLLBAR_LANE = 17
+    await openShell(page, { files: { '/docs/a.md': LONG('Alpha') }, pending: ['/docs/a.md'] })
+    await makeDirty(page, 0, 'edited')
+    await expect(page.locator('#document-state')).toBeVisible()
+    const host = await activeHost(page).boundingBox()
+    const gaps: Record<string, number> = {}
+    for (const selector of ['#mode-switch', '#document-state']) {
+      const box = await page.locator(selector).boundingBox()
+      gaps[selector] = Math.round(host!.x + host!.width - (box!.x + box!.width))
+    }
+    for (const [selector, gap] of Object.entries(gaps)) {
+      expect(gap, `${selector} 离滚动盒右缘 ${gap}px`).toBeGreaterThanOrEqual(SCROLLBAR_LANE + 4)
+      expect(gap, `${selector} 离滚动盒右缘 ${gap}px`).toBeLessThanOrEqual(SCROLLBAR_LANE + 16)
+    }
+  })
+
   test('不带文件启动：第一屏里看得到提示和「打开…」按钮', async ({ page }) => {
     await openShell(page, { files: { '/docs/a.md': '# A\n' }, dialog: ['/docs/a.md'] })
     await expect(page.locator('#empty-state')).toBeInViewport()

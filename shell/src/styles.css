@@ -5,6 +5,10 @@
   color: CanvasText;
   /* 标签栏高度。模式按钮、未保存提示、查找栏、通知区、空状态都按它往下让。 */
   --tab-strip-height: 2.25rem;
+  /* 右缘给滚动条留的道：各标签的滚动盒把滚动条画在窗口右缘，浮在右上角的壳控件要让开它。
+     按目标平台里最宽的算——Windows WebView2 的常驻滚动条 17px；macOS 常驻的 15px，浮层的
+     展开时也不超过它。写死而不现场量：浮层滚动条量出来是 0，却照样画在那里。 */
+  --scrollbar-lane: 17px;
 }
 
 html,
@@ -41,14 +45,17 @@ body {
   scrollbar-width: none;
 }
 
-/* 标签先等比缩窄到 6rem，再由 tablist 横向滚动；+ 在 tablist 之外，始终可见。 */
+/* 标签等宽 12rem，先等比缩窄到 6rem，再由 tablist 横向滚动；+ 在 tablist 之外，始终可见。
+   用 width 定宽而不是 flex-basis：WebKit 按标签内容（封顶于 max-width）量 tablist 的宽度，
+   排版时却按 flex-basis 给标签，文件名一长，每个标签就多出一截空白，全堆在最后一个标签和 +
+   之间（2026-09-28 真机报告；3 个长名标签差 96px，Chromium 不差）。width 让两处取同一个值。 */
 #tab-strip [role='tab'] {
   display: flex;
-  flex: 0 1 12rem;
+  flex: 0 1 auto;
   gap: 0.25rem;
   align-items: center;
+  width: 12rem;
   min-width: 6rem;
-  max-width: 14rem;
   padding: 0 0.25rem 0 0.75rem;
   border-right: 1px solid ButtonBorder;
   color: GrayText;
@@ -173,13 +180,14 @@ body {
   padding-inline: 1.5rem;
 }
 
-/* 浮在文档之上的壳控件，默认在标签栏下方的右上角，可拖动（draggable.ts 会改写 left/top
-   并把 right 让开，拖不进标签栏）。平时半透明地退到背景里，指到、键盘聚焦到、或正在拖动
-   时才完整显示。touch-action/user-select 关掉是为了拖动时不选中文字、不被滚动手势抢走指针。 */
+/* 浮在文档之上的壳控件，默认在标签栏下方的右上角、让开滚动条（2026-09-28 真机报告与滚动条
+   重合），可拖动（draggable.ts 会改写 left/top 并把 right 让开，拖不进标签栏）。平时半透明地
+   退到背景里，指到、键盘聚焦到、或正在拖动时才完整显示。touch-action/user-select 关掉是为了
+   拖动时不选中文字、不被滚动手势抢走指针。 */
 #mode-switch {
   position: fixed;
   top: calc(var(--tab-strip-height) + 0.75rem);
-  right: 0.75rem;
+  right: calc(var(--scrollbar-lane) + 0.75rem);
   z-index: 9;
   display: flex;
   /* 宽度不可压缩。少了这条会形成棘轮：窗口缩到 left 右边没地方时，fixed 元素的可用
@@ -229,7 +237,7 @@ body {
   /* 让开右上角：那里默认是 #mode-switch。竖排而不是横排，是因为横排要依赖
      模式控件的宽度，而它随语言与字体变。 */
   top: calc(var(--tab-strip-height) + 3.25rem);
-  right: 0.75rem;
+  right: calc(var(--scrollbar-lane) + 0.75rem);
   z-index: 9;
   margin: 0;
   padding: 0.35rem 0.6rem;

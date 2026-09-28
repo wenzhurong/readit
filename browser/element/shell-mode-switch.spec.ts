@@ -101,7 +101,8 @@ test.describe('shell mode switch', () => {
   // 2026-09-28 改判：拖过的位置只在拖动时的那个窗口尺寸下有效，尺寸一变就回到右上角。
   // 此前它按左上角记绝对坐标，拖过一次（哪怕 4px）之后最大化，控件就停在屏幕中间：
   // 960→1920 时右边距从 22px 变成 982px（Chromium 与 WebKit 同样复现）。
-  // fixture 的默认位置是 top:12px; right:12px，与壳的 0.75rem 对齐。
+  // fixture 的默认位置是 top:12px; right:12px，是 fixture 自己的值；壳的默认位置另外让开了
+  // 滚动条（shell/src/styles.css 的 --scrollbar-lane），由 shell-tabs.spec.ts 在真壳上测。
   const cornerGap = (page: Page): Promise<{ right: number; top: number }> =>
     page.evaluate(() => {
       const r = document.getElementById('readit-mode-switch')!.getBoundingClientRect()
