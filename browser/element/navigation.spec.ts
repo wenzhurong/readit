@@ -21,6 +21,32 @@ test('相对 .md 链接被拦下并通过 onNavigate 上报', async ({ page }) =
   expect(page.url()).toBe(before)
 })
 
+test('空链接 [文字]() 被拦下：宿主页面不被重新加载，也不上报导航', async ({ page }) => {
+  // 修复前点 <a href=""> 会触发默认动作「跳到当前页」，把整个宿主页面重新加载——桌面壳里
+  // 就是整个 readit 被重载，未保存的修改无提示丢失（2026-09-28，真壳前端 + WebKit/Chromium）。
+  // URL 前后相同，所以不能像上一条那样比 URL；改为数主框架导航次数 + 页面里埋一个标记。
+  await page.goto('/host.html')
+  await page.waitForFunction(() => window.readitFixture !== undefined)
+  await mountDoc(page, 'a', { value: 'click [empty]() here\n', mode: 'read', baseUrl: 'docs/index.md' })
+  let navigated = 0
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) navigated += 1
+  })
+  await page.evaluate(() => {
+    ;(window as unknown as { __readitAlive?: boolean }).__readitAlive = true
+  })
+
+  await page.locator('#a a', { hasText: 'empty' }).click()
+  // 要证明的是「什么也没发生」，只能等一段时间再看；重载在两个引擎里都远快于这个间隔。
+  await page.waitForTimeout(500)
+
+  expect({
+    navigated,
+    alive: await page.evaluate(() => (window as unknown as { __readitAlive?: boolean }).__readitAlive === true),
+    navigations: await page.evaluate(() => window.readitFixture.navigations),
+  }).toEqual({ navigated: 0, alive: true, navigations: [] })
+})
+
 test('点击普通正文后 Alt+Left 能驱动组件历史，而不要求全局键盘监听', async ({ page }) => {
   await page.goto('/host.html')
   await page.waitForFunction(() => window.readitFixture !== undefined)

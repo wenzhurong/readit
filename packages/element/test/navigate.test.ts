@@ -17,13 +17,15 @@ const DOC = [
 
 let kernels: Kernel[] = []
 
-function makeKernel(opts: { baseUrl?: string; onNavigate?: ((path: string) => void) | null } = {}): Kernel {
+function makeKernel(
+  opts: { baseUrl?: string; onNavigate?: ((path: string) => void) | null; value?: string } = {},
+): Kernel {
   const host = document.createElement('div')
   document.body.appendChild(host)
   const kernel = createKernel(
     host,
     resolveMountOptions({
-      value: DOC,
+      value: opts.value ?? DOC,
       baseUrl: opts.baseUrl ?? 'docs/README.md',
       onNavigate: opts.onNavigate === undefined ? (): void => {} : opts.onNavigate,
     }),
@@ -157,6 +159,18 @@ describe('链接拦截', () => {
 
   it('mailto 同样交出去', () => {
     expect(click(makeKernel(), 'mail').defaultPrevented).toBe(false)
+  })
+
+  it('空链接（[文字]() 渲染成 <a href="">）被拦下、什么也不做', () => {
+    // 默认动作是「跳到当前页」，也就是把宿主整页重新加载。2026-09-28 在真壳前端里实测：
+    // 桌面壳整个被重载，未保存的修改无提示丢失（WebKit 与 Chromium 都复现）。
+    const onNavigate = vi.fn()
+    const kernel = makeKernel({ onNavigate, value: 'click [empty]() here\n' })
+    const event = click(kernel, 'empty')
+    expect({ prevented: event.defaultPrevented, navigations: onNavigate.mock.calls.length }).toEqual({
+      prevented: true,
+      navigations: 0,
+    })
   })
 
   it('带修饰键的点击不拦（宿主的「新窗口打开」照常）', () => {

@@ -288,8 +288,11 @@ export function createNavigation(hooks: NavigationHooks, disposers: Disposers): 
     const href = anchor.getAttribute('href')
     if (href === null) return
     const kind = classifyHref(href)
-    if (kind === 'external' || kind === 'ignore') return
+    if (kind === 'external') return
     event.preventDefault()
+    // 空 href（`[文字]()`）：默认动作是「跳到当前页」，也就是把宿主整页重新加载——嵌入页面丢
+    // 状态，桌面壳丢未保存的修改（2026-09-28 真壳前端实测）。拦下，什么也不做。
+    if (kind === 'ignore') return
     if (kind === 'hash') {
       go({ path: loadedPath, hash: href }, true)
       return
