@@ -84,3 +84,28 @@ describe('壳的模式切换按钮', () => {
     expect(src).toContain('function optionalLocalStorage()')
   })
 })
+
+describe('壳的多标签接线', () => {
+  it('main.ts 接上了标签编排、标签栏与两个菜单事件', () => {
+    const src = main()
+    expect(src).toContain('createTabSession(')
+    expect(src).toContain('connectTabStrip(')
+    expect(src).toContain('listen(OPEN_EVENT, requestOpen)')
+    expect(src).toContain('listen(CLOSE_TAB_EVENT, requestCloseTab)')
+  })
+
+  it('修饰键点击在外链拦截之后接（两个都是捕获阶段，外链先认领）', () => {
+    const src = main()
+    const externalAt = src.indexOf('connectExternalLinks(reader')
+    const modifierAt = src.indexOf('connectModifierClicks(reader)')
+    expect(externalAt).toBeGreaterThan(-1)
+    expect(modifierAt).toBeGreaterThan(externalAt)
+  })
+
+  it('index.html 有标签栏、空状态与通知区', () => {
+    const html = readFileSync(join(SHELL_DIR, 'index.html'), 'utf8')
+    for (const needle of ['id="tab-strip"', 'role="tablist"', 'data-action="open"', 'id="empty-state"', 'id="empty-open"', 'id="notice"']) {
+      expect(html).toContain(needle)
+    }
+  })
+})

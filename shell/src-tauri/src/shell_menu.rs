@@ -3,6 +3,10 @@ use tauri::{menu::MenuItemKind, AppHandle, Emitter, Runtime};
 
 pub(crate) const MODE_EVENT: &str = "readit-set-mode";
 pub(crate) const SAVE_EVENT: &str = "readit-save-requested";
+pub(crate) const OPEN_EVENT: &str = "readit-open-requested";
+pub(crate) const CLOSE_TAB_EVENT: &str = "readit-close-tab-requested";
+const OPEN_ID: &str = "readit-open";
+const CLOSE_TAB_ID: &str = "readit-close-tab";
 const SAVE_ID: &str = "readit-save";
 const QUIT_ID: &str = "readit-quit";
 const READ_ID: &str = "readit-mode-read";
@@ -27,6 +31,7 @@ pub(crate) fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tau
     // 完整推导见 leave.rs 上那个函数的文档注释。
     let app_name = app.package_info().name.clone();
     let mut replaced_quit = false;
+    let mut removed_file_close_window = false;
     let menu = Menu::default(app)?;
     for item in menu.items()? {
         let Some(submenu) = item.as_submenu() else {
@@ -34,11 +39,22 @@ pub(crate) fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tau
         };
         match submenu.text()?.as_str() {
             "File" => {
+                removed_file_close_window = remove_close_window_items(submenu)? > 0;
+                let open = MenuItemBuilder::with_id(OPEN_ID, "Open…")
+                    .accelerator("CmdOrCtrl+O")
+                    .build(app)?;
+                let close_tab = MenuItemBuilder::with_id(CLOSE_TAB_ID, "Close Tab")
+                    .accelerator("CmdOrCtrl+W")
+                    .build(app)?;
                 let save = MenuItemBuilder::with_id(SAVE_ID, "Save")
                     .accelerator("CmdOrCtrl+S")
                     .build(app)?;
                 let separator = PredefinedMenuItem::separator(app)?;
-                submenu.prepend_items(&[&save, &separator])?;
+                submenu.prepend_items(&[&open, &close_tab, &save, &separator])?;
+            }
+            "Window" => {
+                // Window 菜单里那一项同样带 ⌘W；留着它，菜单里会有两项都标着 ⌘W。
+                remove_close_window_items(submenu)?;
             }
             "View" => {
                 let separator = PredefinedMenuItem::separator(app)?;
@@ -74,6 +90,15 @@ pub(crate) fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tau
             ),
         )));
     }
+    if !removed_file_close_window {
+        // 大声失败，理由同上：File 菜单里的 Close Window 还在，⌘W 就会关掉整个窗口而不是
+        // 当前标签。
+        return Err(tauri::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "readit: File 菜单里没有找到预定义的 Close Window 项，无法把 ⌘W 改成「关闭标签」。\
+             默认菜单结构可能随依赖升级变了。",
+        )));
+    }
     Ok(menu)
 }
 
@@ -104,6 +129,27 @@ fn replace_quit_item(
         return Ok(true);
     }
     Ok(false)
+}
+
+/// 移除子菜单里的 Close Window 预定义项，返回移除了几个。
+///
+/// 预定义项没有暴露类型判别，只能认文案。muda 0.19.3 在 macOS 上的默认文案是
+/// `C&lose Window`（`&` 是助记符标记），去掉 `&` 再比。
+#[cfg(target_os = "macos")]
+fn remove_close_window_items(
+    submenu: &tauri::menu::Submenu<tauri::Wry>,
+) -> tauri::Result<usize> {
+    let mut removed = 0;
+    for item in submenu.items()? {
+        let MenuItemKind::Predefined(predefined) = &item else {
+            continue;
+        };
+        if predefined.text()?.replace('&', "") == "Close Window" {
+            submenu.remove(predefined)?;
+            removed += 1;
+        }
+    }
+    Ok(removed)
 }
 
 fn set_mode_checks<R: Runtime>(app: &AppHandle<R>, mode: &str) -> tauri::Result<()> {
@@ -149,6 +195,14 @@ pub(crate) fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: tauri::me
             let _ = app.emit(SAVE_EVENT, ());
             return;
         }
+        OPEN_ID => {
+            let _ = app.emit(OPEN_EVENT, ());
+            return;
+        }
+        CLOSE_TAB_ID => {
+            let _ = app.emit(CLOSE_TAB_EVENT, ());
+            return;
+        }
         QUIT_ID => {
             crate::leave::request_exit_from_menu(app);
             return;
@@ -181,7 +235,9 @@ mod tests {
     fn the_shell_extends_the_default_menu_instead_of_replacing_native_editing_actions() {
         let source = implementation_source();
         assert!(source.contains("Menu::default(app)?"));
-        assert!(source.contains("submenu.prepend_items(&[&save, &separator])"));
+        assert!(source.contains("submenu.prepend_items(&[&open, &close_tab, &save, &separator])"));
+        assert!(source.contains("CmdOrCtrl+O"));
+        assert!(source.contains("CmdOrCtrl+W"));
         assert!(source.contains("CmdOrCtrl+S"));
         assert!(source.contains("CmdOrCtrl+1"));
         assert!(source.contains("CmdOrCtrl+2"));
@@ -199,5 +255,17 @@ mod tests {
         assert!(source.contains(".accelerator(\"Cmd+Q\")"));
         // 换不掉就必须启动失败，不能默默放行一个拦不住的 Quit。
         assert!(source.contains("if !replaced_quit {"));
+    }
+
+    #[test]
+    fn cmd_w_closes_the_tab_not_the_window() {
+        let source = implementation_source();
+        // 默认菜单的 Close Window 预定义项接 performClose:，留着它 ⌘W 会关掉整个窗口。
+        assert!(source.contains("fn remove_close_window_items"));
+        assert!(source.contains(".replace('&', \"\") == \"Close Window\""));
+        assert!(source.contains("CLOSE_TAB_ID => {"));
+        assert!(source.contains("OPEN_ID => {"));
+        // 换不掉就启动失败，不静默放行。
+        assert!(source.contains("if !removed_file_close_window {"));
     }
 }

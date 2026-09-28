@@ -3,42 +3,133 @@
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   background: Canvas;
   color: CanvasText;
+  /* 标签栏高度。模式按钮、未保存提示、查找栏、通知区、空状态都按它往下让。 */
+  --tab-strip-height: 2.25rem;
 }
 
 html,
-body,
-#app,
-#reader {
+body {
   box-sizing: border-box;
   width: 100%;
-  min-height: 100%;
+  height: 100%;
   margin: 0;
+  /* 页面本身不滚：每个标签是自己的滚动盒（.document-tab）。理由见多标签设计 §4——
+     整页滚动时，查找命中会停在固定的标签栏底下。 */
+  overflow: hidden;
 }
 
-body {
-  min-height: 100vh;
+#tab-strip {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 12;
+  display: flex;
+  height: var(--tab-strip-height);
+  box-sizing: border-box;
+  border-bottom: 1px solid ButtonBorder;
+  background: Canvas;
+  font-size: 0.8rem;
+  user-select: none;
+}
+
+#tab-strip [role='tablist'] {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* 标签先等比缩窄到 6rem，再由 tablist 横向滚动；+ 在 tablist 之外，始终可见。 */
+#tab-strip [role='tab'] {
+  display: flex;
+  flex: 0 1 12rem;
+  gap: 0.25rem;
+  align-items: center;
+  min-width: 6rem;
+  max-width: 14rem;
+  padding: 0 0.25rem 0 0.75rem;
+  border-right: 1px solid ButtonBorder;
+  color: GrayText;
+  cursor: default;
+  white-space: nowrap;
+}
+
+#tab-strip [role='tab'][aria-selected='true'] {
+  background: ButtonFace;
+  color: CanvasText;
+}
+
+#tab-strip .tab-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 后台标签有待裁决的外部修改冲突。 */
+#tab-strip [role='tab'][data-conflict='true'] .tab-label::after {
+  content: ' ⚠';
+  color: #cf222e;
+}
+
+#tab-strip .tab-close,
+#tab-strip [data-action='open'] {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+#tab-strip .tab-close {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 0.25rem;
+}
+
+#tab-strip [data-action='open'] {
+  width: var(--tab-strip-height);
+  font-size: 1rem;
+}
+
+#tab-strip .tab-close:hover,
+#tab-strip [data-action='open']:hover {
+  background: color-mix(in srgb, CanvasText 10%, transparent);
 }
 
 #reader {
-  min-height: 100vh;
+  position: fixed;
+  top: var(--tab-strip-height);
+  right: 0;
+  bottom: 0;
+  left: 0;
   /* The reusable element remains host-bounded by default. The desktop shell owns
      the whole WebView, so its find bar must stay in the window while the document scrolls. */
   --readit-find-position: fixed;
+  /* 查找栏固定在视口里，要让开标签栏（packages/find 的 --readit-find-top 钩子）。 */
+  --readit-find-top: calc(var(--tab-strip-height) + 8px);
   /* 留白起点：窗口宽过它才开始出现留白，此时行宽正好等于它本身。
      它**不是**行宽上限——见下面的 ::part(content) 规则。 */
   --readit-shell-measure: 52rem;
 }
 
-#status {
-  max-width: 42rem;
-  margin: 20vh auto 0;
-  padding: 1rem 1.25rem;
-  color: GrayText;
-  text-align: center;
+/* 每个标签一块滚动盒。非当前标签保留排版、不可见、不可交互（inert 由 document-tab.ts 设）：
+   display:none 会销毁滚动盒、滚动位置归零（多标签设计 §4）。opacity 兜住后代里显式写
+   visibility: visible 的规则——github-markdown-css 的标题锚点图标在 :hover 时就有一条。 */
+.document-tab {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  background: Canvas;
+  visibility: hidden;
+  opacity: 0;
 }
 
-#status[data-kind='error'] {
-  color: #cf222e;
+.document-tab.is-active {
+  visibility: visible;
+  opacity: 1;
 }
 
 /*
@@ -64,13 +155,14 @@ body {
  *
  * 百分比按**包含块**解析，两种模式因此各自正确，且都在两个引擎里实测过
  * （browser/element/shell-measure.spec.ts）：阅读模式下 .markdown-body 的包含块是
- * 铺满 #reader 的 .readit-root，50% 就是窗口宽；分栏模式下它是 grid item，包含块是
+ * 铺满标签宿主的 .readit-root，50% 就是标签宽；分栏模式下它是 grid item，包含块是
  * 自己的网格区域，于是**每个窗格各自减半**。源码模式下正文不可见，不受影响。
  *
  * 按 CSS Scoping 的跨树层叠，外层树的**普通**声明压过 shadow 树内部的同名声明，
- * 所以这里不需要 !important。
+ * 所以这里不需要 !important。2026-09-28 多标签：选择器由 #reader 改为 .document-tab，
+ * 式子不变。
  */
-#reader::part(content) {
+.document-tab::part(content) {
   box-sizing: border-box;
   max-width: calc(50% + var(--readit-shell-measure) / 2);
   margin-inline: auto;
@@ -78,12 +170,12 @@ body {
   padding-inline: 1.5rem;
 }
 
-/* 浮在文档之上的壳控件，默认右上角，可拖动（draggable.ts 会改写 left/top 并把
-   right 让开）。平时半透明地退到背景里，指到、键盘聚焦到、或正在拖动时才完整显示。
-   touch-action/user-select 关掉是为了拖动时不选中文字、不被滚动手势抢走指针。 */
+/* 浮在文档之上的壳控件，默认在标签栏下方的右上角，可拖动（draggable.ts 会改写 left/top
+   并把 right 让开，拖不进标签栏）。平时半透明地退到背景里，指到、键盘聚焦到、或正在拖动
+   时才完整显示。touch-action/user-select 关掉是为了拖动时不选中文字、不被滚动手势抢走指针。 */
 #mode-switch {
   position: fixed;
-  top: 0.75rem;
+  top: calc(var(--tab-strip-height) + 0.75rem);
   right: 0.75rem;
   z-index: 9;
   display: flex;
@@ -133,7 +225,7 @@ body {
   position: fixed;
   /* 让开右上角：那里默认是 #mode-switch。竖排而不是横排，是因为横排要依赖
      模式控件的宽度，而它随语言与字体变。 */
-  top: 3.25rem;
+  top: calc(var(--tab-strip-height) + 3.25rem);
   right: 0.75rem;
   z-index: 9;
   margin: 0;
@@ -143,6 +235,69 @@ body {
   color: GrayText;
   background: Canvas;
   font-size: 0.75rem;
+}
+
+/* 空状态只在不带文件启动时出现：提示与「打开…」在第一屏正中。原先的提示语排在一个
+   min-height: 100vh 的空 #reader 后面，落在首屏以下（多标签设计 §7）。 */
+#empty-state {
+  position: fixed;
+  top: var(--tab-strip-height);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: center;
+  color: GrayText;
+}
+
+#empty-state[hidden] {
+  display: none;
+}
+
+#empty-state p {
+  margin: 0;
+}
+
+#empty-state button {
+  font: inherit;
+}
+
+/* 错误提示固定在标签栏下方、窗口之内，直到被关掉或被下一条替换。原先 #status 排在正文
+   后面，保存失败的原因落在文档末尾（多标签设计 §7）。z-index 高于模式按钮：窄窗口下
+   两者重叠时错误更要紧。 */
+#notice {
+  position: fixed;
+  top: calc(var(--tab-strip-height) + 0.75rem);
+  left: 50%;
+  z-index: 15;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  max-width: min(40rem, calc(100vw - 2rem));
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #cf222e;
+  border-radius: 0.5rem;
+  background: Canvas;
+  color: #cf222e;
+  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 18%);
+  transform: translateX(-50%);
+}
+
+#notice[hidden] {
+  display: none;
+}
+
+#notice button {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 
 #conflict,

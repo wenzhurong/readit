@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
 import { connectExternalLinks } from '../src/external-links.js'
-import { routeDocumentOpen } from '../src/navigation.js'
 
 interface LinkFixture {
   readonly host: HTMLElement
@@ -124,31 +123,5 @@ describe('external link allowlist', () => {
       opened: [slash.openExternal.mock.calls.length, backslash.openExternal.mock.calls.length],
       feedbackHidden: [slash.status.hidden, backslash.status.hidden],
     }).toEqual({ opened: [0, 0], feedbackHidden: [true, true] })
-  })
-
-  it('lets a second-instance drive path reach the element navigation contract', () => {
-    document.body.innerHTML = '<main><div id="reader"></div><p id="status" hidden></p></main>'
-    const host = document.querySelector<HTMLElement>('#reader')!
-    const status = document.querySelector<HTMLElement>('#status')!
-    const openExternal = vi.fn(async (_url: string) => {})
-    connectExternalLinks(host, {
-      openExternal,
-      showFeedback(message) {
-        status.hidden = false
-        status.textContent = message
-      },
-    })
-    let routed = ''
-    host.addEventListener('click', (event) => {
-      if (event.defaultPrevented) return
-      routed = (event.target as HTMLAnchorElement).getAttribute('href') ?? ''
-      event.preventDefault()
-    })
-
-    routeDocumentOpen(host, '\\\\?\\D:\\docs\\next.md')
-
-    expect({ routed, opened: openExternal.mock.calls.length, feedbackHidden: status.hidden }).toEqual({
-      routed: 'D:/docs/next.md', opened: 0, feedbackHidden: true,
-    })
   })
 })

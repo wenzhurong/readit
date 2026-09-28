@@ -7,13 +7,24 @@
   </head>
   <body>
     <main id="app">
+      <nav id="tab-strip" aria-label="已打开的文档">
+        <div role="tablist" aria-label="文档"></div>
+        <button type="button" data-action="open" aria-label="打开…">+</button>
+      </nav>
       <div id="mode-switch" role="group" aria-label="显示模式">
         <button type="button" data-mode="read" aria-pressed="true">阅读</button>
         <button type="button" data-mode="source" aria-pressed="false">源码</button>
         <button type="button" data-mode="split" aria-pressed="false">分栏</button>
       </div>
       <div id="reader" aria-live="polite"></div>
-      <p id="status">请从 Finder 打开一个 Markdown 文件。</p>
+      <section id="empty-state" aria-label="还没有打开文档">
+        <p>用 Finder 或资源管理器打开一个 Markdown 文件，或者</p>
+        <button id="empty-open" type="button">打开…</button>
+      </section>
+      <div id="notice" role="alert" hidden>
+        <span id="notice-message"></span>
+        <button id="notice-dismiss" type="button" aria-label="关闭提示">×</button>
+      </div>
       <p id="document-state" hidden aria-live="polite"></p>
       <aside id="conflict" hidden role="alertdialog" aria-labelledby="conflict-title">
         <div>

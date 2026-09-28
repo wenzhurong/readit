@@ -41,10 +41,10 @@ it('正文居中，两侧留白随窗口变化且只有"行宽封顶"写法的�
   //     留白就回到 / 2，也就是 2026-09-11 要减掉的那一半。
   // 这里只守 CSS 文本。「新写法的留白正好是旧写法一半」是像素级的断言，两个引擎里
   // 实测在 browser/element/shell-measure.spec.ts。
-  expect(declaration('#reader::part(content)', 'max-width')).toBe(
+  expect(declaration('.document-tab::part(content)', 'max-width')).toBe(
     'calc(50% + var(--readit-shell-measure) / 2)',
   )
-  expect(declaration('#reader::part(content)', 'margin-inline')).toBe('auto')
+  expect(declaration('.document-tab::part(content)', 'margin-inline')).toBe('auto')
   // 变量本身用全文匹配：#reader 还出现在 `html, body, #app, #reader {` 这个组选择器里，
   // 按规则块取会先命中那一个（第一次写这条守卫时就是这么错的）。
   expect(css()).toMatch(/--readit-shell-measure:\s*\d+(\.\d+)?rem;/)
@@ -53,4 +53,23 @@ it('正文居中，两侧留白随窗口变化且只有"行宽封顶"写法的�
 it('模式控件宽度不可压缩 —— 否则缩窗口会把它挤扁且再也回不来', () => {
   // 棘轮：压扁后 draggable 读到的宽度变小，clamp 上界跟着变大，控件永远贴在边界外。
   expect(declaration('#mode-switch', 'width')).toBe('max-content')
+})
+
+it('页面本身不滚：滚动归各个标签（多标签设计 §4）', () => {
+  expect(css()).toMatch(/html,\s*body\s*\{[^}]*overflow:\s*hidden;/)
+  expect(declaration('.document-tab', 'overflow')).toBe('auto')
+})
+
+it('非当前标签保留排版、不可见——不用 display:none（它会销毁滚动盒）', () => {
+  expect(declaration('.document-tab', 'visibility')).toBe('hidden')
+  // opacity 兜住后代里显式写 visibility: visible 的规则（github-markdown-css 的标题锚点图标）。
+  expect(declaration('.document-tab', 'opacity')).toBe('0')
+  expect(ruleBody('.document-tab')).not.toMatch(/display:\s*none/)
+  expect(declaration('.document-tab.is-active', 'visibility')).toBe('visible')
+})
+
+it('模式按钮、未保存提示与查找栏都让开标签栏', () => {
+  expect(declaration('#mode-switch', 'top')).toContain('var(--tab-strip-height)')
+  expect(declaration('#document-state', 'top')).toContain('var(--tab-strip-height)')
+  expect(css()).toMatch(/--readit-find-top:\s*calc\(var\(--tab-strip-height\) \+ 8px\);/)
 })
