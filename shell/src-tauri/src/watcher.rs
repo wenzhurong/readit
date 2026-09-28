@@ -4,7 +4,6 @@ use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
 pub(crate) struct DocumentWatcher {
     _watcher: RecommendedWatcher,
-    document: PathBuf,
 }
 
 impl DocumentWatcher {
@@ -12,8 +11,7 @@ impl DocumentWatcher {
     where
         F: Fn(PathBuf) + Send + Sync + 'static,
     {
-        let document = document.to_path_buf();
-        let watched_document = document.clone();
+        let watched_document = document.to_path_buf();
         let mut watcher =
             notify::recommended_watcher(move |result: notify::Result<Event>| match result {
                 Ok(event) if event_targets_document(&event, &watched_document) => {
@@ -32,14 +30,7 @@ impl DocumentWatcher {
         // Watch the directory, not the file. Editors commonly replace a document by
         // renaming a temporary file over it, which detaches a file-only watch.
         watcher.watch(parent, RecursiveMode::NonRecursive)?;
-        Ok(Self {
-            _watcher: watcher,
-            document,
-        })
-    }
-
-    pub(crate) fn watches(&self, document: &Path) -> bool {
-        self.document == document
+        Ok(Self { _watcher: watcher })
     }
 }
 

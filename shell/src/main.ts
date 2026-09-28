@@ -5,7 +5,7 @@ import { mount, type Mode, type MountHandle } from 'readit/element'
 import './styles.css'
 import { createHighlighterLoader, createMermaidLoader } from './loaders.js'
 import { routeDocumentOpen } from './navigation.js'
-import { observeLocalResources, resourceProtocolBase } from './resources.js'
+import { documentResourceBase, observeLocalResources, resourceProtocolBase } from './resources.js'
 import {
   createWatchedDocumentReloader,
   type WatchedDocumentChange,
@@ -74,7 +74,8 @@ let stopObservingResources: (() => void) | null = null
 let navigationTail: Promise<void> = Promise.resolve()
 let draining = false
 let drainAgain = false
-let currentDocumentPath: string | null = null
+let currentGeneration: number | null = null
+const protocolBase = resourceProtocolBase(navigator.userAgent)
 const stopListening: Array<() => void> = []
 let stopUpdateNotice: (() => void) | null = null
 
@@ -162,7 +163,8 @@ useDisk.addEventListener('click', () => saveState.resolveConflict('use-disk'))
 keepMine.addEventListener('click', () => saveState.resolveConflict('keep-mine'))
 
 function showDocument(documentPayload: DocumentPayload): void {
-  currentDocumentPath = documentPayload.path
+  // 先换 generation 再挂内容：新内容插进 DOM 时，资源改写要取到新前缀。
+  currentGeneration = documentPayload.generation
   status.hidden = true
   status.removeAttribute('data-kind')
   if (handle !== null) {
@@ -182,7 +184,9 @@ function showDocument(documentPayload: DocumentPayload): void {
       onNavigate: (path) => queueNavigation(path),
       onChange: (value) => saveState.userChanged(value),
     })
-    stopObservingResources = observeLocalResources(host, resourceProtocolBase(navigator.userAgent))
+    stopObservingResources = observeLocalResources(host, () =>
+      documentResourceBase(protocolBase, currentGeneration ?? 0),
+    )
   }
   saveState.load(documentPayload)
 }
@@ -191,7 +195,10 @@ async function openAndShow(path: string): Promise<void> {
   // A discarded navigation may happen while a manually-started save is still in flight. Let the
   // old generation finish before open_document publishes the next Rust authority.
   await saveState.whenSavesSettle()
+  const previous = currentGeneration
   showDocument(await invoke<DocumentPayload>('open_document', { path }))
+  // 旧文档的 watcher 与资源根交还 Rust；新文档此时已经登记好了。
+  if (previous !== null) void invoke('close_document', { generation: previous }).catch(displayError)
 }
 
 async function mayNavigate(): Promise<boolean> {
@@ -211,12 +218,10 @@ function queueNavigation(path: string): Promise<void> {
 }
 
 const watchedDocumentReloader = createWatchedDocumentReloader(
-  () => currentDocumentPath,
-  async () => {
+  () => currentGeneration,
+  async (generation) => {
     await compositionGate.wait()
-    const generation = saveState.snapshot().generation
-    if (generation === null) return
-    const source = await invoke<string>('read_current_document', { generation })
+    const source = await invoke<string>('read_document', { generation })
     if (saveState.snapshot().generation !== generation) return
     saveState.diskChanged(source)
   },

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::RwLock,
 };
@@ -8,41 +9,56 @@ use tauri::http::{header, Response, StatusCode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ResourceError {
-    NoDocument,
     InvalidPath,
     OutsideDocumentRoot,
     NotFound,
 }
 
+/// 已开文档的资源根目录，以 generation 为键。
+///
+/// URL 形如 `/<generation>/<相对路径>`：每份文档只解析到它自己所在的目录，多标签下标签 B 的
+/// 图片不会跑到标签 A 的目录里去找（多标签设计 §3.2）。
 #[derive(Default)]
-pub(crate) struct ResourceRoot {
-    current: RwLock<Option<PathBuf>>,
+pub(crate) struct ResourceRoots {
+    roots: RwLock<HashMap<u64, PathBuf>>,
 }
 
-impl ResourceRoot {
-    pub(crate) fn set_document(&self, document: &Path) -> std::io::Result<()> {
+impl ResourceRoots {
+    pub(crate) fn insert(&self, generation: u64, document: &Path) -> std::io::Result<()> {
         let document = document.canonicalize()?;
         if !document.is_file() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "current document is not a file",
+                "document is not a file",
             ));
         }
         let directory = document.parent().ok_or_else(|| {
             std::io::Error::new(std::io::ErrorKind::InvalidInput, "document has no parent")
         })?;
-        *self.current.write().expect("resource root lock poisoned") = Some(directory.to_path_buf());
+        self.roots
+            .write()
+            .expect("resource root lock poisoned")
+            .insert(generation, directory.to_path_buf());
         Ok(())
     }
 
+    pub(crate) fn remove(&self, generation: u64) {
+        self.roots
+            .write()
+            .expect("resource root lock poisoned")
+            .remove(&generation);
+    }
+
     fn resolve_path(&self, uri_path: &str) -> Result<PathBuf, ResourceError> {
+        let (generation, rest) = split_generation(uri_path)?;
         let root = self
-            .current
+            .roots
             .read()
             .expect("resource root lock poisoned")
-            .clone()
-            .ok_or(ResourceError::NoDocument)?;
-        let relative = decode_relative_path(uri_path)?;
+            .get(&generation)
+            .cloned()
+            .ok_or(ResourceError::NotFound)?;
+        let relative = decode_relative_path(rest)?;
         let resolved = root
             .join(relative)
             .canonicalize()
@@ -72,6 +88,19 @@ impl ResourceRoot {
             Err(error) => error_response(error),
         }
     }
+}
+
+/// `/<generation>/<rest>` → `(generation, "/<rest>")`。rest 保留自己的前导 `/`，原样交给
+/// `decode_relative_path`，所以编码过的前导斜杠照旧认得出来。首段不是数字，就当作没有这份文档。
+fn split_generation(uri_path: &str) -> Result<(u64, &str), ResourceError> {
+    let without_separator = uri_path.strip_prefix('/').unwrap_or(uri_path);
+    let slash = without_separator
+        .find('/')
+        .ok_or(ResourceError::NotFound)?;
+    let generation = without_separator[..slash]
+        .parse::<u64>()
+        .map_err(|_| ResourceError::NotFound)?;
+    Ok((generation, &without_separator[slash..]))
 }
 
 fn decode_relative_path(uri_path: &str) -> Result<PathBuf, ResourceError> {
@@ -110,7 +139,6 @@ fn decode_relative_path(uri_path: &str) -> Result<PathBuf, ResourceError> {
 
 fn error_response(error: ResourceError) -> Response<Vec<u8>> {
     let status = match error {
-        ResourceError::NoDocument => StatusCode::SERVICE_UNAVAILABLE,
         ResourceError::InvalidPath => StatusCode::BAD_REQUEST,
         ResourceError::OutsideDocumentRoot => StatusCode::FORBIDDEN,
         ResourceError::NotFound => StatusCode::NOT_FOUND,
@@ -162,7 +190,7 @@ mod tests {
         sync::atomic::{AtomicU64, Ordering},
     };
 
-    use super::{ResourceError, ResourceRoot};
+    use super::{ResourceError, ResourceRoots};
 
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
@@ -189,33 +217,6 @@ mod tests {
     }
 
     #[test]
-    fn refuses_resources_until_a_document_is_current() {
-        assert_eq!(
-            ResourceRoot::default().resolve_path("/image.png"),
-            Err(ResourceError::NoDocument)
-        );
-    }
-
-    #[test]
-    fn resolves_percent_encoded_resources_beneath_the_current_document() {
-        let tree = TempTree::new();
-        let docs = tree.path().join("docs");
-        fs::create_dir_all(docs.join("assets")).unwrap();
-        let document = docs.join("README.md");
-        let resource = docs.join("assets/hello world.png");
-        fs::write(&document, "# current").unwrap();
-        fs::write(&resource, b"png").unwrap();
-
-        let root = ResourceRoot::default();
-        root.set_document(&document).unwrap();
-
-        assert_eq!(
-            root.resolve_path("/assets/hello%20world.png").unwrap(),
-            resource.canonicalize().unwrap()
-        );
-    }
-
-    #[test]
     fn rejects_plain_encoded_and_windows_style_parent_traversal() {
         let tree = TempTree::new();
         let docs = tree.path().join("docs");
@@ -224,10 +225,10 @@ mod tests {
         fs::write(&document, "# current").unwrap();
         fs::write(tree.path().join("secret.txt"), "secret").unwrap();
 
-        let root = ResourceRoot::default();
-        root.set_document(&document).unwrap();
+        let root = ResourceRoots::default();
+        root.insert(1, &document).unwrap();
 
-        for path in ["/../secret.txt", "/%2e%2e/secret.txt", "/..%5csecret.txt"] {
+        for path in ["/1/../secret.txt", "/1/%2e%2e/secret.txt", "/1/..%5csecret.txt"] {
             assert_eq!(root.resolve_path(path), Err(ResourceError::InvalidPath));
         }
     }
@@ -246,11 +247,11 @@ mod tests {
         fs::write(&secret, "secret").unwrap();
         symlink(&secret, docs.join("alias.txt")).unwrap();
 
-        let root = ResourceRoot::default();
-        root.set_document(&document).unwrap();
+        let root = ResourceRoots::default();
+        root.insert(1, &document).unwrap();
 
         assert_eq!(
-            root.resolve_path("/alias.txt"),
+            root.resolve_path("/1/alias.txt"),
             Err(ResourceError::OutsideDocumentRoot)
         );
     }
@@ -280,38 +281,12 @@ mod tests {
             String::from_utf8_lossy(&output.stderr)
         );
 
-        let root = ResourceRoot::default();
-        root.set_document(&document).unwrap();
-        let result = root.resolve_path("/escape/secret.txt");
+        let root = ResourceRoots::default();
+        root.insert(1, &document).unwrap();
+        let result = root.resolve_path("/1/escape/secret.txt");
         fs::remove_dir(&junction).unwrap();
 
         assert_eq!(result, Err(ResourceError::OutsideDocumentRoot));
-    }
-
-    #[test]
-    fn replacing_the_current_document_replaces_the_resource_scope() {
-        let tree = TempTree::new();
-        let first = tree.path().join("first");
-        let second = tree.path().join("second");
-        fs::create_dir_all(&first).unwrap();
-        fs::create_dir_all(&second).unwrap();
-        fs::write(first.join("doc.md"), "first").unwrap();
-        fs::write(second.join("doc.md"), "second").unwrap();
-        fs::write(first.join("asset.txt"), "first").unwrap();
-        fs::write(second.join("asset.txt"), "second").unwrap();
-
-        let root = ResourceRoot::default();
-        root.set_document(&first.join("doc.md")).unwrap();
-        assert_eq!(
-            root.resolve_path("/asset.txt").unwrap(),
-            first.join("asset.txt").canonicalize().unwrap()
-        );
-
-        root.set_document(&second.join("doc.md")).unwrap();
-        assert_eq!(
-            root.resolve_path("/asset.txt").unwrap(),
-            second.join("asset.txt").canonicalize().unwrap()
-        );
     }
 
     #[test]
@@ -340,10 +315,10 @@ mod tests {
         fs::write(&document, "# current").unwrap();
         fs::write(&image, "<svg></svg>").unwrap();
 
-        let root = ResourceRoot::default();
-        root.set_document(&document).unwrap();
+        let root = ResourceRoots::default();
+        root.insert(1, &document).unwrap();
 
-        let success = root.response_for("/diagram.svg");
+        let success = root.response_for("/1/diagram.svg");
         assert_eq!(success.status(), tauri::http::StatusCode::OK);
         assert_eq!(
             success.headers()[tauri::http::header::CONTENT_TYPE],
@@ -361,11 +336,11 @@ mod tests {
         let tree = TempTree::new();
         let document = tree.path().join("README.md");
         fs::write(&document, "# current").unwrap();
-        let root = ResourceRoot::default();
-        root.set_document(&document).unwrap();
+        let root = ResourceRoots::default();
+        root.insert(1, &document).unwrap();
 
         assert_eq!(
-            root.response_for("/missing.svg").status(),
+            root.response_for("/1/missing.svg").status(),
             tauri::http::StatusCode::NOT_FOUND
         );
     }
@@ -375,12 +350,100 @@ mod tests {
         let tree = TempTree::new();
         let document = tree.path().join("README.md");
         fs::write(&document, "# current").unwrap();
-        let root = ResourceRoot::default();
-        root.set_document(&document).unwrap();
+        let root = ResourceRoots::default();
+        root.insert(1, &document).unwrap();
 
         assert_eq!(
-            root.response_for("/%2Fetc/passwd").status(),
+            root.response_for("/1/%2Fetc/passwd").status(),
             tauri::http::StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test]
+    fn refuses_resources_for_a_generation_that_is_not_open() {
+        let tree = TempTree::new();
+        let document = tree.path().join("README.md");
+        fs::write(&document, "# current").unwrap();
+        fs::write(tree.path().join("image.png"), b"png").unwrap();
+        let roots = ResourceRoots::default();
+        assert_eq!(roots.resolve_path("/1/image.png"), Err(ResourceError::NotFound));
+
+        roots.insert(1, &document).unwrap();
+        assert!(roots.resolve_path("/1/image.png").is_ok());
+        for other in ["/2/image.png", "/image.png", "/x/image.png", "/1"] {
+            assert_eq!(roots.resolve_path(other), Err(ResourceError::NotFound), "{other}");
+        }
+
+        roots.remove(1);
+        assert_eq!(roots.resolve_path("/1/image.png"), Err(ResourceError::NotFound));
+    }
+
+    #[test]
+    fn resolves_percent_encoded_resources_beneath_its_document() {
+        let tree = TempTree::new();
+        // 目录名与文件名都带空格、#、中文：多标签设计的评审关注第 4 条。
+        let docs = tree.path().join("docs #1 中文");
+        fs::create_dir_all(docs.join("assets")).unwrap();
+        let document = docs.join("README.md");
+        let spaced = docs.join("assets/hello world.png");
+        let chinese = docs.join("assets/中文 图.png");
+        fs::write(&document, "# current").unwrap();
+        fs::write(&spaced, b"png").unwrap();
+        fs::write(&chinese, b"png").unwrap();
+
+        let roots = ResourceRoots::default();
+        roots.insert(7, &document).unwrap();
+
+        assert_eq!(
+            roots.resolve_path("/7/assets/hello%20world.png").unwrap(),
+            spaced.canonicalize().unwrap()
+        );
+        assert_eq!(
+            roots
+                .resolve_path("/7/assets/%E4%B8%AD%E6%96%87%20%E5%9B%BE.png")
+                .unwrap(),
+            chinese.canonicalize().unwrap()
+        );
+    }
+
+    #[test]
+    fn each_open_document_resolves_resources_in_its_own_directory() {
+        let tree = TempTree::new();
+        let first = tree.path().join("first");
+        let second = tree.path().join("second");
+        fs::create_dir_all(&first).unwrap();
+        fs::create_dir_all(&second).unwrap();
+        fs::write(first.join("doc.md"), "first").unwrap();
+        fs::write(second.join("doc.md"), "second").unwrap();
+        fs::write(first.join("asset.txt"), "first").unwrap();
+        fs::write(second.join("asset.txt"), "second").unwrap();
+
+        let roots = ResourceRoots::default();
+        roots.insert(1, &first.join("doc.md")).unwrap();
+        roots.insert(2, &second.join("doc.md")).unwrap();
+
+        assert_eq!(
+            roots.resolve_path("/1/asset.txt").unwrap(),
+            first.join("asset.txt").canonicalize().unwrap()
+        );
+        assert_eq!(
+            roots.resolve_path("/2/asset.txt").unwrap(),
+            second.join("asset.txt").canonicalize().unwrap()
+        );
+    }
+
+    #[test]
+    fn protocol_response_reports_an_unknown_generation_as_not_found() {
+        let tree = TempTree::new();
+        let document = tree.path().join("README.md");
+        fs::write(&document, "# current").unwrap();
+        fs::write(tree.path().join("diagram.svg"), "<svg></svg>").unwrap();
+        let roots = ResourceRoots::default();
+        roots.insert(1, &document).unwrap();
+
+        assert_eq!(
+            roots.response_for("/9/diagram.svg").status(),
+            tauri::http::StatusCode::NOT_FOUND
         );
     }
 }

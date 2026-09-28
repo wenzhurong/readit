@@ -14,6 +14,11 @@ export function resourceProtocolBase(userAgent: string): string {
   return userAgent.includes('Windows') ? WINDOWS_PROTOCOL_BASE : PROTOCOL_BASE
 }
 
+/** 某份已开文档的资源地址前缀，形如 `readit://localhost/7/`（多标签设计 §3.2）。 */
+export function documentResourceBase(protocolBase: string, generation: number): string {
+  return `${protocolBase}${generation}/`
+}
+
 export function toReaditResourceUrl(raw: string, protocolBase = PROTOCOL_BASE): string | null {
   const value = raw.trim()
   if (
@@ -69,15 +74,20 @@ export function rewriteLocalResources(root: ParentNode, protocolBase = PROTOCOL_
   }
 }
 
-export function observeLocalResources(host: HTMLElement, protocolBase = PROTOCOL_BASE): () => void {
+export function observeLocalResources(
+  host: HTMLElement,
+  protocolBase: string | (() => string) = PROTOCOL_BASE,
+): () => void {
   const root = host.shadowRoot
   if (root === null) return () => {}
-  rewriteLocalResources(root, protocolBase)
+  // 标签内跳转会换 generation，前缀得在每次改写时现取。
+  const base = typeof protocolBase === 'function' ? protocolBase : (): string => protocolBase
+  rewriteLocalResources(root, base())
 
   const observer = new MutationObserver((records) => {
     for (const record of records) {
       for (const node of record.addedNodes) {
-        if (node instanceof HTMLElement) rewriteLocalResources(node, protocolBase)
+        if (node instanceof HTMLElement) rewriteLocalResources(node, base())
       }
     }
   })

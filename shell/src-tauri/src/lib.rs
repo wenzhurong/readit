@@ -18,6 +18,7 @@ const DOCUMENT_CHANGED_EVENT: &str = "readit-document-changed";
 
 #[derive(Clone, Serialize)]
 struct DocumentChangedPayload {
+    generation: u64,
     path: String,
 }
 
@@ -34,11 +35,12 @@ async fn open_document(
 ) -> Result<DocumentPayload, String> {
     let state = Arc::clone(state.inner());
     tauri::async_runtime::spawn_blocking(move || {
-        state.open_document_with_watcher(std::path::Path::new(&path), move |changed| {
+        state.open_document_with_watcher(std::path::Path::new(&path), move |generation, changed| {
             if let Some(path) = changed.to_str() {
                 let _ = app.emit(
                     DOCUMENT_CHANGED_EVENT,
                     DocumentChangedPayload {
+                        generation,
                         path: path.to_owned(),
                     },
                 );
@@ -47,6 +49,18 @@ async fn open_document(
     })
     .await
     .map_err(|error| format!("document read task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn close_document(
+    generation: u64,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let state = Arc::clone(state.inner());
+    // 可能要等一次在途的保存放开表锁，也可能要等 watcher 线程停下：不占 IPC 线程。
+    tauri::async_runtime::spawn_blocking(move || state.close_document(generation))
+        .await
+        .map_err(|error| format!("document close task failed: {error}"))?
 }
 
 #[tauri::command]
@@ -62,12 +76,12 @@ async fn save_document(
 }
 
 #[tauri::command]
-async fn read_current_document(
+async fn read_document(
     generation: u64,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
     let state = Arc::clone(state.inner());
-    tauri::async_runtime::spawn_blocking(move || state.read_current_document(generation))
+    tauri::async_runtime::spawn_blocking(move || state.read_document(generation))
         .await
         .map_err(|error| format!("document reload task failed: {error}"))?
 }
@@ -170,7 +184,8 @@ pub fn run() {
             take_pending_path,
             open_document,
             save_document,
-            read_current_document,
+            close_document,
+            read_document,
             leave::frontend_ready,
             leave::cancel_leave,
             leave::complete_leave,

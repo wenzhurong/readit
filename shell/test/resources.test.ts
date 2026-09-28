@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  documentResourceBase,
   observeLocalResources,
+  PROTOCOL_BASE,
   resourceProtocolBase,
   rewriteLocalResources,
   toReaditResourceUrl,
+  WINDOWS_PROTOCOL_BASE,
 } from '../src/resources.js'
 
 describe('readit resource URLs', () => {
@@ -112,5 +115,36 @@ describe('readit resource URLs', () => {
 
     expect(image.getAttribute('src')).toBe('http://readit.localhost/after-render.png')
     stop()
+  })
+
+  it('gives each open document its own prefix, keyed by generation', () => {
+    expect(documentResourceBase(PROTOCOL_BASE, 7)).toBe('readit://localhost/7/')
+    expect(documentResourceBase(WINDOWS_PROTOCOL_BASE, 12)).toBe('http://readit.localhost/12/')
+    // 评审关注第 4 条：空格与中文只在 generation 之后的那一段编码。
+    expect(toReaditResourceUrl('中文 图.png#x', documentResourceBase(PROTOCOL_BASE, 7))).toBe(
+      'readit://localhost/7/%E4%B8%AD%E6%96%87%20%E5%9B%BE.png#x',
+    )
+  })
+
+  it('reads the prefix at rewrite time, so nodes added after a generation change use the new one', async () => {
+    const host = document.createElement('div')
+    const shadow = host.attachShadow({ mode: 'open' })
+    let generation = 1
+    const stop = observeLocalResources(host, () => documentResourceBase(PROTOCOL_BASE, generation))
+    const first = document.createElement('img')
+    first.setAttribute('src', 'a.png')
+    shadow.append(first)
+    await Promise.resolve()
+    generation = 2
+    const second = document.createElement('img')
+    second.setAttribute('src', 'a.png')
+    shadow.append(second)
+    await Promise.resolve()
+    stop()
+
+    expect([first.getAttribute('src'), second.getAttribute('src')]).toEqual([
+      'readit://localhost/1/a.png',
+      'readit://localhost/2/a.png',
+    ])
   })
 })

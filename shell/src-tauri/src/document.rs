@@ -1,5 +1,5 @@
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     io::Write,
     path::{Path, PathBuf},
     sync::{
@@ -10,7 +10,7 @@ use std::{
 
 use serde::Serialize;
 
-use crate::{protocol::ResourceRoot, watcher::DocumentWatcher};
+use crate::{protocol::ResourceRoots, watcher::DocumentWatcher};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,18 +20,20 @@ pub(crate) struct DocumentPayload {
     pub(crate) generation: u64,
 }
 
-struct CurrentDocument {
+/// 表里的一份已开文档。watcher 随表项一起释放。
+struct OpenDocument {
     path: PathBuf,
-    generation: u64,
+    _watcher: DocumentWatcher,
 }
 
 #[derive(Default)]
 pub(crate) struct AppState {
-    pub(crate) resources: ResourceRoot,
-    current_document: Mutex<Option<CurrentDocument>>,
+    pub(crate) resources: ResourceRoots,
+    /// 以 generation 为键的已开文档表（多标签设计 §3.1）。保存期间持有这把锁：打开、关闭
+    /// 都要等它写完，内容不会写到被关掉或换掉的文档上。
+    documents: Mutex<HashMap<u64, OpenDocument>>,
     next_generation: AtomicU64,
     pending: Mutex<VecDeque<PathBuf>>,
-    watcher: Mutex<Option<DocumentWatcher>>,
 }
 
 impl AppState {
@@ -43,7 +45,8 @@ impl AppState {
         self.enqueue_paths(paths);
     }
 
-    fn enqueue_paths(&self, paths: impl IntoIterator<Item = PathBuf>) -> usize {
+    /// 待打开队列的唯一入口：Finder、第二实例的 argv、「打开…」对话框都走这里，只收 Markdown。
+    pub(crate) fn enqueue_paths(&self, paths: impl IntoIterator<Item = PathBuf>) -> usize {
         let paths = paths
             .into_iter()
             .filter(|path| is_markdown(path))
@@ -89,7 +92,7 @@ impl AppState {
         on_change: F,
     ) -> Result<DocumentPayload, String>
     where
-        F: Fn(PathBuf) + Send + Sync + 'static,
+        F: Fn(u64, PathBuf) + Send + Sync + 'static,
     {
         let canonical = path
             .canonicalize()
@@ -109,41 +112,30 @@ impl AppState {
             .ok_or_else(|| format!("document path is not valid UTF-8: {}", canonical.display()))?
             .to_owned();
 
-        let mut active_watcher = self
-            .watcher
-            .lock()
-            .map_err(|_| "document watcher lock poisoned".to_owned())?;
-        let replacement = if active_watcher
-            .as_ref()
-            .is_some_and(|watcher| watcher.watches(&canonical))
-        {
-            None
-        } else {
-            Some(
-                DocumentWatcher::new(&canonical, on_change)
-                    .map_err(|error| format!("cannot watch {}: {error}", canonical.display()))?,
-            )
-        };
-
-        // Change the protocol scope only after the new document has been read successfully.
-        // A failed navigation must leave the currently visible document's images working.
-        self.resources.set_document(&canonical).map_err(|error| {
+        // 先分配 generation：watcher 的回调要带着它，前端据此把变更分派给对应的标签。
+        let generation = self.next_generation.fetch_add(1, Ordering::Relaxed) + 1;
+        let watcher = DocumentWatcher::new(&canonical, move |changed| on_change(generation, changed))
+            .map_err(|error| format!("cannot watch {}: {error}", canonical.display()))?;
+        self.resources.insert(generation, &canonical).map_err(|error| {
             format!(
                 "cannot scope resources for {}: {error}",
                 canonical.display()
             )
         })?;
-        if let Some(watcher) = replacement {
-            *active_watcher = Some(watcher);
-        }
-        let generation = self.next_generation.fetch_add(1, Ordering::Relaxed) + 1;
-        *self
-            .current_document
-            .lock()
-            .map_err(|_| "current document lock poisoned".to_owned())? = Some(CurrentDocument {
-            path: canonical,
+        let mut documents = match self.documents.lock() {
+            Ok(documents) => documents,
+            Err(_) => {
+                self.resources.remove(generation);
+                return Err("document table lock poisoned".to_owned());
+            }
+        };
+        documents.insert(
             generation,
-        });
+            OpenDocument {
+                path: canonical,
+                _watcher: watcher,
+            },
+        );
         Ok(DocumentPayload {
             path,
             source,
@@ -151,24 +143,31 @@ impl AppState {
         })
     }
 
-    pub(crate) fn save_document(&self, generation: u64, content: &str) -> Result<(), String> {
-        // Keep the path locked for the whole replacement. An open that completes while a save is
-        // in flight waits here before it can publish the next current document, so content can
-        // never jump from the document visible when Save was requested to a later navigation.
-        let current = self
-            .current_document
+    /// 释放一份已开文档：watcher 与资源根一起走。未知 generation 当作已经关过。
+    pub(crate) fn close_document(&self, generation: u64) -> Result<(), String> {
+        let removed = self
+            .documents
             .lock()
-            .map_err(|_| "current document lock poisoned".to_owned())?;
-        let current = current
-            .as_ref()
-            .ok_or_else(|| "cannot save: no Markdown document is open".to_owned())?;
-        if current.generation != generation {
-            return Err(format!(
-                "cannot save: document generation {generation} is stale (current generation is {})",
-                current.generation
-            ));
-        }
-        let path = current.path.as_path();
+            .map_err(|_| "document table lock poisoned".to_owned())?
+            .remove(&generation);
+        self.resources.remove(generation);
+        // watcher 在锁外释放：停掉文件系统监听可能要等它的线程。
+        drop(removed);
+        Ok(())
+    }
+
+    pub(crate) fn save_document(&self, generation: u64, content: &str) -> Result<(), String> {
+        // Keep the table locked for the whole replacement. An open or close that arrives while a
+        // save is in flight waits here, so content can never land on a document that was closed or
+        // replaced after Save was requested.
+        let documents = self
+            .documents
+            .lock()
+            .map_err(|_| "document table lock poisoned".to_owned())?;
+        let document = documents.get(&generation).ok_or_else(|| {
+            format!("cannot save: document generation {generation} is not open")
+        })?;
+        let path = document.path.as_path();
         if !is_markdown(path) {
             return Err(format!(
                 "cannot save a non-Markdown document: {}",
@@ -178,29 +177,36 @@ impl AppState {
         atomic_write(path, content.as_bytes())
     }
 
-    pub(crate) fn read_current_document(&self, generation: u64) -> Result<String, String> {
-        let current = self
-            .current_document
+    pub(crate) fn read_document(&self, generation: u64) -> Result<String, String> {
+        let path = self
+            .documents
             .lock()
-            .map_err(|_| "current document lock poisoned".to_owned())?;
-        let current = current
-            .as_ref()
-            .ok_or_else(|| "cannot reload: no Markdown document is open".to_owned())?;
-        if current.generation != generation {
-            return Err(format!(
-                "cannot reload: document generation {generation} is stale (current generation is {})",
-                current.generation
-            ));
-        }
-        let bytes = std::fs::read(&current.path)
-            .map_err(|error| format!("cannot read {}: {error}", current.path.display()))?;
+            .map_err(|_| "document table lock poisoned".to_owned())?
+            .get(&generation)
+            .map(|document| document.path.clone())
+            .ok_or_else(|| {
+                format!("cannot reload: document generation {generation} is not open")
+            })?;
+        let bytes = std::fs::read(&path)
+            .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
         String::from_utf8(bytes)
-            .map_err(|_| format!("document is not valid UTF-8: {}", current.path.display()))
+            .map_err(|_| format!("document is not valid UTF-8: {}", path.display()))
+    }
+
+    /// 「打开…」对话框的起始目录：该 generation 的文件所在目录。
+    pub(crate) fn document_directory(&self, generation: u64) -> Option<PathBuf> {
+        self.documents
+            .lock()
+            .ok()?
+            .get(&generation)?
+            .path
+            .parent()
+            .map(Path::to_path_buf)
     }
 
     #[cfg(test)]
     fn open_document(&self, path: &Path) -> Result<DocumentPayload, String> {
-        self.open_document_with_watcher(path, |_| {})
+        self.open_document_with_watcher(path, |_, _| {})
     }
 }
 
@@ -282,7 +288,11 @@ mod tests {
     use std::{
         fs,
         path::{Path, PathBuf},
-        sync::atomic::{AtomicU64, Ordering},
+        sync::{
+            atomic::{AtomicU64, Ordering},
+            mpsc,
+        },
+        time::{Duration, Instant},
     };
 
     use tauri::http::StatusCode;
@@ -390,29 +400,6 @@ mod tests {
     }
 
     #[test]
-    fn opening_markdown_reads_it_and_moves_the_resource_scope() {
-        let tree = TempTree::new();
-        let docs = tree.path().join("docs");
-        fs::create_dir_all(&docs).unwrap();
-        let document = docs.join("README.md");
-        fs::write(&document, "# hello\n").unwrap();
-        fs::write(docs.join("diagram.svg"), "<svg></svg>").unwrap();
-        let state = AppState::default();
-
-        let payload = state.open_document(&document).unwrap();
-
-        assert_eq!(payload.source, "# hello\n");
-        assert_eq!(
-            payload.path,
-            document.canonicalize().unwrap().to_str().unwrap()
-        );
-        assert_eq!(
-            state.resources.response_for("/diagram.svg").status(),
-            StatusCode::OK
-        );
-    }
-
-    #[test]
     fn opening_rejects_non_markdown_and_non_utf8_documents() {
         let tree = TempTree::new();
         let text = tree.path().join("notes.txt");
@@ -423,14 +410,6 @@ mod tests {
 
         assert!(state.open_document(&text).unwrap_err().contains("Markdown"));
         assert!(state.open_document(&binary).unwrap_err().contains("UTF-8"));
-    }
-
-    #[test]
-    fn saving_requires_an_open_document() {
-        let error = AppState::default()
-            .save_document(1, "# nowhere\n")
-            .unwrap_err();
-        assert!(error.contains("no Markdown document is open"));
     }
 
     #[test]
@@ -470,46 +449,6 @@ mod tests {
     }
 
     #[test]
-    fn a_save_from_an_older_document_generation_cannot_touch_the_new_document() {
-        let tree = TempTree::new();
-        let first = tree.path().join("first.md");
-        let second = tree.path().join("second.md");
-        fs::write(&first, "first").unwrap();
-        fs::write(&second, "second").unwrap();
-        let state = AppState::default();
-        let first_payload = state.open_document(&first).unwrap();
-        let second_payload = state.open_document(&second).unwrap();
-
-        let error = state
-            .save_document(first_payload.generation, "stale write")
-            .unwrap_err();
-
-        assert!(error.contains("generation"));
-        assert_eq!(fs::read_to_string(&first).unwrap(), "first");
-        assert_eq!(fs::read_to_string(&second).unwrap(), "second");
-        assert!(second_payload.generation > first_payload.generation);
-    }
-
-    #[test]
-    fn watcher_reload_reads_only_the_matching_current_generation() {
-        let tree = TempTree::new();
-        let document = tree.path().join("watched.md");
-        fs::write(&document, "before").unwrap();
-        let state = AppState::default();
-        let payload = state.open_document(&document).unwrap();
-        fs::write(&document, "after").unwrap();
-
-        assert_eq!(
-            state.read_current_document(payload.generation).unwrap(),
-            "after"
-        );
-        assert!(state
-            .read_current_document(payload.generation + 1)
-            .unwrap_err()
-            .contains("stale"));
-    }
-
-    #[test]
     fn failed_atomic_replace_reports_the_target_and_removes_the_temporary_file() {
         let tree = TempTree::new();
         let document = tree.path().join("failure.md");
@@ -546,5 +485,195 @@ mod tests {
         );
         assert_eq!(associations[0]["role"], "Viewer");
         assert_eq!(associations[0]["rank"], "Default");
+    }
+
+    #[test]
+    fn opening_markdown_reads_it_and_scopes_its_resources_by_generation() {
+        let tree = TempTree::new();
+        let docs = tree.path().join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        let document = docs.join("README.md");
+        fs::write(&document, "# hello\n").unwrap();
+        fs::write(docs.join("diagram.svg"), "<svg></svg>").unwrap();
+        let state = AppState::default();
+
+        let payload = state.open_document(&document).unwrap();
+
+        assert_eq!(payload.source, "# hello\n");
+        assert_eq!(
+            payload.path,
+            document.canonicalize().unwrap().to_str().unwrap()
+        );
+        assert_eq!(
+            state
+                .resources
+                .response_for(&format!("/{}/diagram.svg", payload.generation))
+                .status(),
+            StatusCode::OK
+        );
+    }
+
+    #[test]
+    fn saving_requires_an_open_document() {
+        let error = AppState::default()
+            .save_document(1, "# nowhere\n")
+            .unwrap_err();
+        assert!(error.contains("is not open"));
+    }
+
+    #[test]
+    fn two_open_documents_save_independently_and_a_closed_one_rejects_writes() {
+        let tree = TempTree::new();
+        let first = tree.path().join("first.md");
+        let second = tree.path().join("second.md");
+        fs::write(&first, "first").unwrap();
+        fs::write(&second, "second").unwrap();
+        let state = AppState::default();
+        let first_payload = state.open_document(&first).unwrap();
+        let second_payload = state.open_document(&second).unwrap();
+
+        state
+            .save_document(first_payload.generation, "first saved")
+            .unwrap();
+        state
+            .save_document(second_payload.generation, "second saved")
+            .unwrap();
+        state.close_document(first_payload.generation).unwrap();
+        let error = state
+            .save_document(first_payload.generation, "late write")
+            .unwrap_err();
+
+        assert!(error.contains("is not open"));
+        assert_eq!(fs::read_to_string(&first).unwrap(), "first saved");
+        assert_eq!(fs::read_to_string(&second).unwrap(), "second saved");
+        assert!(second_payload.generation > first_payload.generation);
+    }
+
+    #[test]
+    fn reload_reads_only_an_open_generation() {
+        let tree = TempTree::new();
+        let document = tree.path().join("watched.md");
+        fs::write(&document, "before").unwrap();
+        let state = AppState::default();
+        let payload = state.open_document(&document).unwrap();
+        fs::write(&document, "after").unwrap();
+
+        assert_eq!(state.read_document(payload.generation).unwrap(), "after");
+        assert!(state
+            .read_document(payload.generation + 1)
+            .unwrap_err()
+            .contains("is not open"));
+        state.close_document(payload.generation).unwrap();
+        assert!(state
+            .read_document(payload.generation)
+            .unwrap_err()
+            .contains("is not open"));
+    }
+
+    #[test]
+    fn closing_a_document_releases_its_resource_scope_and_tolerates_repeats() {
+        let tree = TempTree::new();
+        let document = tree.path().join("README.md");
+        fs::write(&document, "# hello\n").unwrap();
+        fs::write(tree.path().join("image.png"), b"png").unwrap();
+        let state = AppState::default();
+        let payload = state.open_document(&document).unwrap();
+        let uri = format!("/{}/image.png", payload.generation);
+        assert_eq!(state.resources.response_for(&uri).status(), StatusCode::OK);
+
+        state.close_document(payload.generation).unwrap();
+        state.close_document(payload.generation).unwrap();
+
+        assert_eq!(
+            state.resources.response_for(&uri).status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[test]
+    fn each_document_reports_disk_changes_with_its_own_generation() {
+        let tree = TempTree::new();
+        let first_dir = tree.path().join("first");
+        let second_dir = tree.path().join("second");
+        fs::create_dir_all(&first_dir).unwrap();
+        fs::create_dir_all(&second_dir).unwrap();
+        let first = first_dir.join("doc.md");
+        let second = second_dir.join("doc.md");
+        fs::write(&first, "first").unwrap();
+        fs::write(&second, "second").unwrap();
+        let state = AppState::default();
+        let (sender, receiver) = mpsc::channel();
+        let first_sender = sender.clone();
+        // 通道关闭时不能在 notify 的回调里 unwind，照 watcher.rs 的测试用 `let _ =`。
+        let first_payload = state
+            .open_document_with_watcher(&first, move |generation, path| {
+                let _ = first_sender.send((generation, path));
+            })
+            .unwrap();
+        let second_payload = state
+            .open_document_with_watcher(&second, move |generation, path| {
+                let _ = sender.send((generation, path));
+            })
+            .unwrap();
+
+        fs::write(&second, "second changed").unwrap();
+
+        // 收到第二份的事件为止（最多 5 秒）。重扫事件可能让第一份也报一次，所以不断言「只有一条」，
+        // 只断言每条事件的 generation 与路径是配对的。
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut seen = Vec::new();
+        while Instant::now() < deadline {
+            if let Ok(event) = receiver.recv_timeout(Duration::from_millis(200)) {
+                let done = event.0 == second_payload.generation;
+                seen.push(event);
+                if done {
+                    break;
+                }
+            }
+        }
+        let first_path = first.canonicalize().unwrap();
+        let second_path = second.canonicalize().unwrap();
+        assert!(
+            seen.contains(&(second_payload.generation, second_path.clone())),
+            "{seen:?}"
+        );
+        assert!(
+            seen.iter().all(|(generation, path)| {
+                (*generation == first_payload.generation && *path == first_path)
+                    || (*generation == second_payload.generation && *path == second_path)
+            }),
+            "{seen:?}"
+        );
+    }
+
+    #[test]
+    fn dialog_selections_join_the_pending_queue_and_keep_only_markdown() {
+        let tree = TempTree::new();
+        let first = tree.path().join("a.md");
+        let text = tree.path().join("b.txt");
+        let second = tree.path().join("c.markdown");
+        let state = AppState::default();
+
+        assert_eq!(state.enqueue_paths([first.clone(), text, second.clone()]), 2);
+        assert_eq!(state.take_pending_path().as_deref(), first.to_str());
+        assert_eq!(state.take_pending_path().as_deref(), second.to_str());
+        assert_eq!(state.take_pending_path(), None);
+    }
+
+    #[test]
+    fn the_dialog_starts_in_the_directory_of_an_open_document() {
+        let tree = TempTree::new();
+        let docs = tree.path().join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        let document = docs.join("README.md");
+        fs::write(&document, "# hello\n").unwrap();
+        let state = AppState::default();
+        let payload = state.open_document(&document).unwrap();
+
+        assert_eq!(
+            state.document_directory(payload.generation),
+            Some(docs.canonicalize().unwrap())
+        );
+        assert_eq!(state.document_directory(payload.generation + 1), None);
     }
 }
