@@ -42,6 +42,50 @@ describe('createWatchedDocumentReloader', () => {
     reloader.destroy()
   })
 
+  it('stays quiet when a reload fails after the document moved to another generation', async () => {
+    // 评审关注第 3 条：读盘在途时标签被关掉（或在标签内跳走），Rust 回「generation 不在表里」。
+    // 那个错误已经没人关心，不该弹出来。
+    vi.useFakeTimers()
+    let current: number | null = 7
+    const reportError = vi.fn()
+    const reload = vi.fn(async (_generation: number) => {
+      current = null
+      throw new Error('cannot reload: document generation 7 is not open')
+    })
+    const reloader = createWatchedDocumentReloader(() => current, reload, reportError, 80)
+
+    reloader.handle({ generation: 7 })
+    await vi.advanceTimersByTimeAsync(80)
+    for (let i = 0; i < 5; i += 1) await Promise.resolve()
+
+    expect({ reloads: reload.mock.calls.length, reported: reportError.mock.calls.length }).toEqual({
+      reloads: 1,
+      reported: 0,
+    })
+    reloader.destroy()
+  })
+
+  it('still reports a failed reload for the document that is still current', async () => {
+    vi.useFakeTimers()
+    const reportError = vi.fn()
+    const failure = new Error('cannot read /docs/a.md: permission denied')
+    const reloader = createWatchedDocumentReloader(
+      () => 7,
+      async () => {
+        throw failure
+      },
+      reportError,
+      80,
+    )
+
+    reloader.handle({ generation: 7 })
+    await vi.advanceTimersByTimeAsync(80)
+    for (let i = 0; i < 5; i += 1) await Promise.resolve()
+
+    expect(reportError.mock.calls).toEqual([[failure]])
+    reloader.destroy()
+  })
+
   it('cancels a pending reload when destroyed', async () => {
     vi.useFakeTimers()
     const reload = vi.fn(async (_generation: number) => {})

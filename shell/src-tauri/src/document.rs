@@ -616,27 +616,28 @@ mod tests {
             })
             .unwrap();
 
-        fs::write(&second, "second changed").unwrap();
-
-        // 收到第二份的事件为止（最多 5 秒）。重扫事件可能让第一份也报一次，所以不断言「只有一条」，
-        // 只断言每条事件的 generation 与路径是配对的。
-        let deadline = Instant::now() + Duration::from_secs(5);
-        let mut seen = Vec::new();
-        while Instant::now() < deadline {
-            if let Ok(event) = receiver.recv_timeout(Duration::from_millis(200)) {
-                let done = event.0 == second_payload.generation;
-                seen.push(event);
-                if done {
-                    break;
-                }
-            }
-        }
         let first_path = first.canonicalize().unwrap();
         let second_path = second.canonicalize().unwrap();
-        assert!(
-            seen.contains(&(second_payload.generation, second_path.clone())),
-            "{seen:?}"
-        );
+
+        // 两份依次改、两份都要各自报到。只留一个 watcher 的回归（打开第二份时把第一份的
+        // 丢掉——正是改动前的行为）会在第二轮卡住。重扫事件可能让另一份也报一次，所以不断言
+        // 「只有一条」，只断言每条事件的 generation 与路径是配对的。
+        let mut seen = Vec::new();
+        for (target, generation, path) in [
+            (&second, second_payload.generation, &second_path),
+            (&first, first_payload.generation, &first_path),
+        ] {
+            fs::write(target, "changed").unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut found = false;
+            while !found && Instant::now() < deadline {
+                if let Ok(event) = receiver.recv_timeout(Duration::from_millis(200)) {
+                    found = event.0 == generation && &event.1 == path;
+                    seen.push(event);
+                }
+            }
+            assert!(found, "no event for generation {generation}: {seen:?}");
+        }
         assert!(
             seen.iter().all(|(generation, path)| {
                 (*generation == first_payload.generation && *path == first_path)

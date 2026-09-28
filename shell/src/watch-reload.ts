@@ -32,7 +32,10 @@ export function createWatchedDocumentReloader(
         timer = null
         pendingGeneration = null
         if (generation === null || generation !== currentGeneration()) return
-        void reload(generation).catch(reportError)
+        void reload(generation).catch((error: unknown) => {
+          // 读盘在途时文档可能已经换代（标签关了、或在标签内跳走了）：那个错误已经没人关心。
+          if (generation === currentGeneration()) reportError(error)
+        })
       }, delayMs)
     },
 
