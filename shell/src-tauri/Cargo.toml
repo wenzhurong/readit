@@ -1,6 +1,6 @@
 [package]
 name = "readit-shell"
-version = "0.1.6"
+version = "0.1.7"
 description = "Native shell for readit"
 authors = ["mmy420"]
 edition = "2021"
