@@ -618,7 +618,7 @@ Rust 层刻意保持薄：文件 IO、协议处理、窗口/导航、文件关�
 |---|---|
 | 资源协议 | 自注册 `readit://` 异步 URI scheme（`register_asynchronous_uri_scheme_protocol`），在 Rust 侧按文档限定作用域：URL 首段是该文档的 generation，只解析到那份文档所在的目录（⚠️ 2026-09-28 多标签：原为「限定到当前文档所在目录」，全局只有一个作用域）。**不用**内置 asset 协议 + 持久化 scope——静态 glob 作用域对"用户双击任意文件"这个形态是错的。⚠️ CSP 里 `readit:` 和 `http://readit.localhost` **都要加**，两个引擎的 scheme 形态不同，一边对另一边就静默坏图 |
 | 文件关联 | `bundle.fileAssociations`，`ext: ["md","markdown"]` + `LSHandlerRank` |
-| macOS 打开事件 | `RunEvent::Opened` 的路径存进 `AppState`，前端挂载后来取。**事件在任何 JS 监听器存在之前就触发**（顺序 Opened → Ready → Window），不这么做会间歇性开出空窗口，且随机器速度复现不稳 |
+| macOS 打开事件 | `RunEvent::Opened` 的路径存进 `AppState`，前端挂载后来取。**事件在任何 JS 监听器存在之前就触发**（顺序 Opened → Ready → Window），不这么做会间歇性开出空窗口，且随机器速度复现不稳。readit 已在运行时 Finder 双击只发这个事件、不起第二实例，系统至多激活应用，**不会把最小化的窗口恢复出来**：与第二实例一样调 `focus_main_window`（显示、取消最小化、聚焦）（⚠️ 2026-10-29：原先不聚焦，文档开进了程序坞里的窗口，用户看不见） |
 | Windows argv | 直接读裸 argv，**不要当 URL 解析**——Tauri 官方的文件关联示例就是这么错的，会丢掉 `C:\Users\…\file.md` |
 | 单实例 | `tauri-plugin-single-instance` 2.4.3，**第一个注册**，早于其他所有插件。第二次调用的 argv 在已开窗口里新开标签，已开着的文件切到那个标签（⚠️ 2026-09-28：原为「路由进已开窗口的导航历史」） |
 | 文件监听 | `notify`。⚠️ 原子保存的 rename 语义会骗过朴素 watcher |

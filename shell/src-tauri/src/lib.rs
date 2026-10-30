@@ -136,6 +136,18 @@ fn handle_second_instance<R: Runtime>(app: &tauri::AppHandle<R>, args: Vec<Strin
     focus_main_window(app);
 }
 
+/// Finder 双击、「打开方式」：readit 已在运行时，LaunchServices 把文件以 Apple Event 交给这个
+/// 进程而不起第二实例。系统至多激活应用，不会把最小化的窗口恢复出来——与第二实例一样要自己
+/// 显示并聚焦主窗口。
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn handle_opened_urls<R: Runtime>(app: &tauri::AppHandle<R>, urls: Vec<tauri::Url>) {
+    app.state::<Arc<AppState>>().enqueue_opened_urls(urls);
+    // If JS already exists this wakes it; if Opened precedes Ready/Window, the queue in
+    // AppState is the durable handoff and the frontend drains it after mounting.
+    announce_pending_documents(app);
+    focus_main_window(app);
+}
+
 #[cfg(windows)]
 fn disable_browser_accelerator_keys<R: Runtime>(
     app: &tauri::App<R>,
@@ -238,12 +250,7 @@ pub fn run() {
         }
         #[cfg(any(target_os = "macos", target_os = "ios"))]
         if let tauri::RunEvent::Opened { urls } = _event {
-            _app_handle
-                .state::<Arc<AppState>>()
-                .enqueue_opened_urls(urls);
-            // If JS already exists this wakes it; if Opened precedes Ready/Window, the queue in
-            // AppState is the durable handoff and the frontend drains it after mounting.
-            announce_pending_documents(_app_handle);
+            handle_opened_urls(_app_handle, urls);
         }
     });
 }
@@ -332,6 +339,36 @@ mod tests {
                 production.contains("state.enqueue_paths(paths)"),
             ),
             (true, true, true, true)
+        );
+    }
+
+    /// Finder 双击时 readit 已在运行：LaunchServices 把文件以 Apple Event 交给既有进程，不起
+    /// 第二实例；系统至多激活应用，不恢复最小化的窗口。打开事件不聚焦时，文档开进了程序坞里
+    /// 的窗口，用户看不见（2026-10-29 用户真机报告、探针包复现）。两条入口必须一样聚焦主窗口。
+    #[test]
+    fn finder_opens_focus_the_main_window_like_second_launches() {
+        let source = include_str!("lib.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("lib.rs must contain production code before tests");
+        let body = |name: &str| {
+            let start = production
+                .find(&format!("fn {name}<"))
+                .unwrap_or_else(|| panic!("lib.rs must define {name}"));
+            let rest = &production[start..];
+            let end = rest
+                .find("\n}")
+                .expect("a top-level function ends with a column-0 brace");
+            &rest[..end]
+        };
+        assert_eq!(
+            (
+                body("handle_second_instance").contains("focus_main_window(app)"),
+                body("handle_opened_urls").contains("focus_main_window(app)"),
+                production.contains("handle_opened_urls(_app_handle, urls)"),
+            ),
+            (true, true, true)
         );
     }
 }
