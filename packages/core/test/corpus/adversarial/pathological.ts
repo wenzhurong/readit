@@ -30,4 +30,9 @@ export const PATHOLOGICAL_CASES: readonly PathologicalCase[] = [
   { name: 'unclosed-links-b', source: () => rep('[a](b', 20000) },
   { name: 'reference-collisions', source: () => rep('[a]: b\n', 20000) + rep('[a]', 20000) },
   { name: 'nul-byte', source: () => rep('a\u0000b ', 10000) },
+  // Not from cmark: markdown-it's own quadratic paths, fixed in 15.0.3. The first needs
+  // `html: true`, which readit hard-codes (engine.ts), so the advisory's "default config is
+  // unaffected" does not apply here. On 15.0.0 these took 5.6 s and 2.2 s in render().
+  { name: 'unclosed-inline-html-comments', source: () => 'x ' + rep('<!--', 32000) }, // GHSA-vfgh-jcmw-g37q
+  { name: 'unclosed-multiline-reference-title', source: () => '[a]: /u "' + rep('x\n', 100000) }, // GHSA-gfr2-rv44-r23c
 ]

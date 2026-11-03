@@ -160,7 +160,8 @@ const EXTRA_ATTRIBUTES: readonly SanitizerNameEntry[] = [
  *     的路径）——DOMPurify 对未知标签同样是 unwrap（保留文本、丢外层标签），
  *     `alias` 也不在 DOMPurify 默认属性名单里。
  *   - `target` 属性——DOMPurify 3.4.13 的默认 HTML 属性表本身就不含 `target`
- *     （`node_modules/dompurify/dist/purify.js` 的 `html` 允许名单逐一核对过），
+ *     （`node_modules/dompurify/dist/purify.js` 的 `html` 允许名单逐一核对过；
+ *     升到 3.4.17 时复核，仍不含），
  *     图片外链装饰（decorate.ts 的 `target="_blank"`）在第 2 级路径上此前
  *     一直被静默剥掉。`rel="noopener noreferrer"` 不受影响（在默认名单里）。
  *
@@ -178,7 +179,7 @@ const EXTRA_ATTRIBUTES: readonly SanitizerNameEntry[] = [
  * 或较新标签它都认），第 1 级需要补的 4 个标签在这里不是缺口。回归覆盖同样
  * 是永久的，见 `EXTRA_ELEMENTS` 头部大注释末尾指到的那两处。
  */
-// 不用 readonly：DOMPurify 3.4.13 自己的 Config.ADD_TAGS/ADD_ATTR 类型是可变
+// 不用 readonly：DOMPurify（3.4.13 起，3.4.17 仍是）自己的 Config.ADD_TAGS/ADD_ATTR 类型是可变
 // string[]，与本文件其余名单（EXTRA_ELEMENTS/EXTRA_ATTRIBUTES）用 readonly
 // 不同，是外部类型形状决定的，不是疏忽。
 const TIER2_EXTRA_TAGS: string[] = ['markdown-accessiblity-table', 'math-renderer', 'g-emoji']
@@ -262,7 +263,7 @@ export function selectTier(env: InjectionEnv): InjectionTier {
 /**
  * 从真实全局读一次。三处都用 typeof 守：在纯 Node 里这几个标识符根本不存在；
  * 在本包 vitest 用的 happy-dom（§0 A2）里 `window` 与 `Element` 都存在，但
- * happy-dom 20.11.2 都没有实现 Sanitizer API 与 Trusted Types，所以这几个探测
+ * happy-dom 21.0.4 都没有实现 Sanitizer API 与 Trusted Types，所以这几个探测
  * 在两种测试环境下碰巧给出同一个答案——真正装了这两个特性的宿主由 L3b-element
  * （真浏览器）断言。
  */

@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
  * 浏览器套件本身在 CI 的容器里跑，那层红灯来得晚，而这层红灯在本地 <1s 就来。
  *
  * §0 A9 改了浏览器 fixture 装置的三件事（相对 task-11-brief.md 的正文）：
- *   1. 打包器是 vite 8.2.1，不是 esbuild —— ?raw 导入与工作区 .ts 软链解析都靠它。
+ *   1. 打包器是 vite 8.2.4，不是 esbuild —— ?raw 导入与工作区 .ts 软链解析都靠它。
  *   2. 端口 5183，不是任务书样例里的 4173。
  *   3. 页面全局是 window.readitFixture，不是 window.__readit。
  * 以及五个（+ 一个 advisory）Playwright project 必须各自带 testDir，见下面那组断言。
@@ -27,7 +27,7 @@ const pkg = JSON.parse(read('package.json') || '{}') as {
   scripts?: Record<string, string>
 }
 const PINNED_PLAYWRIGHT = '1.62.1'
-const PINNED_VITE = '8.2.1'
+const PINNED_VITE = '8.2.4'
 
 describe('Playwright 与 vite 的版本与镜像钉在一起', () => {
   it('@playwright/test 是精确版本，不是范围', () => {

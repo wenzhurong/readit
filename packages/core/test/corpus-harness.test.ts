@@ -95,7 +95,11 @@ describe('adversarial inventory', () => {
 
   it('carries the cmark pathological generators', () => {
     expect(PATHOLOGICAL_CASES.map((c) => c.name)).toContain('nested-brackets')
-    expect(PATHOLOGICAL_CASES).toHaveLength(16)
+    // 16 ported from cmark, plus 2 from markdown-it's own advisories (GHSA-vfgh, GHSA-gfr2).
+    expect(PATHOLOGICAL_CASES).toHaveLength(18)
+    expect(PATHOLOGICAL_CASES.map((c) => c.name)).toEqual(
+      expect.arrayContaining(['unclosed-inline-html-comments', 'unclosed-multiline-reference-title']),
+    )
     expect(PATHOLOGICAL_CASES.find((c) => c.name === 'nested-brackets')!.source()).toHaveLength(40001)
   })
 })

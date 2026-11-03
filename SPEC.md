@@ -231,16 +231,16 @@ const html = render(src, opts)
 
 ## 5. 组件划分与定版
 
-所有版本为 2026-08-06 实测，所有字节数为本地 `esbuild --bundle --minify` + `gzip -9` 实测。
+所有版本为 2026-08-06 实测，所有字节数为本地 `esbuild --bundle --minify` + `gzip -9` 实测。markdown-it 与 dompurify 于 2026-11-03 按安全公告升到修复版（markdown-it 15.0.0 有两条平方级卡死路径，在 readit 的配置下都能触发，其中一条要 `html: true`，readit 硬编码打开），由 `test/dependency-security.test.ts` 钉住。
 
 | 包 | 职责 | 关键依赖（精确版本） |
 |---|---|---|
-| `@readit/core` | Phase A 引擎 | markdown-it **15.0.0**、hast-util-sanitize **5.0.2**、github-slugger **2.0.0** |
+| `@readit/core` | Phase A 引擎 | markdown-it **15.0.3**、hast-util-sanitize **5.0.2**、github-slugger **2.0.0** |
 | `@readit/math` | MathJax 渲染器（Phase A，懒加载） | @mathjax/src **4.1.3**、@mathjax/mathjax-tex-font **4.1.3** |
 | `@readit/element` | Web Component + `mount()` | github-markdown-css **5.9.0**（用其中的单主题文件，见 §9.2） |
 | `@readit/highlight` | 高亮 adapter + 两个实现 | @wooorm/starry-night **3.10.0** / shiki **4.4.2** |
 | `@readit/editor` | CodeMirror 源码模式（懒加载） | @codemirror/view **6.43.8**、state **6.7.1**、language **6.12.4**、commands **6.10.4**、lang-markdown **6.5.2**、**style-mod >=4.1.2** |
-| `@readit/mermaid` | 图表（Phase B，懒加载） | mermaid **11.16.1**、dompurify **3.4.13** |
+| `@readit/mermaid` | 图表（Phase B，懒加载） | mermaid **11.16.1**、dompurify **3.4.17** |
 | `@readit/find` | 查找（Phase B）—— M6（已落地） | 无依赖 |
 | `shell` | Tauri 桌面壳 | tauri **2.11.5**、tauri-plugin-single-instance **2.4.3** |
 

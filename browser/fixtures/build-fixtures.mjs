@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { build } from 'vite'
 
 /**
- * §0 A9：vite 8.2.1 一套，esbuild 那套装置弃用——`?raw` 导入与工作区 `.ts` 软链解析
+ * §0 A9：vite 8.2.4 一套，esbuild 那套装置弃用——`?raw` 导入与工作区 `.ts` 软链解析
  * （npm workspaces 把 @readit/element 等包软链进 node_modules，指向各包 src 目录下的
  * 真实路径）都靠它。
  *

@@ -291,7 +291,7 @@ describe('the real environment', () => {
   it('readEnv() reads the test environment as neither tier 1 nor tier 2, without throwing', () => {
     // §0 A2：本包的 vitest environment 是 happy-dom（不是 node），所以 window 与 Element
     // 确实存在——探测用 typeof 守是为了在纯 Node 里也不炸，不是因为这里没有全局。
-    // happy-dom 20.11.2 没有实现 Sanitizer API 也没有实现 Trusted Types，所以两个探测
+    // happy-dom 21.0.4 没有实现 Sanitizer API 也没有实现 Trusted Types，所以两个探测
     // 仍然都读到 false；真正装了这两个特性的宿主由 L3b-element（真浏览器）断言。
     const env = readEnv()
     expect(env.hasSetHtml).toBe(false)

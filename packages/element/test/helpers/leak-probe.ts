@@ -9,7 +9,7 @@
  * ## 补丁打在哪：不是 `view.EventTarget.prototype`
  *
  * 任务书原文的实现补丁打在 `view.EventTarget.prototype` 上。在 happy-dom
- * 20.11.2（§0 A2/A3 钉的版本）下实测这是错的，探针自己的自检测试
+ * 20.11.2（当时 §0 A2/A3 钉的版本；升到 21.0.4 时复测仍然如此）下实测这是错的，探针自己的自检测试
  * （下面「抓得到没拆的监听器」那条）会先红：`window.EventTarget` 作为裸全局
  * 读到的其实是 **Node.js 自带**的那个 `EventTarget` 类（Node 15+ 全局可用），
  * 跟真实 DOM 节点（`document.createElement('div')`）的原型链毫无关系——两者

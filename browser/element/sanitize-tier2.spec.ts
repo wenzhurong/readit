@@ -17,12 +17,15 @@ import { forceTier2 } from '../support/tiers.js'
  *
  * **必须在真浏览器里做**（`docs/plans/2026-08-08-plan2-debt.md` D2-17 的警告）：
  * happy-dom 20.11.2 下 `DOMPurify.sanitize('<script>b()</script>')` 原样返回
- * `<script>`，`isSupported` 还报 `true`——遍历行为不正常，任何差集都是假的。
+ * `<script>`，`isSupported` 还报 `true`——遍历行为不正常，任何差集都是假的。升到
+ * happy-dom 21.0.4 + DOMPurify 3.4.17 时复测：变成返回 `b()`（标签删了、脚本正文留下；
+ * 真 WebKit/Chromium 返回空串），`<img src=x onerror=…>` 整个消失（真浏览器保留
+ * `<img src="x">`），`isSupported` 仍报 `true`——换了一种不正常，结论不变。
  *
  * 两个引擎都跑：Chromium 用 `Reflect.deleteProperty` 逼走第 1 级（否则第 2 级永远
  * 不会在 Chromium 上被执行到），WebKit 天然选中第 2 级（无原生 `setHTML()`，
  * `hasTrustedTypes` 为真，见 `trusted-types.spec.ts` 的既有记录）。两个引擎共用
- * 同一个 DOMPurify 3.4.13，跑两个引擎不是测两套配置，是排除「这只是某个引擎自己
+ * 同一个 DOMPurify 3.4.17，跑两个引擎不是测两套配置，是排除「这只是某个引擎自己
  * 的怪癖」这个混淆——两边结果理应一致。Firefox 走第 3 级（既无原生 setHTML 也无
  * trustedTypes），第 2 级配置对它没有意义，不测。
  */
